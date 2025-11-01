@@ -1,0 +1,21 @@
+# pyproject.toml
+
+[project]
+name = "psforge-core"
+version = "0.1.0-dev"
+description = "Core data models and I/O for the psforge project."
+
+# このリポジトリが動作するために必要なライブラリ
+dependencies = [
+    "pandas",
+    "numpy"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+# この設定で、'psforge_core'というフォルダがソースコードだと認識されます
+[tool.setuptools]
+packages = ["psforge_core"]
