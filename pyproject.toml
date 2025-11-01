@@ -1,21 +1,29 @@
-# pyproject.toml
+# psforge-core/pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "psforge-core"
-version = "0.1.0-dev"
+version = "0.1.0"
 description = "Core data models and I/O for the psforge project."
+readme = "README.md"
+license = { text = "MIT" } # or Apache-2.0
+requires-python = ">=3.9"
 
-# このリポジトリが動作するために必要なライブラリ
+# Dependencies
 dependencies = [
-    "pandas",
-    "numpy"
+    "numpy",
+    "pandas"
 ]
 
+# Development dependencies (tests, etc.)
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "ruff" # Linter/Formatter
 ]
 
-# この設定で、'psforge_core'というフォルダがソースコードだと認識されます
-[tool.setuptools]
-packages = ["psforge_core"]
+[tool.setuptools.packages.find]
+where = ["src"] # Source code is in the 'src' directory
