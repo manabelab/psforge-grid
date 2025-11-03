@@ -1,0 +1,80 @@
+{
+  // ========================================
+  // General Editor Settings
+  // ========================================
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "editor.rulers": [100],
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // ========================================
+  // Python Settings
+  // ========================================
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    },
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+
+  // Ruff settings (native language server)
+  "ruff.nativeServer": "on",
+
+  // Pylance settings (type checking)
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.diagnosticMode": "workspace",
+
+  // Python testing
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "-v"
+  ],
+
+  // ========================================
+  // File Management
+  // ========================================
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/*.egg-info": true
+  },
+
+  "search.exclude": {
+    "**/build": true,
+    "**/dist": true,
+    "**/.venv": true,
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/*.egg-info": true
+  },
+
+  // ========================================
+  // Spell Checker
+  // ========================================
+  "cSpell.words": [
+    "psforge",
+    "numpy",
+    "pandas",
+    "pytest",
+    "mypy",
+    "ruff",
+    "pyproject",
+    "toml"
+  ]
+}

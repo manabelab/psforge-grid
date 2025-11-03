@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    // Python Development
+    "charliermarsh.ruff",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+
+    // General
+    "editorconfig.editorconfig",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}
