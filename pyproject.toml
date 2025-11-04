@@ -13,10 +13,8 @@ license = { text = "MIT" } # or Apache-2.0
 requires-python = ">=3.9"
 
 # Dependencies
-dependencies = [
-    "numpy",
-    "pandas"
-]
+# Hub design: psforge-core has minimal dependencies (standard library only)
+dependencies = []
 
 # Development dependencies (tests, etc.)
 [project.optional-dependencies]
