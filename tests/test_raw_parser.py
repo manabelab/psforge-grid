@@ -89,7 +89,7 @@ class TestIEEE9Bus:
         assert len(system.loads) == 3
 
         # Check load locations
-        load_buses = {l.bus_id for l in system.loads}
+        load_buses = {load.bus_id for load in system.loads}
         assert load_buses == {5, 6, 8}
 
         # Check total load (315 MW)

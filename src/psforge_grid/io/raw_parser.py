@@ -18,6 +18,7 @@ References:
 
 from __future__ import annotations
 
+import contextlib
 import math
 from pathlib import Path
 
@@ -587,10 +588,8 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
             # STAT is typically at position 11 in v34
             status = 1
             if len(fields1) > 11:
-                try:
+                with contextlib.suppress(ValueError):
                     status = int(fields1[11])
-                except ValueError:
-                    pass
 
             # Determine number of windings
             is_three_winding = k_bus != 0
