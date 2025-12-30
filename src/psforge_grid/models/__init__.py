@@ -8,6 +8,7 @@ from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.load import Load
+from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "Branch",
     "Generator",
     "Load",
+    "Shunt",
     "System",
 ]

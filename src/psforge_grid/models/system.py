@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.load import Load
+from psforge_grid.models.shunt import Shunt
 
 
 @dataclass
@@ -17,49 +19,285 @@ class System:
     """Power system container class.
 
     Central data structure containing all power system components including
-    buses, branches, and generators. Serves as the hub of the Hub & Spoke
-    architecture for psforge ecosystem.
+    buses, branches, generators, loads, and shunts. Serves as the hub of the
+    Hub & Spoke architecture for psforge ecosystem.
 
     Attributes:
         buses: List of Bus objects representing network nodes
         branches: List of Branch objects representing transmission lines/transformers
         generators: List of Generator objects representing generation units
+        loads: List of Load objects representing electrical consumption
+        shunts: List of Shunt objects representing capacitors/reactors
         base_mva: System base MVA for per-unit conversion (default: 100.0)
         name: System name (optional, default: empty string)
 
     Note:
         - All per-unit values in components are based on base_mva
-        - This class should be treated as immutable for data integrity
-        - Modifying buses/branches/generators after construction is discouraged
-        - Used as the primary interface between I/O parsers and analysis algorithms
+        - This class serves as the primary interface between I/O parsers and analysis algorithms
+        - Use helper methods to query components by bus ID
+
+    Example:
+        >>> from psforge_grid.models import System, Bus, Branch, Generator, Load
+        >>> system = System(
+        ...     buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)],
+        ...     branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        ...     generators=[Generator(bus_id=1, p_gen=1.0)],
+        ...     loads=[Load(bus_id=2, p_load=0.8, q_load=0.2)]
+        ... )
     """
 
     buses: list[Bus] = field(default_factory=list)
     branches: list[Branch] = field(default_factory=list)
     generators: list[Generator] = field(default_factory=list)
+    loads: list[Load] = field(default_factory=list)
+    shunts: list[Shunt] = field(default_factory=list)
     base_mva: float = 100.0
     name: str = ""
 
-    def num_buses(self) -> int:
-        """Return the number of buses in the system.
+    # =========================================================================
+    # Count methods
+    # =========================================================================
 
-        Returns:
-            Number of buses.
-        """
+    def num_buses(self) -> int:
+        """Return the number of buses in the system."""
         return len(self.buses)
 
     def num_branches(self) -> int:
-        """Return the number of branches in the system.
-
-        Returns:
-            Number of branches.
-        """
+        """Return the number of branches in the system."""
         return len(self.branches)
 
     def num_generators(self) -> int:
-        """Return the number of generators in the system.
+        """Return the number of generators in the system."""
+        return len(self.generators)
+
+    def num_loads(self) -> int:
+        """Return the number of loads in the system."""
+        return len(self.loads)
+
+    def num_shunts(self) -> int:
+        """Return the number of shunts in the system."""
+        return len(self.shunts)
+
+    # =========================================================================
+    # Bus lookup methods
+    # =========================================================================
+
+    def get_bus(self, bus_id: int) -> Bus | None:
+        """Get a bus by its ID.
+
+        Args:
+            bus_id: Bus ID to search for
 
         Returns:
-            Number of generators.
+            Bus object if found, None otherwise
         """
-        return len(self.generators)
+        for bus in self.buses:
+            if bus.bus_id == bus_id:
+                return bus
+        return None
+
+    def get_bus_index(self, bus_id: int) -> int:
+        """Get the index of a bus in the buses list.
+
+        Args:
+            bus_id: Bus ID to search for
+
+        Returns:
+            Index in buses list (0-based)
+
+        Raises:
+            ValueError: If bus_id is not found
+        """
+        for i, bus in enumerate(self.buses):
+            if bus.bus_id == bus_id:
+                return i
+        raise ValueError(f"Bus {bus_id} not found in system")
+
+    def get_bus_ids(self) -> list[int]:
+        """Get all bus IDs in the system.
+
+        Returns:
+            List of bus IDs
+        """
+        return [bus.bus_id for bus in self.buses]
+
+    # =========================================================================
+    # Component lookup by bus
+    # =========================================================================
+
+    def get_bus_generators(self, bus_id: int, in_service_only: bool = True) -> list[Generator]:
+        """Get all generators connected to a specific bus.
+
+        Args:
+            bus_id: Bus ID to search for
+            in_service_only: If True, return only in-service generators
+
+        Returns:
+            List of Generator objects connected to the bus
+        """
+        gens = [g for g in self.generators if g.bus_id == bus_id]
+        if in_service_only:
+            gens = [g for g in gens if g.is_in_service]
+        return gens
+
+    def get_bus_loads(self, bus_id: int, in_service_only: bool = True) -> list[Load]:
+        """Get all loads connected to a specific bus.
+
+        Args:
+            bus_id: Bus ID to search for
+            in_service_only: If True, return only in-service loads
+
+        Returns:
+            List of Load objects connected to the bus
+        """
+        loads = [load for load in self.loads if load.bus_id == bus_id]
+        if in_service_only:
+            loads = [load for load in loads if load.is_in_service]
+        return loads
+
+    def get_bus_shunts(self, bus_id: int, in_service_only: bool = True) -> list[Shunt]:
+        """Get all shunts connected to a specific bus.
+
+        Args:
+            bus_id: Bus ID to search for
+            in_service_only: If True, return only in-service shunts
+
+        Returns:
+            List of Shunt objects connected to the bus
+        """
+        shunts = [s for s in self.shunts if s.bus_id == bus_id]
+        if in_service_only:
+            shunts = [s for s in shunts if s.status == 1]
+        return shunts
+
+    def get_branches_at_bus(self, bus_id: int, in_service_only: bool = True) -> list[Branch]:
+        """Get all branches connected to a specific bus.
+
+        Args:
+            bus_id: Bus ID to search for
+            in_service_only: If True, return only in-service branches
+
+        Returns:
+            List of Branch objects connected to the bus (either from_bus or to_bus)
+        """
+        branches = [b for b in self.branches if b.from_bus == bus_id or b.to_bus == bus_id]
+        if in_service_only:
+            branches = [b for b in branches if b.is_in_service]
+        return branches
+
+    # =========================================================================
+    # Power injection calculations
+    # =========================================================================
+
+    def get_bus_p_injection(self, bus_id: int) -> float:
+        """Calculate net active power injection at a bus [p.u.].
+
+        P_injection = sum(P_gen) - sum(P_load)
+
+        Args:
+            bus_id: Bus ID
+
+        Returns:
+            Net active power injection (generation - load) [p.u.]
+        """
+        p_gen = sum(g.p_gen for g in self.get_bus_generators(bus_id))
+        p_load = sum(load.p_load for load in self.get_bus_loads(bus_id))
+        return p_gen - p_load
+
+    def get_bus_q_injection(self, bus_id: int) -> float:
+        """Calculate net reactive power injection at a bus [p.u.].
+
+        Q_injection = sum(Q_gen) - sum(Q_load) + V^2 * sum(B_shunt)
+
+        Note: Shunt contribution depends on voltage; this uses nominal V=1.0
+
+        Args:
+            bus_id: Bus ID
+
+        Returns:
+            Net reactive power injection [p.u.] (excluding voltage-dependent shunt)
+        """
+        q_gen = sum(g.q_gen for g in self.get_bus_generators(bus_id))
+        q_load = sum(load.q_load for load in self.get_bus_loads(bus_id))
+        return q_gen - q_load
+
+    def get_bus_shunt_admittance(self, bus_id: int) -> tuple[float, float]:
+        """Get total shunt admittance at a bus.
+
+        Args:
+            bus_id: Bus ID
+
+        Returns:
+            Tuple of (G_total, B_total) [p.u.]
+        """
+        g_total = sum(s.g_pu for s in self.get_bus_shunts(bus_id))
+        b_total = sum(s.b_pu for s in self.get_bus_shunts(bus_id))
+        return g_total, b_total
+
+    # =========================================================================
+    # System-wide queries
+    # =========================================================================
+
+    def get_slack_buses(self) -> list[Bus]:
+        """Get all slack (swing) buses in the system.
+
+        Returns:
+            List of Bus objects with bus_type == 3
+        """
+        return [bus for bus in self.buses if bus.is_slack]
+
+    def get_pv_buses(self) -> list[Bus]:
+        """Get all PV (generator) buses in the system.
+
+        Returns:
+            List of Bus objects with bus_type == 2
+        """
+        return [bus for bus in self.buses if bus.is_pv]
+
+    def get_pq_buses(self) -> list[Bus]:
+        """Get all PQ (load) buses in the system.
+
+        Returns:
+            List of Bus objects with bus_type == 1
+        """
+        return [bus for bus in self.buses if bus.is_pq]
+
+    def get_in_service_branches(self) -> list[Branch]:
+        """Get all in-service branches.
+
+        Returns:
+            List of Branch objects with status == 1
+        """
+        return [b for b in self.branches if b.is_in_service]
+
+    def total_generation(self, in_service_only: bool = True) -> tuple[float, float]:
+        """Calculate total system generation.
+
+        Args:
+            in_service_only: If True, count only in-service generators
+
+        Returns:
+            Tuple of (total_P, total_Q) [p.u.]
+        """
+        gens = self.generators
+        if in_service_only:
+            gens = [g for g in gens if g.is_in_service]
+        total_p = sum(g.p_gen for g in gens)
+        total_q = sum(g.q_gen for g in gens)
+        return total_p, total_q
+
+    def total_load(self, in_service_only: bool = True) -> tuple[float, float]:
+        """Calculate total system load.
+
+        Args:
+            in_service_only: If True, count only in-service loads
+
+        Returns:
+            Tuple of (total_P, total_Q) [p.u.]
+        """
+        loads = self.loads
+        if in_service_only:
+            loads = [load for load in loads if load.is_in_service]
+        total_p = sum(load.p_load for load in loads)
+        total_q = sum(load.q_load for load in loads)
+        return total_p, total_q

@@ -6,9 +6,51 @@ Core data models and I/O for the psforge project.
 
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
-- Common data classes (`System`, `Bus`, `Branch`, `Generator`, etc.)
-- PSS/E `.raw` file parser
+- Common data classes (`System`, `Bus`, `Branch`, `Generator`, `Load`, `Shunt`)
+- PSS/E RAW file parser (v33/v34 partial support)
 - Shared utilities for power system analysis
+
+## PSS/E RAW Format Support
+
+### Current Status
+
+The parser supports **core power flow data** required for basic AC power flow analysis:
+
+| Section | v33 | v34 | Notes |
+|---------|-----|-----|-------|
+| Case Identification | Yes | Yes | Base MVA, system info |
+| Bus Data | Yes | Yes | All bus types (PQ, PV, Slack, Isolated) |
+| Load Data | Yes | Yes | Constant power loads |
+| Fixed Shunt Data | Yes | Yes | Capacitors and reactors |
+| Generator Data | Yes | Yes | P, Q, voltage setpoint, Q limits |
+| Branch Data | Yes | Yes | Transmission lines |
+| Transformer Data | Yes | Yes | Two-winding transformers only |
+
+### Not Yet Supported
+
+The following sections are parsed but ignored (data is skipped):
+
+- Area Data, Zone Data, Owner Data
+- Two-Terminal DC Data, Multi-Terminal DC Data
+- VSC DC Line Data, FACTS Device Data
+- Switched Shunt Data (use Fixed Shunt instead)
+- Multi-Section Line Data, Impedance Correction Data
+- GNE Data, Induction Machine Data, Substation Data
+- Three-winding Transformers
+
+### Test Data Sources
+
+Parser has been validated with IEEE test cases from multiple sources:
+
+- IEEE 9-bus (v34): [GitHub - todstewart1001](https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-)
+- IEEE 14-bus (v33): [GitHub - ITI/models](https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/)
+- IEEE 118-bus (v33): [GitHub - powsybl](https://github.com/powsybl/powsybl-distribution/blob/main/resources/PSSE/IEEE_118_bus.raw)
+
+### Future Plans
+
+1. **Phase 2**: Three-winding transformer support
+2. **Phase 3**: Switched shunt data support
+3. **Future**: HVDC, FACTS device support (as needed)
 
 ## Installation
 
