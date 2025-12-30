@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Dict, List, Union
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -16,7 +15,7 @@ from psforge_grid.models.generator import Generator
 from psforge_grid.models.system import System
 
 
-def parse_raw(filepath: Union[str, Path]) -> System:
+def parse_raw(filepath: str | Path) -> System:
     """Parse PSS/E RAW file and return a System object.
 
     Reads a PSS/E RAW format file (version 33 preferred) and constructs
@@ -45,10 +44,10 @@ def parse_raw(filepath: Union[str, Path]) -> System:
     system = System()
 
     try:
-        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(filepath, encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
     except Exception as e:
-        raise ValueError(f"Failed to read file {filepath}: {e}")
+        raise ValueError(f"Failed to read file {filepath}: {e}") from e
 
     # Split file into sections
     sections = _split_sections(lines)
@@ -72,7 +71,7 @@ def parse_raw(filepath: Union[str, Path]) -> System:
     return system
 
 
-def _split_sections(lines: List[str]) -> Dict[str, List[str]]:
+def _split_sections(lines: list[str]) -> dict[str, list[str]]:
     """Split RAW file into sections.
 
     Identifies section boundaries and groups lines by section type.
@@ -95,7 +94,7 @@ def _split_sections(lines: List[str]) -> Dict[str, List[str]]:
         line = line.strip()
 
         # Skip comments
-        if line.startswith('@'):
+        if line.startswith("@"):
             continue
 
         # Handle case identification (first 3 lines)
@@ -140,7 +139,7 @@ def _split_sections(lines: List[str]) -> Dict[str, List[str]]:
     return sections
 
 
-def _parse_case_id(lines: List[str]) -> float:
+def _parse_case_id(lines: list[str]) -> float:
     """Parse CASE ID section to extract base MVA.
 
     Args:
@@ -165,7 +164,7 @@ def _parse_case_id(lines: List[str]) -> float:
     return 100.0
 
 
-def _parse_bus_data(lines: List[str]) -> List[Bus]:
+def _parse_bus_data(lines: list[str]) -> list[Bus]:
     """Parse BUS DATA section.
 
     Args:
@@ -212,18 +211,18 @@ def _parse_bus_data(lines: List[str]) -> List[Bus]:
                 base_kv=base_kv,
                 v_magnitude=v_magnitude,
                 v_angle=v_angle,
-                name=name
+                name=name,
             )
             buses.append(bus)
 
-        except (IndexError, ValueError) as e:
+        except (IndexError, ValueError):
             # Skip malformed lines
             continue
 
     return buses
 
 
-def _parse_branch_data(lines: List[str]) -> List[Branch]:
+def _parse_branch_data(lines: list[str]) -> list[Branch]:
     """Parse BRANCH DATA section.
 
     Args:
@@ -265,12 +264,7 @@ def _parse_branch_data(lines: List[str]) -> List[Branch]:
                     rate_mva = rate_val
 
             branch = Branch(
-                from_bus=from_bus,
-                to_bus=to_bus,
-                r_pu=r_pu,
-                x_pu=x_pu,
-                b_pu=b_pu,
-                rate_mva=rate_mva
+                from_bus=from_bus, to_bus=to_bus, r_pu=r_pu, x_pu=x_pu, b_pu=b_pu, rate_mva=rate_mva
             )
             branches.append(branch)
 
@@ -280,7 +274,7 @@ def _parse_branch_data(lines: List[str]) -> List[Branch]:
     return branches
 
 
-def _parse_generator_data(lines: List[str]) -> List[Generator]:
+def _parse_generator_data(lines: list[str]) -> list[Generator]:
     """Parse GENERATOR DATA section.
 
     Args:
@@ -319,12 +313,7 @@ def _parse_generator_data(lines: List[str]) -> List[Generator]:
             # If MW/MVAr, conversion to p.u. is needed: p_gen = p_gen_mw / base_mva
             # This will be validated with IEEE test case data in Sprint 1 testing phase
 
-            generator = Generator(
-                bus_id=bus_id,
-                p_gen=p_gen,
-                q_gen=q_gen,
-                v_setpoint=v_setpoint
-            )
+            generator = Generator(bus_id=bus_id, p_gen=p_gen, q_gen=q_gen, v_setpoint=v_setpoint)
             generators.append(generator)
 
         except (IndexError, ValueError):

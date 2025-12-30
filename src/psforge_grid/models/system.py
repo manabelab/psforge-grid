@@ -4,11 +4,11 @@ This module defines the System class as the central container for all power syst
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List
 
-from psforge_grid.models.bus import Bus
+from dataclasses import dataclass, field
+
 from psforge_grid.models.branch import Branch
+from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
 
 
@@ -34,9 +34,9 @@ class System:
         - Used as the primary interface between I/O parsers and analysis algorithms
     """
 
-    buses: List[Bus] = field(default_factory=list)
-    branches: List[Branch] = field(default_factory=list)
-    generators: List[Generator] = field(default_factory=list)
+    buses: list[Bus] = field(default_factory=list)
+    branches: list[Branch] = field(default_factory=list)
+    generators: list[Generator] = field(default_factory=list)
     base_mva: float = 100.0
     name: str = ""
 

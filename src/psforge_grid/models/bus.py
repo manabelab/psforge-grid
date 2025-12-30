@@ -4,8 +4,8 @@ This module defines the Bus class representing electrical buses in a power syste
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -42,7 +42,7 @@ class Bus:
     p_gen: float = 0.0
     q_gen: float = 0.0
     base_kv: float = 1.0
-    name: Optional[str] = None
+    name: str | None = None
 
     def __post_init__(self) -> None:
         """Validate bus data after initialization.
@@ -52,6 +52,5 @@ class Bus:
         """
         if self.bus_type not in [1, 2, 3]:
             raise ValueError(
-                f"Invalid bus_type: {self.bus_type}. "
-                f"Must be 1 (PQ), 2 (PV), or 3 (Slack)."
+                f"Invalid bus_type: {self.bus_type}. Must be 1 (PQ), 2 (PV), or 3 (Slack)."
             )

@@ -4,8 +4,8 @@ This module defines the Branch class representing transmission lines and transfo
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -40,5 +40,5 @@ class Branch:
     b_pu: float = 0.0
     tap_ratio: float = 1.0
     shift_angle: float = 0.0
-    rate_mva: Optional[float] = None
-    name: Optional[str] = None
+    rate_mva: float | None = None
+    name: str | None = None

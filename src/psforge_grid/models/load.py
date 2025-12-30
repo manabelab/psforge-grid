@@ -6,8 +6,8 @@ This module is provided for future extensibility.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -33,4 +33,4 @@ class Load:
     bus_id: int
     p_load: float
     q_load: float = 0.0
-    name: Optional[str] = None
+    name: str | None = None

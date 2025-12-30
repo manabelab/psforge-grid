@@ -4,8 +4,8 @@ This module defines the Generator class representing power generation units.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -36,8 +36,8 @@ class Generator:
     p_gen: float
     q_gen: float = 0.0
     v_setpoint: float = 1.0
-    p_max: Optional[float] = None
-    p_min: Optional[float] = None
-    q_max: Optional[float] = None
-    q_min: Optional[float] = None
-    name: Optional[str] = None
+    p_max: float | None = None
+    p_min: float | None = None
+    q_max: float | None = None
+    q_min: float | None = None
+    name: str | None = None
