@@ -7,9 +7,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-from psforge_core.models.bus import Bus
-from psforge_core.models.branch import Branch
-from psforge_core.models.generator import Generator
+from psforge_grid.models.bus import Bus
+from psforge_grid.models.branch import Branch
+from psforge_grid.models.generator import Generator
 
 
 @dataclass

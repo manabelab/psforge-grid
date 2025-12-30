@@ -10,10 +10,10 @@ import math
 from pathlib import Path
 from typing import Dict, List, Union
 
-from psforge_core.models.branch import Branch
-from psforge_core.models.bus import Bus
-from psforge_core.models.generator import Generator
-from psforge_core.models.system import System
+from psforge_grid.models.branch import Branch
+from psforge_grid.models.bus import Bus
+from psforge_grid.models.generator import Generator
+from psforge_grid.models.system import System
 
 
 def parse_raw(filepath: Union[str, Path]) -> System:

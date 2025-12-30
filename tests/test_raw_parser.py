@@ -5,7 +5,7 @@ Tests the parsing functionality for PSS/E RAW format files.
 
 import pytest
 
-from psforge_core.io.raw_parser import parse_raw
+from psforge_grid.io.raw_parser import parse_raw
 
 
 class TestRawParser:

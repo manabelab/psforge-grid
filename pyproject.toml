@@ -1,11 +1,11 @@
-# psforge-core/pyproject.toml
+# psforge-grid/pyproject.toml
 
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "psforge-core"
+name = "psforge-grid"
 version = "0.1.0"
 description = "Core data models and I/O for the psforge project."
 readme = "README.md"
@@ -13,7 +13,7 @@ license = { text = "MIT" } # or Apache-2.0
 requires-python = ">=3.9"
 
 # Dependencies
-# Hub design: psforge-core has minimal dependencies (standard library only)
+# Hub design: psforge-grid has minimal dependencies (standard library only)
 dependencies = []
 
 # Development dependencies (tests, etc.)
@@ -49,7 +49,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["psforge_core"]
+known-first-party = ["psforge_grid"]
 
 [tool.ruff.format]
 quote-style = "double"

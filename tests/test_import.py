@@ -3,4 +3,4 @@
 
 def test_import() -> None:
     """Test that the package can be imported."""
-    import psforge_core  # noqa: F401
+    import psforge_grid  # noqa: F401
