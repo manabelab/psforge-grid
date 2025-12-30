@@ -5,6 +5,7 @@ This module defines the Load class representing electrical loads.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -67,7 +68,7 @@ class Load:
         Returns:
             |S| = sqrt(P^2 + Q^2)
         """
-        return (self.p_load**2 + self.q_load**2) ** 0.5
+        return math.sqrt(self.p_load**2 + self.q_load**2)
 
     @property
     def power_factor(self) -> float:
