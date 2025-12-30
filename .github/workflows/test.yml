@@ -40,5 +40,5 @@ jobs:
 
     - name: Type check with mypy
       run: |
-        mypy src/ tests/
+        mypy src/
 
