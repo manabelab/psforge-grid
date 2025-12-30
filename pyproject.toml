@@ -20,8 +20,9 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "ruff", # Linter/Formatter
-    "mypy", # Type checker
+    "ruff",        # Linter/Formatter
+    "mypy",        # Type checker
+    "pre-commit",  # Git hooks for automatic checks
 ]
 
 [tool.setuptools.packages.find]
