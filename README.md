@@ -10,6 +10,28 @@ psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 - PSS/E RAW file parser (v33/v34 partial support)
 - Shared utilities for power system analysis
 
+## LLM Affinity Design
+
+> **"Pickaxe in the Gold Rush"** - psforge is designed for seamless LLM integration.
+
+psforge-grid implements LLM-friendly data structures:
+
+| Feature | Description |
+|---------|-------------|
+| **Explicit Units** | Field names include units (`voltage_pu`, `power_mw`) |
+| **Semantic Status** | Enum-based status annotations (`VoltageStatus.LOW`) |
+| **Self-Documenting** | Rich docstrings explaining physical meaning |
+| **to_description()** | Human/LLM-readable output methods |
+
+```python
+# Example: LLM-friendly bus description
+bus = system.get_bus(14)
+print(bus.to_description())
+# Output: "Bus 14 (LOAD_BUS): 13.8 kV, PQ type"
+```
+
+See [CLAUDE.md](CLAUDE.md) for detailed AI development guidelines.
+
 ## PSS/E RAW Format Support
 
 ### Current Status
