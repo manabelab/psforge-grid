@@ -93,7 +93,7 @@ class ParserFactory:
             )
         else:
             available = ParserFactory.available_formats()
-            raise ValueError(f"Unknown format: '{format_type}'. " f"Available formats: {available}")
+            raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
 
     @staticmethod
     def from_extension(extension: str) -> IParser:
@@ -124,9 +124,7 @@ class ParserFactory:
             return ParserFactory.create(format_type)
         else:
             supported = list(ParserFactory._EXTENSION_MAP.keys())
-            raise ValueError(
-                f"Unknown extension: '{extension}'. " f"Supported extensions: {supported}"
-            )
+            raise ValueError(f"Unknown extension: '{extension}'. Supported extensions: {supported}")
 
     @staticmethod
     def from_path(filepath: str | Path) -> IParser:
