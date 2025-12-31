@@ -105,13 +105,44 @@ pip install -e ".[dev]"
 
 Pre-commit hooks automatically run ruff and mypy checks before each commit.
 
+#### Option 1: Global Install with pipx (Recommended)
+
+Using [pipx](https://github.com/pypa/pipx) for global installation is recommended, especially when using **git worktree** for parallel development. This ensures `pre-commit` is available across all worktrees without additional setup.
+
 ```bash
-# Install pre-commit hooks
+# Install pipx if not already installed
+brew install pipx  # macOS
+# or: pip install --user pipx
+
+# Install pre-commit globally
+pipx install pre-commit
+
+# Install hooks (only needed once per repository)
 pre-commit install
 
 # Run hooks manually on all files
 pre-commit run --all-files
 ```
+
+**Why pipx?**
+- Works across all git worktrees without per-worktree setup
+- Isolated environment prevents dependency conflicts
+- Single installation, works everywhere
+
+#### Option 2: Local Install in Virtual Environment
+
+```bash
+# Install pre-commit in your virtual environment
+pip install pre-commit
+
+# Install hooks
+pre-commit install
+
+# Run hooks manually on all files
+pre-commit run --all-files
+```
+
+> **Note:** CI runs ruff and mypy checks via GitHub Actions (`.github/workflows/test.yml`), so code quality is enforced on push/PR even if local hooks are skipped.
 
 ### Manual Code Quality Checks
 
