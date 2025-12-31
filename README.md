@@ -14,7 +14,7 @@ psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
 > **"Pickaxe in the Gold Rush"** - psforge is designed for seamless LLM integration.
 
-psforge-grid implements LLM-friendly data structures:
+psforge-grid implements LLM-friendly data structures and CLI:
 
 | Feature | Description |
 |---------|-------------|
@@ -29,6 +29,31 @@ bus = system.get_bus(14)
 print(bus.to_description())
 # Output: "Bus 14 (LOAD_BUS): 13.8 kV, PQ type"
 ```
+
+### CLI for LLM Integration
+
+psforge-grid includes a CLI designed for LLM-friendly output:
+
+```bash
+# System summary in different formats
+psforge-grid info ieee14.raw              # Table format
+psforge-grid info ieee14.raw -f json      # JSON for API/LLM
+psforge-grid info ieee14.raw -f summary   # Compact for tokens
+
+# Display element details
+psforge-grid show ieee14.raw buses
+psforge-grid show ieee14.raw branches -f json
+
+# Validate system data
+psforge-grid validate ieee14.raw
+psforge-grid validate ieee14.raw --strict
+```
+
+**Output Formats:**
+- `table`: Human-readable tables (default)
+- `json`: Structured JSON for LLM/API processing
+- `summary`: Compact text for token-efficient LLM usage
+- `csv`: Comma-separated values for data analysis
 
 See [CLAUDE.md](CLAUDE.md) for detailed AI development guidelines.
 
