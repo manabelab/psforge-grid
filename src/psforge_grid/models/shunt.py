@@ -25,6 +25,8 @@ class Shunt:
         status: Operating status (1: in-service, 0: out-of-service)
         shunt_id: Shunt identifier for multiple shunts on same bus
         name: Shunt name (optional)
+        description: Free-text description providing context not captured
+            in numerical parameters. For LLM-friendly output.
 
     Note:
         - Susceptance (B) convention: B > 0 for capacitors (leading VAr),
@@ -46,6 +48,7 @@ class Shunt:
     status: int = 1
     shunt_id: str = "1"
     name: str | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate shunt data after initialization.
@@ -57,3 +60,55 @@ class Shunt:
             raise ValueError(
                 f"Invalid status: {self.status}. Must be 0 (out-of-service) or 1 (in-service)."
             )
+
+    @property
+    def is_in_service(self) -> bool:
+        """Check if this shunt is in service."""
+        return self.status == 1
+
+    @property
+    def is_capacitor(self) -> bool:
+        """Check if this shunt is a capacitor (B > 0)."""
+        return self.b_pu > 0
+
+    @property
+    def is_reactor(self) -> bool:
+        """Check if this shunt is a reactor (B < 0)."""
+        return self.b_pu < 0
+
+    @property
+    def shunt_type_name(self) -> str:
+        """Get human-readable shunt type name."""
+        if self.b_pu > 0:
+            return "Capacitor"
+        elif self.b_pu < 0:
+            return "Reactor"
+        else:
+            return "Neutral Shunt"
+
+    def to_description(self) -> str:
+        """Generate human/LLM-readable description of this shunt.
+
+        Returns:
+            Multi-line string describing the shunt for LLM context.
+
+        Example:
+            >>> cap = Shunt(bus_id=1, b_pu=0.5, name="Cap1")
+            >>> print(cap.to_description())
+            Shunt Cap1 at Bus 1: Capacitor
+              Admittance: G = 0.0000 pu, B = 0.5000 pu
+              Status: In-service
+        """
+        name_str = f"{self.name}" if self.name else f"S{self.shunt_id}"
+        status_str = "In-service" if self.is_in_service else "Out-of-service"
+
+        lines = [
+            f"Shunt {name_str} at Bus {self.bus_id}: {self.shunt_type_name}",
+            f"  Admittance: G = {self.g_pu:.4f} pu, B = {self.b_pu:.4f} pu",
+            f"  Status: {status_str}",
+        ]
+
+        if self.description:
+            lines.append(f"  Note: {self.description}")
+
+        return "\n".join(lines)

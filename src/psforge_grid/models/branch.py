@@ -33,6 +33,8 @@ class Branch:
         status: Operating status (1: in-service, 0: out-of-service)
         circuit_id: Circuit identifier for parallel branches (default: "1")
         name: Branch name (optional)
+        description: Free-text description providing context not captured
+            in numerical parameters. For LLM-friendly output.
 
     Note:
         - All impedance values are in per-unit on system base MVA
@@ -62,6 +64,7 @@ class Branch:
     status: int = 1
     circuit_id: str = "1"
     name: str | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate branch data after initialization.
@@ -85,3 +88,56 @@ class Branch:
     def is_in_service(self) -> bool:
         """Check if this branch is in service."""
         return self.status == 1
+
+    @property
+    def branch_type_name(self) -> str:
+        """Get human-readable branch type name."""
+        if self.is_transformer:
+            if self.shift_angle != 0.0:
+                return "Phase-Shifting Transformer"
+            return "Transformer"
+        return "Transmission Line"
+
+    @property
+    def impedance_pu(self) -> complex:
+        """Get series impedance as complex number [p.u.]."""
+        return complex(self.r_pu, self.x_pu)
+
+    def to_description(self) -> str:
+        """Generate human/LLM-readable description of this branch.
+
+        Returns:
+            Multi-line string describing the branch for LLM context.
+
+        Example:
+            >>> branch = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1, rate_a=100)
+            >>> print(branch.to_description())
+            Branch 1-2: Transmission Line
+              Impedance: 0.0100 + j0.1000 pu
+              Rating: 100.0 MVA
+              Status: In-service
+        """
+        name_str = f" ({self.name})" if self.name else ""
+        status_str = "In-service" if self.is_in_service else "Out-of-service"
+
+        lines = [
+            f"Branch {self.from_bus}-{self.to_bus}{name_str}: {self.branch_type_name}",
+            f"  Impedance: {self.r_pu:.4f} + j{self.x_pu:.4f} pu",
+        ]
+
+        if self.b_pu != 0.0:
+            lines.append(f"  Charging: B = {self.b_pu:.4f} pu")
+
+        if self.is_transformer:
+            shift_deg = self.shift_angle * 180.0 / 3.14159265359
+            lines.append(f"  Tap: {self.tap_ratio:.4f}, Shift: {shift_deg:.2f}°")
+
+        if self.rate_a is not None:
+            lines.append(f"  Rating: {self.rate_a:.1f} MVA")
+
+        lines.append(f"  Status: {status_str}")
+
+        if self.description:
+            lines.append(f"  Note: {self.description}")
+
+        return "\n".join(lines)
