@@ -1,11 +1,17 @@
 """System data model for power system analysis.
 
 This module defines the System class as the central container for all power system components.
+
+Factory Methods:
+    The System class provides factory methods for creating instances from files:
+    - from_raw(): Create from PSS/E RAW file
+    - from_file(): Create from any supported format (auto-detect)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -53,6 +59,72 @@ class System:
     shunts: list[Shunt] = field(default_factory=list)
     base_mva: float = 100.0
     name: str = ""
+
+    # =========================================================================
+    # Factory methods
+    # =========================================================================
+
+    @classmethod
+    def from_raw(cls, filepath: str | Path) -> System:
+        """Create a System from a PSS/E RAW file.
+
+        Factory method for creating System instances from PSS/E RAW format
+        files (v33/v34). This is the recommended way to load power system
+        data from RAW files.
+
+        Args:
+            filepath: Path to the .raw file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_raw("ieee14.raw")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_raw(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.raw_parser import parse_raw
+
+        return parse_raw(filepath)
+
+    @classmethod
+    def from_file(cls, filepath: str | Path) -> System:
+        """Create a System from a power system data file.
+
+        Factory method that auto-detects the file format based on extension
+        and uses the appropriate parser. Supports PSS/E RAW and future formats.
+
+        Args:
+            filepath: Path to the data file (extension determines format)
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is not recognized or invalid
+
+        Example:
+            >>> system = System.from_file("ieee14.raw")  # PSS/E format
+            >>> system = System.from_file("case9.m")    # MATPOWER (future)
+
+        See Also:
+            - from_raw(): Explicit PSS/E format loading
+            - ParserFactory: Direct parser access
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.factories import ParserFactory
+
+        parser = ParserFactory.from_path(filepath)
+        return parser.parse(filepath)
 
     # =========================================================================
     # Count methods
