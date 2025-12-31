@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ develop, 'feature/**' ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:
@@ -41,4 +41,3 @@ jobs:
     - name: Type check with mypy
       run: |
         mypy src/
-
