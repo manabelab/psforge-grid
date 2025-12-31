@@ -7,6 +7,13 @@ Supported Formats:
     - PSS/E v33: Bus data starts immediately after 3-line case ID header
     - PSS/E v34: Uses explicit "BEGIN XXX DATA" section markers
 
+Architecture:
+    The module provides two interfaces:
+    - RawParser class: Implements IParser interface for factory pattern
+    - parse_raw function: Convenience function for quick usage
+
+    Both use the same parsing logic internally.
+
 Test Data Sources:
     - IEEE 9-bus (v34): https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
     - IEEE 14-bus (v33): https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/
@@ -14,6 +21,10 @@ Test Data Sources:
 References:
     - IEEE Test Systems: https://icseg.iti.illinois.edu/power-cases/
     - Texas A&M Repository: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/
+
+IDE Navigation Tips:
+    - Press F12 on RawParser to see this implementation
+    - Press Ctrl+F12 (Mac: Cmd+F12) on IParser to see other implementations
 """
 
 from __future__ import annotations
@@ -22,6 +33,7 @@ import contextlib
 import math
 from pathlib import Path
 
+from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
@@ -30,8 +42,51 @@ from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
 
 
+class RawParser(IParser):
+    """PSS/E RAW format parser.
+
+    Parses PSS/E RAW files (v33/v34) and constructs System objects.
+    This class implements the IParser interface for use with ParserFactory.
+
+    Supported Versions:
+        - v33: Traditional format with fixed section order
+        - v34: Modern format with explicit "BEGIN XXX DATA" markers
+
+    See IParser.parse() for full documentation of the parse method.
+
+    Example:
+        >>> from psforge_grid.io.raw_parser import RawParser
+        >>> parser = RawParser()
+        >>> system = parser.parse("ieee14.raw")
+        >>>
+        >>> # Or use the convenience function:
+        >>> from psforge_grid.io import parse_raw
+        >>> system = parse_raw("ieee14.raw")
+    """
+
+    @property
+    def supported_extensions(self) -> list[str]:
+        """Return list of supported file extensions."""
+        return ["raw", "RAW"]
+
+    @property
+    def format_name(self) -> str:
+        """Return human-readable format name."""
+        return "PSS/E RAW"
+
+    def parse(self, filepath: str | Path) -> System:
+        """Parse PSS/E RAW file and return a System object.
+
+        See IParser.parse() for full documentation.
+        """
+        return _parse_raw_impl(filepath)
+
+
 def parse_raw(filepath: str | Path) -> System:
     """Parse PSS/E RAW file and return a System object.
+
+    Convenience function for parsing PSS/E RAW files. For factory pattern
+    usage, see RawParser class or ParserFactory.
 
     Reads a PSS/E RAW format file (v33 or v34) and constructs a complete
     System object with buses, branches, generators, loads, and shunts.
@@ -54,6 +109,20 @@ def parse_raw(filepath: str | Path) -> System:
         - Empty lines and whitespace are handled automatically
         - Section markers ('0 /' or 'Q') denote end of data sections
         - Power values (MW, MVAr) are converted to per-unit on system base MVA
+
+    See Also:
+        - RawParser: Class implementing IParser interface
+        - ParserFactory: Factory for creating parsers
+        - System.from_raw(): Alternative factory method
+    """
+    return _parse_raw_impl(filepath)
+
+
+def _parse_raw_impl(filepath: str | Path) -> System:
+    """Internal implementation of RAW file parsing.
+
+    This is the shared implementation used by both parse_raw()
+    and RawParser.parse().
     """
     filepath = Path(filepath)
     if not filepath.exists():
