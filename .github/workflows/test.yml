@@ -9,11 +9,12 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
+    # NOTE: Minimal matrix for private repo (save GitHub Actions minutes)
+    # Run `/restore-ci-matrix` before making public to restore full matrix
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.11', '3.12']
 
     steps:
     - name: Checkout code
