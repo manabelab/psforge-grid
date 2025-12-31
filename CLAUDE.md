@@ -13,6 +13,64 @@
 
 ---
 
+## Interface & Factory Architecture
+
+> **This repository implements the Interface-Factory pattern** for pluggable file format parsers.
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    User Code                                │
+│         system = System.from_raw("ieee14.raw")              │
+│         # or: system = parse_raw("ieee14.raw")              │
+├─────────────────────────────────────────────────────────────┤
+│                    Factory Methods: System (models/system.py)│
+│         - System.from_raw(): Create from PSS/E file         │
+│         - System.from_file(): Auto-detect format            │
+├─────────────────────────────────────────────────────────────┤
+│                    Factory: ParserFactory (io/factories.py) │
+│         - ParserFactory.create("raw") → RawParser           │
+│         - ParserFactory.from_path(...) → auto-detect        │
+├─────────────────────────────────────────────────────────────┤
+│                    Interface: IParser (io/protocols.py)     │
+│         - Abstract base class (ABC)                         │
+│         - parse(filepath) → System                          │
+├─────────────────────────────────────────────────────────────┤
+│                    Implementations: io/                     │
+│         - RawParser: PSS/E RAW format (v33/v34)             │
+│         - [MatpowerParser]: MATPOWER format [planned]       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Module Structure
+
+```
+psforge_grid/
+├── __init__.py          # Public API exports
+├── models/              # Dataclass definitions
+│   ├── __init__.py
+│   ├── system.py        # System (with factory methods)
+│   ├── bus.py
+│   ├── branch.py
+│   ├── generator.py
+│   ├── load.py
+│   └── shunt.py
+└── io/                  # File I/O (Interface-Factory pattern)
+    ├── __init__.py      # Public exports
+    ├── protocols.py     # IParser interface
+    ├── factories.py     # ParserFactory
+    └── raw_parser.py    # RawParser implementation
+```
+
+### VSCode Navigation
+
+- **F12 on System.from_raw()**: Goes to factory method
+- **Ctrl+F12 on IParser.parse()**: Lists all implementations (RawParser, etc.)
+- Docstrings include "See Also" cross-references
+
+---
+
 ## LLM Affinity Design Principles
 
 > **This repository is critical for LLM affinity** - all data models defined here must support LLM-friendly output.
