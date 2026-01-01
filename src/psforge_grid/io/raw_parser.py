@@ -130,6 +130,9 @@ def _parse_raw_impl(filepath: str | Path) -> System:
 
     system = System()
 
+    # Set system name from filename
+    system.name = filepath.name
+
     try:
         with open(filepath, encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -139,9 +142,12 @@ def _parse_raw_impl(filepath: str | Path) -> System:
     # Split file into sections
     sections = _split_sections(lines)
 
-    # Parse CASE IDENTIFICATION section for base MVA
+    # Parse CASE IDENTIFICATION section for base MVA and case title
     if "CASE_ID" in sections:
-        system.base_mva = _parse_case_id(sections["CASE_ID"])
+        base_mva, case_title = _parse_case_id(sections["CASE_ID"])
+        system.base_mva = base_mva
+        if case_title:
+            system.description = case_title
 
     # Parse BUS DATA section
     if "BUS_DATA" in sections:
@@ -253,29 +259,56 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
     return sections
 
 
-def _parse_case_id(lines: list[str]) -> float:
-    """Parse CASE ID section to extract base MVA.
+def _parse_case_id(lines: list[str]) -> tuple[float, str]:
+    """Parse CASE ID section to extract base MVA and case title.
+
+    PSS/E RAW file header format (v33):
+        Line 1: IC, SBASE, REV, XFRRAT, NXFRAT, BASFRQ / comment
+        Line 2: Case title line 1 (up to 60 characters)
+        Line 3: Case title line 2 (up to 60 characters)
 
     Args:
         lines: Lines from CASE_ID section (first 3 lines of RAW file)
 
     Returns:
-        Base MVA value (default: 100.0 if not found)
-    """
-    if not lines:
-        return 100.0
+        Tuple of (base_mva, case_title):
+            - base_mva: System base MVA (default: 100.0 per PSS/E specification)
+            - case_title: Combined case title from lines 2-3 (stripped)
 
+    Note:
+        The default base MVA of 100.0 is defined in the PSS/E Program Application
+        Guide (SBASE default value). This is also the de facto industry standard
+        used by IEEE test cases (IEEE 14-bus, 30-bus, etc.) and most power system
+        analysis software.
+    """
+    # Default: 100 MVA per PSS/E specification and industry convention
+    # Reference: PSS/E Program Application Guide, Case Identification Data
+    base_mva = 100.0
+    case_title = ""
+
+    if not lines:
+        return base_mva, case_title
+
+    # Parse first line for base MVA
     try:
-        # First line typically contains IC, SBASE, REV, etc.
         # Format: IC, SBASE, REV, XFRRAT, NXFRAT, BASFRQ
         first_line = lines[0].split(",")
         if len(first_line) >= 2:
             base_mva = float(first_line[1].strip())
-            return base_mva
     except (IndexError, ValueError):
         pass
 
-    return 100.0
+    # Parse lines 2-3 for case title (v33 format)
+    title_parts = []
+    for i in range(1, min(3, len(lines))):
+        line = lines[i].strip()
+        # Skip empty lines and v34 section markers
+        if line and not line.startswith("BEGIN ") and not line.startswith("GENERAL,"):
+            title_parts.append(line)
+
+    case_title = " ".join(title_parts).strip()
+
+    return base_mva, case_title
 
 
 def _parse_bus_data(lines: list[str]) -> list[Bus]:
