@@ -49,7 +49,8 @@ class VoltageStatus(Enum):
     Classifies bus voltage magnitudes into semantic categories
     based on configurable thresholds.
 
-    Default Thresholds:
+    Status Values:
+        - NOT_CLASSIFIED: No limits specified, status not determined
         - CRITICAL_LOW: < 0.90 pu (dangerous undervoltage)
         - LOW: 0.90 - 0.95 pu (below normal range)
         - NORMAL: 0.95 - 1.05 pu (acceptable operating range)
@@ -62,11 +63,17 @@ class VoltageStatus(Enum):
         - Power quality (motors, electronics)
         - System stability (voltage collapse prevention)
 
+        When limits are not specified, the status is NOT_CLASSIFIED,
+        indicating that no judgment has been made about whether
+        the voltage is acceptable or not. This avoids imposing
+        arbitrary default thresholds on users.
+
     Example:
-        >>> status = VoltageStatus.from_value(0.943)
+        >>> status = VoltageStatus.from_value(0.943, v_min=0.95, v_max=1.05)
         >>> print(f"Voltage is {status.value}")  # "Voltage is LOW"
     """
 
+    NOT_CLASSIFIED = "NOT_CLASSIFIED"
     CRITICAL_LOW = "CRITICAL_LOW"
     LOW = "LOW"
     NORMAL = "NORMAL"
@@ -114,24 +121,44 @@ class VoltageStatus(Enum):
             return cls.CRITICAL_HIGH
 
     @property
+    def is_classified(self) -> bool:
+        """Check if voltage status has been classified.
+
+        Returns False if no limits were specified, True otherwise.
+        """
+        return self != VoltageStatus.NOT_CLASSIFIED
+
+    @property
     def is_normal(self) -> bool:
-        """Check if voltage is within normal range."""
+        """Check if voltage is within normal range.
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
         return self == VoltageStatus.NORMAL
 
     @property
     def is_violation(self) -> bool:
-        """Check if voltage violates normal limits."""
-        return self != VoltageStatus.NORMAL
+        """Check if voltage violates normal limits.
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
+        return self not in (VoltageStatus.NORMAL, VoltageStatus.NOT_CLASSIFIED)
 
     @property
     def is_critical(self) -> bool:
-        """Check if voltage is in critical range."""
+        """Check if voltage is in critical range.
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
         return self in (VoltageStatus.CRITICAL_LOW, VoltageStatus.CRITICAL_HIGH)
 
     @property
     def severity(self) -> Severity:
-        """Get the severity level for this voltage status."""
-        if self == VoltageStatus.NORMAL:
+        """Get the severity level for this voltage status.
+
+        Returns INFO if status is NOT_CLASSIFIED.
+        """
+        if self in (VoltageStatus.NORMAL, VoltageStatus.NOT_CLASSIFIED):
             return Severity.INFO
         elif self in (VoltageStatus.LOW, VoltageStatus.HIGH):
             return Severity.WARNING
@@ -145,7 +172,8 @@ class LoadingStatus(Enum):
     Classifies branch loading as a percentage of thermal limit
     into semantic categories.
 
-    Default Thresholds:
+    Status Values:
+        - NOT_CLASSIFIED: No limits/rating specified, status not determined
         - LIGHT: < 50% (low utilization)
         - NORMAL: 50% - 80% (normal operation)
         - HEAVY: 80% - 100% (approaching limit)
@@ -157,11 +185,17 @@ class LoadingStatus(Enum):
         - Insulation degradation
         - Reduced equipment lifetime
 
+        When limits are not specified, the status is NOT_CLASSIFIED,
+        indicating that no judgment has been made about whether
+        the loading is acceptable or not. This avoids imposing
+        arbitrary default thresholds on users.
+
     Example:
-        >>> status = LoadingStatus.from_percent(85.0)
+        >>> status = LoadingStatus.from_percent(85.0, heavy_threshold=80.0)
         >>> print(f"Branch loading: {status.value}")  # "Branch loading: HEAVY"
     """
 
+    NOT_CLASSIFIED = "NOT_CLASSIFIED"
     LIGHT = "LIGHT"
     NORMAL = "NORMAL"
     HEAVY = "HEAVY"
@@ -206,19 +240,44 @@ class LoadingStatus(Enum):
             return cls.OVERLOAD
 
     @property
+    def is_classified(self) -> bool:
+        """Check if loading status has been classified.
+
+        Returns False if no limits/rating were specified, True otherwise.
+        """
+        return self != LoadingStatus.NOT_CLASSIFIED
+
+    @property
     def is_normal(self) -> bool:
-        """Check if loading is within normal range (LIGHT or NORMAL)."""
+        """Check if loading is within normal range (LIGHT or NORMAL).
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
         return self in (LoadingStatus.LIGHT, LoadingStatus.NORMAL)
 
     @property
     def is_overload(self) -> bool:
-        """Check if loading exceeds thermal limit."""
+        """Check if loading exceeds thermal limit.
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
         return self == LoadingStatus.OVERLOAD
 
     @property
+    def is_heavy_or_overload(self) -> bool:
+        """Check if loading is heavy or overloaded.
+
+        Returns False if status is NOT_CLASSIFIED (no judgment made).
+        """
+        return self in (LoadingStatus.HEAVY, LoadingStatus.OVERLOAD)
+
+    @property
     def severity(self) -> Severity:
-        """Get the severity level for this loading status."""
-        if self in (LoadingStatus.LIGHT, LoadingStatus.NORMAL):
+        """Get the severity level for this loading status.
+
+        Returns INFO if status is NOT_CLASSIFIED.
+        """
+        if self in (LoadingStatus.LIGHT, LoadingStatus.NORMAL, LoadingStatus.NOT_CLASSIFIED):
             return Severity.INFO
         elif self == LoadingStatus.HEAVY:
             return Severity.WARNING
