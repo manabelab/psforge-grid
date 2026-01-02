@@ -13,22 +13,23 @@ license = { text = "MIT" } # or Apache-2.0
 requires-python = ">=3.9"
 
 # Dependencies
-# Hub design: psforge-grid has minimal dependencies (standard library only)
-dependencies = []
-
-# Development dependencies (tests, etc.)
-[project.optional-dependencies]
-cli = [
+# CLI tools (typer/rich) are included by default for immediate usability
+dependencies = [
     "typer>=0.9.0",
     "rich>=13.0.0",
 ]
+
+# Optional dependencies
+[project.optional-dependencies]
+# Slim install without CLI dependencies (for embedding in other packages)
+slim = []
+# Backward compatibility: cli extra is now empty since CLI is included by default
+cli = []
 dev = [
     "pytest",
     "ruff",        # Linter/Formatter
     "mypy",        # Type checker
     "pre-commit",  # Git hooks for automatic checks
-    "typer>=0.9.0",
-    "rich>=13.0.0",
 ]
 
 [project.scripts]
