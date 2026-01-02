@@ -463,8 +463,7 @@ class System:
                 f"Base MVA: {self.base_mva:.1f}",
                 f"Buses: {self.num_buses()}, Branches: {self.num_branches()}",
                 f"Generators: {self.num_generators()}, Loads: {self.num_loads()}",
-                f"Total Gen: {p_gen * self.base_mva:.1f} MW, "
-                f"Load: {p_load * self.base_mva:.1f} MW",
+                f"Total Gen: {p_gen * self.base_mva:.1f} MW, Load: {p_load * self.base_mva:.1f} MW",
             ]
 
         if self.description:

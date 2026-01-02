@@ -123,8 +123,7 @@ class LimitsConfig:
             )
         if self.convergence_tolerance_pu <= 0:
             raise ValueError(
-                f"convergence_tolerance_pu must be positive, "
-                f"got {self.convergence_tolerance_pu}"
+                f"convergence_tolerance_pu must be positive, got {self.convergence_tolerance_pu}"
             )
         if self.max_iterations <= 0:
             raise ValueError(f"max_iterations must be positive, got {self.max_iterations}")

@@ -173,8 +173,7 @@ def info(
 
         if verbose >= 2:
             console.print(
-                f"[dim]Parsed: {system.num_buses()} buses, "
-                f"{system.num_branches()} branches[/dim]"
+                f"[dim]Parsed: {system.num_buses()} buses, {system.num_branches()} branches[/dim]"
             )
 
         # Create summary and format output
