@@ -30,6 +30,8 @@ class Bus:
         v_max: Maximum voltage limit [p.u.] (default: 1.1)
         v_min: Minimum voltage limit [p.u.] (default: 0.9)
         name: Bus name (optional)
+        description: Free-text description providing context not captured
+            in numerical parameters. For LLM-friendly output.
 
     Note:
         - Per-unit (p.u.) values are normalized by system base MVA
@@ -54,6 +56,7 @@ class Bus:
     v_max: float = 1.1
     v_min: float = 0.9
     name: str | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate bus data after initialization.
@@ -86,3 +89,36 @@ class Bus:
     def is_isolated(self) -> bool:
         """Check if this is an isolated bus."""
         return self.bus_type == 4
+
+    @property
+    def bus_type_name(self) -> str:
+        """Get human-readable bus type name."""
+        type_names = {1: "PQ (Load)", 2: "PV (Generator)", 3: "Slack", 4: "Isolated"}
+        return type_names.get(self.bus_type, f"Unknown ({self.bus_type})")
+
+    def to_description(self) -> str:
+        """Generate human/LLM-readable description of this bus.
+
+        Returns:
+            Multi-line string describing the bus for LLM context.
+
+        Example:
+            >>> bus = Bus(bus_id=1, bus_type=3, base_kv=500.0, name="Main")
+            >>> print(bus.to_description())
+            Bus 1 (Main): Slack bus at 500.0 kV
+              Voltage: 1.0000 pu @ 0.00°
+              Limits: 0.90 - 1.10 pu
+        """
+        name_str = f" ({self.name})" if self.name else ""
+        v_angle_deg = self.v_angle * 180.0 / 3.14159265359
+
+        lines = [
+            f"Bus {self.bus_id}{name_str}: {self.bus_type_name} at {self.base_kv:.1f} kV",
+            f"  Voltage: {self.v_magnitude:.4f} pu @ {v_angle_deg:.2f}°",
+            f"  Limits: {self.v_min:.2f} - {self.v_max:.2f} pu",
+        ]
+
+        if self.description:
+            lines.append(f"  Note: {self.description}")
+
+        return "\n".join(lines)

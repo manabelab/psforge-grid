@@ -6,24 +6,68 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psforge-grid"
-version = "0.1.0"
-description = "Core data models and I/O for the psforge project."
+version = "0.1.1"
+description = "Core data models and I/O for the psforge power system analysis ecosystem. LLM-friendly design for AI-assisted analysis."
 readme = "README.md"
-license = { text = "MIT" } # or Apache-2.0
+license = "MIT"
 requires-python = ">=3.9"
+authors = [
+    { name = "Manabe Lab LLC", email = "manabe@manabelab.com" }
+]
+maintainers = [
+    { name = "Manabe Lab LLC", email = "manabe@manabelab.com" }
+]
+keywords = [
+    "power-systems",
+    "electrical-engineering",
+    "psse",
+    "power-flow",
+    "grid",
+    "llm-friendly",
+    "education",
+    "energy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+# Dependencies - CLI tools (typer/rich) are included by default for immediate usability
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
 
-# Dependencies
-# Hub design: psforge-grid has minimal dependencies (standard library only)
-dependencies = []
+[project.urls]
+Homepage = "https://github.com/manabelab/psforge-grid"
+Documentation = "https://github.com/manabelab/psforge-grid#readme"
+Repository = "https://github.com/manabelab/psforge-grid.git"
+Changelog = "https://github.com/manabelab/psforge-grid/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/manabelab/psforge-grid/issues"
 
-# Development dependencies (tests, etc.)
 [project.optional-dependencies]
+# Slim install without CLI dependencies (for embedding in other packages)
+slim = []
+# Backward compatibility: cli extra is now empty since CLI is included by default
+cli = []
 dev = [
     "pytest",
     "ruff",        # Linter/Formatter
     "mypy",        # Type checker
     "pre-commit",  # Git hooks for automatic checks
 ]
+
+[project.scripts]
+psforge-grid = "psforge_grid.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"] # Source code is in the 'src' directory

@@ -7,6 +7,13 @@ Supported Formats:
     - PSS/E v33: Bus data starts immediately after 3-line case ID header
     - PSS/E v34: Uses explicit "BEGIN XXX DATA" section markers
 
+Architecture:
+    The module provides two interfaces:
+    - RawParser class: Implements IParser interface for factory pattern
+    - parse_raw function: Convenience function for quick usage
+
+    Both use the same parsing logic internally.
+
 Test Data Sources:
     - IEEE 9-bus (v34): https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
     - IEEE 14-bus (v33): https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/
@@ -14,6 +21,10 @@ Test Data Sources:
 References:
     - IEEE Test Systems: https://icseg.iti.illinois.edu/power-cases/
     - Texas A&M Repository: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/
+
+IDE Navigation Tips:
+    - Press F12 on RawParser to see this implementation
+    - Press Ctrl+F12 (Mac: Cmd+F12) on IParser to see other implementations
 """
 
 from __future__ import annotations
@@ -22,6 +33,7 @@ import contextlib
 import math
 from pathlib import Path
 
+from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
@@ -30,8 +42,51 @@ from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
 
 
+class RawParser(IParser):
+    """PSS/E RAW format parser.
+
+    Parses PSS/E RAW files (v33/v34) and constructs System objects.
+    This class implements the IParser interface for use with ParserFactory.
+
+    Supported Versions:
+        - v33: Traditional format with fixed section order
+        - v34: Modern format with explicit "BEGIN XXX DATA" markers
+
+    See IParser.parse() for full documentation of the parse method.
+
+    Example:
+        >>> from psforge_grid.io.raw_parser import RawParser
+        >>> parser = RawParser()
+        >>> system = parser.parse("ieee14.raw")
+        >>>
+        >>> # Or use the convenience function:
+        >>> from psforge_grid.io import parse_raw
+        >>> system = parse_raw("ieee14.raw")
+    """
+
+    @property
+    def supported_extensions(self) -> list[str]:
+        """Return list of supported file extensions."""
+        return ["raw", "RAW"]
+
+    @property
+    def format_name(self) -> str:
+        """Return human-readable format name."""
+        return "PSS/E RAW"
+
+    def parse(self, filepath: str | Path) -> System:
+        """Parse PSS/E RAW file and return a System object.
+
+        See IParser.parse() for full documentation.
+        """
+        return _parse_raw_impl(filepath)
+
+
 def parse_raw(filepath: str | Path) -> System:
     """Parse PSS/E RAW file and return a System object.
+
+    Convenience function for parsing PSS/E RAW files. For factory pattern
+    usage, see RawParser class or ParserFactory.
 
     Reads a PSS/E RAW format file (v33 or v34) and constructs a complete
     System object with buses, branches, generators, loads, and shunts.
@@ -54,12 +109,29 @@ def parse_raw(filepath: str | Path) -> System:
         - Empty lines and whitespace are handled automatically
         - Section markers ('0 /' or 'Q') denote end of data sections
         - Power values (MW, MVAr) are converted to per-unit on system base MVA
+
+    See Also:
+        - RawParser: Class implementing IParser interface
+        - ParserFactory: Factory for creating parsers
+        - System.from_raw(): Alternative factory method
+    """
+    return _parse_raw_impl(filepath)
+
+
+def _parse_raw_impl(filepath: str | Path) -> System:
+    """Internal implementation of RAW file parsing.
+
+    This is the shared implementation used by both parse_raw()
+    and RawParser.parse().
     """
     filepath = Path(filepath)
     if not filepath.exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
     system = System()
+
+    # Set system name from filename
+    system.name = filepath.name
 
     try:
         with open(filepath, encoding="utf-8", errors="ignore") as f:
@@ -70,9 +142,12 @@ def parse_raw(filepath: str | Path) -> System:
     # Split file into sections
     sections = _split_sections(lines)
 
-    # Parse CASE IDENTIFICATION section for base MVA
+    # Parse CASE IDENTIFICATION section for base MVA and case title
     if "CASE_ID" in sections:
-        system.base_mva = _parse_case_id(sections["CASE_ID"])
+        base_mva, case_title = _parse_case_id(sections["CASE_ID"])
+        system.base_mva = base_mva
+        if case_title:
+            system.description = case_title
 
     # Parse BUS DATA section
     if "BUS_DATA" in sections:
@@ -184,29 +259,56 @@ def _split_sections(lines: list[str]) -> dict[str, list[str]]:
     return sections
 
 
-def _parse_case_id(lines: list[str]) -> float:
-    """Parse CASE ID section to extract base MVA.
+def _parse_case_id(lines: list[str]) -> tuple[float, str]:
+    """Parse CASE ID section to extract base MVA and case title.
+
+    PSS/E RAW file header format (v33):
+        Line 1: IC, SBASE, REV, XFRRAT, NXFRAT, BASFRQ / comment
+        Line 2: Case title line 1 (up to 60 characters)
+        Line 3: Case title line 2 (up to 60 characters)
 
     Args:
         lines: Lines from CASE_ID section (first 3 lines of RAW file)
 
     Returns:
-        Base MVA value (default: 100.0 if not found)
-    """
-    if not lines:
-        return 100.0
+        Tuple of (base_mva, case_title):
+            - base_mva: System base MVA (default: 100.0 per PSS/E specification)
+            - case_title: Combined case title from lines 2-3 (stripped)
 
+    Note:
+        The default base MVA of 100.0 is defined in the PSS/E Program Application
+        Guide (SBASE default value). This is also the de facto industry standard
+        used by IEEE test cases (IEEE 14-bus, 30-bus, etc.) and most power system
+        analysis software.
+    """
+    # Default: 100 MVA per PSS/E specification and industry convention
+    # Reference: PSS/E Program Application Guide, Case Identification Data
+    base_mva = 100.0
+    case_title = ""
+
+    if not lines:
+        return base_mva, case_title
+
+    # Parse first line for base MVA
     try:
-        # First line typically contains IC, SBASE, REV, etc.
         # Format: IC, SBASE, REV, XFRRAT, NXFRAT, BASFRQ
         first_line = lines[0].split(",")
         if len(first_line) >= 2:
             base_mva = float(first_line[1].strip())
-            return base_mva
     except (IndexError, ValueError):
         pass
 
-    return 100.0
+    # Parse lines 2-3 for case title (v33 format)
+    title_parts = []
+    for i in range(1, min(3, len(lines))):
+        line = lines[i].strip()
+        # Skip empty lines and v34 section markers
+        if line and not line.startswith("BEGIN ") and not line.startswith("GENERAL,"):
+            title_parts.append(line)
+
+    case_title = " ".join(title_parts).strip()
+
+    return base_mva, case_title
 
 
 def _parse_bus_data(lines: list[str]) -> list[Bus]:

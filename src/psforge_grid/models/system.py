@@ -1,11 +1,17 @@
 """System data model for power system analysis.
 
 This module defines the System class as the central container for all power system components.
+
+Factory Methods:
+    The System class provides factory methods for creating instances from files:
+    - from_raw(): Create from PSS/E RAW file
+    - from_file(): Create from any supported format (auto-detect)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -30,6 +36,8 @@ class System:
         shunts: List of Shunt objects representing capacitors/reactors
         base_mva: System base MVA for per-unit conversion (default: 100.0)
         name: System name (optional, default: empty string)
+        description: Free-text description providing context about the system.
+            For LLM-friendly output.
 
     Note:
         - All per-unit values in components are based on base_mva
@@ -53,6 +61,73 @@ class System:
     shunts: list[Shunt] = field(default_factory=list)
     base_mva: float = 100.0
     name: str = ""
+    description: str | None = None
+
+    # =========================================================================
+    # Factory methods
+    # =========================================================================
+
+    @classmethod
+    def from_raw(cls, filepath: str | Path) -> System:
+        """Create a System from a PSS/E RAW file.
+
+        Factory method for creating System instances from PSS/E RAW format
+        files (v33/v34). This is the recommended way to load power system
+        data from RAW files.
+
+        Args:
+            filepath: Path to the .raw file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_raw("ieee14.raw")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_raw(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.raw_parser import parse_raw
+
+        return parse_raw(filepath)
+
+    @classmethod
+    def from_file(cls, filepath: str | Path) -> System:
+        """Create a System from a power system data file.
+
+        Factory method that auto-detects the file format based on extension
+        and uses the appropriate parser. Supports PSS/E RAW and future formats.
+
+        Args:
+            filepath: Path to the data file (extension determines format)
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is not recognized or invalid
+
+        Example:
+            >>> system = System.from_file("ieee14.raw")  # PSS/E format
+            >>> system = System.from_file("case9.m")    # MATPOWER (future)
+
+        See Also:
+            - from_raw(): Explicit PSS/E format loading
+            - ParserFactory: Direct parser access
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.factories import ParserFactory
+
+        parser = ParserFactory.from_path(filepath)
+        return parser.parse(filepath)
 
     # =========================================================================
     # Count methods
@@ -301,3 +376,148 @@ class System:
         total_p = sum(load.p_load for load in loads)
         total_q = sum(load.q_load for load in loads)
         return total_p, total_q
+
+    # =========================================================================
+    # LLM-friendly output methods
+    # =========================================================================
+
+    def to_description(self) -> str:
+        """Generate human/LLM-readable description of this system.
+
+        Returns:
+            Multi-line string describing the system for LLM context.
+
+        Example:
+            >>> system = System.from_raw("ieee14.raw")
+            >>> print(system.to_description())
+            Power System: IEEE 14-Bus Test System
+              Base MVA: 100.0
+              Components: 14 buses, 20 branches, 5 generators, 11 loads, 1 shunts
+              Total Generation: 2.72 pu P, 0.00 pu Q
+              Total Load: 2.59 pu P, 0.74 pu Q
+        """
+        name_str = self.name if self.name else "Unnamed System"
+        p_gen, q_gen = self.total_generation()
+        p_load, q_load = self.total_load()
+
+        lines = [
+            f"Power System: {name_str}",
+            f"  Base MVA: {self.base_mva:.1f}",
+            f"  Components: {self.num_buses()} buses, {self.num_branches()} branches, "
+            f"{self.num_generators()} generators, {self.num_loads()} loads, "
+            f"{self.num_shunts()} shunts",
+            f"  Total Generation: {p_gen:.2f} pu P, {q_gen:.2f} pu Q",
+            f"  Total Load: {p_load:.2f} pu P, {q_load:.2f} pu Q",
+        ]
+
+        if self.description:
+            lines.append(f"  Note: {self.description}")
+
+        return "\n".join(lines)
+
+    def to_llm_context(
+        self,
+        max_buses: int = 20,  # noqa: ARG002
+        max_branches: int = 20,  # noqa: ARG002
+        include_components: bool = True,
+        format: str = "markdown",
+    ) -> str:
+        """Generate context string optimized for LLM prompts.
+
+        Creates a compact, token-efficient representation of the system
+        suitable for embedding in LLM prompts.
+
+        Args:
+            max_buses: Maximum number of buses to include in detail
+            max_branches: Maximum number of branches to include in detail
+            include_components: Whether to include component lists
+            format: Output format ("markdown" or "text")
+
+        Returns:
+            LLM-friendly context string
+
+        Example:
+            >>> context = system.to_llm_context(max_buses=10)
+            >>> response = llm.ask(f"Analyze this system: {context}")
+        """
+        p_gen, q_gen = self.total_generation()
+        p_load, q_load = self.total_load()
+
+        if format == "markdown":
+            lines = [
+                f"## Power System: {self.name or 'Unnamed'}",
+                "",
+                "| Property | Value |",
+                "|----------|-------|",
+                f"| Base MVA | {self.base_mva:.1f} |",
+                f"| Buses | {self.num_buses()} |",
+                f"| Branches | {self.num_branches()} |",
+                f"| Generators | {self.num_generators()} |",
+                f"| Loads | {self.num_loads()} |",
+                f"| Total Gen (P) | {p_gen * self.base_mva:.1f} MW |",
+                f"| Total Load (P) | {p_load * self.base_mva:.1f} MW |",
+            ]
+        else:
+            lines = [
+                f"Power System: {self.name or 'Unnamed'}",
+                f"Base MVA: {self.base_mva:.1f}",
+                f"Buses: {self.num_buses()}, Branches: {self.num_branches()}",
+                f"Generators: {self.num_generators()}, Loads: {self.num_loads()}",
+                f"Total Gen: {p_gen * self.base_mva:.1f} MW, Load: {p_load * self.base_mva:.1f} MW",
+            ]
+
+        if self.description:
+            lines.append("")
+            lines.append(f"Description: {self.description}")
+
+        if include_components:
+            lines.append("")
+            lines.append("### Bus Types:")
+            slack = [b for b in self.buses if b.is_slack]
+            pv = [b for b in self.buses if b.is_pv]
+            pq = [b for b in self.buses if b.is_pq]
+            lines.append(f"- Slack: {len(slack)} ({', '.join(str(b.bus_id) for b in slack)})")
+            lines.append(f"- PV: {len(pv)}")
+            lines.append(f"- PQ: {len(pq)}")
+
+        return "\n".join(lines)
+
+    def get_all_descriptions(self) -> str:
+        """Get descriptions of all components with custom notes.
+
+        Returns only components that have a description field set.
+
+        Returns:
+            Multi-line string with all component descriptions
+        """
+        lines = []
+
+        if self.description:
+            lines.append(f"System: {self.description}")
+
+        for bus in self.buses:
+            if bus.description:
+                name = bus.name or f"Bus {bus.bus_id}"
+                lines.append(f"Bus {bus.bus_id} ({name}): {bus.description}")
+
+        for branch in self.branches:
+            if branch.description:
+                name = branch.name or f"{branch.from_bus}-{branch.to_bus}"
+                lines.append(f"Branch {name}: {branch.description}")
+
+        for gen in self.generators:
+            if gen.description:
+                name = gen.name or f"Gen {gen.gen_id} at Bus {gen.bus_id}"
+                lines.append(f"Generator {name}: {gen.description}")
+
+        for load in self.loads:
+            if load.description:
+                name = load.name or f"Load {load.load_id} at Bus {load.bus_id}"
+                lines.append(f"Load {name}: {load.description}")
+
+        for shunt in self.shunts:
+            if shunt.description:
+                name = shunt.name or f"Shunt {shunt.shunt_id} at Bus {shunt.bus_id}"
+                lines.append(f"Shunt {name}: {shunt.description}")
+
+        return "\n".join(lines) if lines else "No descriptions available."
