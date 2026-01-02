@@ -7,6 +7,7 @@ and output formats.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -14,6 +15,13 @@ from typer.testing import CliRunner
 from psforge_grid.cli.app import app
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
+
 
 # Path to test fixtures
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
@@ -199,7 +207,8 @@ class TestVersionAndHelp:
         """Test info --help."""
         result = runner.invoke(app, ["info", "--help"])
         assert result.exit_code == 0
-        assert "--format" in result.stdout
+        # Strip ANSI codes before checking (Typer adds color formatting)
+        assert "--format" in strip_ansi(result.stdout)
 
     def test_show_help(self) -> None:
         """Test show --help."""
@@ -210,7 +219,8 @@ class TestVersionAndHelp:
         """Test validate --help."""
         result = runner.invoke(app, ["validate", "--help"])
         assert result.exit_code == 0
-        assert "--strict" in result.stdout
+        # Strip ANSI codes before checking (Typer adds color formatting)
+        assert "--strict" in strip_ansi(result.stdout)
 
 
 class TestLLMAffinityOutput:
