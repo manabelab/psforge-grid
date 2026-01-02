@@ -1,6 +1,48 @@
 # psforge-grid
 
-Core data models and I/O for the psforge project.
+[![PyPI version](https://badge.fury.io/py/psforge-grid.svg)](https://badge.fury.io/py/psforge-grid)
+[![Python versions](https://img.shields.io/pypi/pyversions/psforge-grid.svg)](https://pypi.org/project/psforge-grid/)
+[![Tests](https://github.com/manabelab/psforge-grid/actions/workflows/test.yml/badge.svg)](https://github.com/manabelab/psforge-grid/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> **Hub data model for the psforge power system analysis ecosystem**
+
+Core data models and I/O for power system analysis with LLM-friendly design.
+
+## Quick Start
+
+```bash
+pip install psforge-grid
+```
+
+```python
+from psforge_grid import System
+
+# Load a PSS/E RAW file
+system = System.from_raw("ieee14.raw")
+
+# Explore the system
+print(f"Buses: {len(system.buses)}, Branches: {len(system.branches)}")
+
+# Get LLM-friendly summary
+print(system.to_summary())
+```
+
+```bash
+# Or use the CLI
+psforge-grid info ieee14.raw
+psforge-grid show ieee14.raw buses -f json
+```
+
+## Why psforge-grid?
+
+| Feature | psforge-grid | Others |
+|---------|--------------|--------|
+| **LLM-friendly output** | Built-in JSON/summary formats | Manual formatting |
+| **Educational design** | Rich docstrings, clear naming | Varies |
+| **Type hints** | Complete type annotations | Often missing |
+| **CLI included** | Yes, with multiple output formats | Usually separate |
+| **PSS/E RAW support** | v33/v34 core sections | Varies |
 
 ## Overview
 
@@ -201,6 +243,34 @@ This project includes `.vscode/` configuration for seamless development:
 - `ms-python.mypy-type-checker` - Mypy type checker
 - `ms-python.python` - Python language support
 
+## Related Projects
+
+psforge is a modular power system analysis ecosystem:
+
+| Package | Description | Status |
+|---------|-------------|--------|
+| **psforge-grid** (this) | Core data models and I/O (Hub) | Active |
+| [psforge-flow](https://github.com/manabelab/psforge-flow) | AC power flow calculation | Active |
+| psforge-stability | Transient stability analysis | Planned |
+| psforge-schedule | Unit commitment optimization | Planned |
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Run tests (`pytest tests/`)
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+See [CLAUDE.md](CLAUDE.md) for AI development guidelines.
+
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+**Developed by [Manabe Lab LLC](https://github.com/manabelab)**
