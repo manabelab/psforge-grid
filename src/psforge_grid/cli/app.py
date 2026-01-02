@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from rich.console import Console
@@ -69,7 +69,7 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main_callback(
     version: Annotated[
-        bool | None,
+        Optional[bool],  # noqa: UP007 - Typer requires Optional for Python 3.9
         typer.Option(
             "--version",
             "-V",
@@ -116,7 +116,7 @@ def info(
         ),
     ] = "table",
     output: Annotated[
-        Path | None,
+        Optional[Path],  # noqa: UP007 - Typer requires Optional for Python 3.9
         typer.Option(
             "--output",
             "-o",
@@ -221,7 +221,7 @@ def show(
         ),
     ],
     element_id: Annotated[  # noqa: ARG001 - placeholder for future filtering
-        int | None,
+        Optional[int],  # noqa: UP007 - Typer requires Optional for Python 3.9
         typer.Argument(
             help="Specific element ID to display. If not specified, shows all.",
         ),
@@ -235,7 +235,7 @@ def show(
         ),
     ] = "table",
     output: Annotated[
-        Path | None,
+        Optional[Path],  # noqa: UP007 - Typer requires Optional for Python 3.9
         typer.Option(
             "--output",
             "-o",
