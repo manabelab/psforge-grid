@@ -61,7 +61,7 @@ slim = []
 cli = []
 dev = [
     "pytest",
-    "ruff",        # Linter/Formatter
+    "ruff>=0.8.0", # Linter/Formatter (pinned to avoid rule differences)
     "mypy",        # Type checker
     "pre-commit",  # Git hooks for automatic checks
 ]
@@ -90,8 +90,12 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501", # line too long (handled by formatter)
+    "E501",  # line too long (handled by formatter)
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Typer requires Optional[] for Python 3.9 runtime compatibility
+"src/psforge_grid/cli/app.py" = ["UP007", "UP045"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["psforge_grid"]

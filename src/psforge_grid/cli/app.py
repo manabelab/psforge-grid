@@ -69,7 +69,7 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main_callback(
     version: Annotated[
-        Optional[bool],  # noqa: UP007 - Typer requires Optional for Python 3.9
+        Optional[bool],
         typer.Option(
             "--version",
             "-V",
@@ -116,7 +116,7 @@ def info(
         ),
     ] = "table",
     output: Annotated[
-        Optional[Path],  # noqa: UP007 - Typer requires Optional for Python 3.9
+        Optional[Path],
         typer.Option(
             "--output",
             "-o",
@@ -221,7 +221,7 @@ def show(
         ),
     ],
     element_id: Annotated[  # noqa: ARG001 - placeholder for future filtering
-        Optional[int],  # noqa: UP007 - Typer requires Optional for Python 3.9
+        Optional[int],
         typer.Argument(
             help="Specific element ID to display. If not specified, shows all.",
         ),
@@ -235,7 +235,7 @@ def show(
         ),
     ] = "table",
     output: Annotated[
-        Optional[Path],  # noqa: UP007 - Typer requires Optional for Python 3.9
+        Optional[Path],
         typer.Option(
             "--output",
             "-o",
