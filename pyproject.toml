@@ -10,7 +10,7 @@ version = "0.1.1"
 description = "Core data models and I/O for the psforge power system analysis ecosystem. LLM-friendly design for AI-assisted analysis."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "Manabe Lab LLC", email = "manabe@manabelab.com" }
 ]
@@ -33,7 +33,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -75,7 +74,7 @@ where = ["src"] # Source code is in the 'src' directory
 # Ruff configuration
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
@@ -93,10 +92,6 @@ ignore = [
     "E501",  # line too long (handled by formatter)
 ]
 
-[tool.ruff.lint.per-file-ignores]
-# Typer requires Optional[] for Python 3.9 runtime compatibility
-"src/psforge_grid/cli/app.py" = ["UP007", "UP045"]
-
 [tool.ruff.lint.isort]
 known-first-party = ["psforge_grid"]
 
@@ -106,7 +101,7 @@ indent-style = "space"
 
 # Mypy configuration
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
