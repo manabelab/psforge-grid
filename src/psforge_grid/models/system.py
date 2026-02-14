@@ -5,6 +5,7 @@ This module defines the System class as the central container for all power syst
 Factory Methods:
     The System class provides factory methods for creating instances from files:
     - from_raw(): Create from PSS/E RAW file
+    - from_matpower(): Create from MATPOWER .m file
     - from_file(): Create from any supported format (auto-detect)
 """
 
@@ -16,6 +17,7 @@ from pathlib import Path
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
 
@@ -34,6 +36,7 @@ class System:
         generators: List of Generator objects representing generation units
         loads: List of Load objects representing electrical consumption
         shunts: List of Shunt objects representing capacitors/reactors
+        generator_costs: List of GeneratorCost objects for OPF/UC formulations
         base_mva: System base MVA for per-unit conversion (default: 100.0)
         name: System name (optional, default: empty string)
         description: Free-text description providing context about the system.
@@ -59,6 +62,7 @@ class System:
     generators: list[Generator] = field(default_factory=list)
     loads: list[Load] = field(default_factory=list)
     shunts: list[Shunt] = field(default_factory=list)
+    generator_costs: list[GeneratorCost] = field(default_factory=list)
     base_mva: float = 100.0
     name: str = ""
     description: str | None = None
@@ -97,6 +101,38 @@ class System:
         from psforge_grid.io.raw_parser import parse_raw
 
         return parse_raw(filepath)
+
+    @classmethod
+    def from_matpower(cls, filepath: str | Path) -> System:
+        """Create a System from a MATPOWER .m file.
+
+        Factory method for creating System instances from MATPOWER format
+        files (.m). Supports standard MATPOWER case files including
+        pglib-opf benchmark cases.
+
+        Args:
+            filepath: Path to the .m file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_matpower("case14.m")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_raw(): Load PSS/E RAW format
+            - from_file(): Auto-detect format from extension
+            - parse_matpower(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.matpower_parser import parse_matpower
+
+        return parse_matpower(filepath)
 
     @classmethod
     def from_file(cls, filepath: str | Path) -> System:
@@ -337,6 +373,10 @@ class System:
     def num_shunts(self) -> int:
         """Return the number of shunts in the system."""
         return len(self.shunts)
+
+    def num_generator_costs(self) -> int:
+        """Return the number of generator cost functions in the system."""
+        return len(self.generator_costs)
 
     # =========================================================================
     # Bus lookup methods
@@ -594,6 +634,9 @@ class System:
             f"  Total Generation: {p_gen:.2f} pu P, {q_gen:.2f} pu Q",
             f"  Total Load: {p_load:.2f} pu P, {q_load:.2f} pu Q",
         ]
+
+        if self.generator_costs:
+            lines.append(f"  Generator Costs: {self.num_generator_costs()} cost functions")
 
         if self.description:
             lines.append(f"  Note: {self.description}")
