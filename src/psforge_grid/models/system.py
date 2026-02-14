@@ -130,6 +130,191 @@ class System:
         return parser.parse(filepath)
 
     # =========================================================================
+    # Modification methods (validated)
+    # =========================================================================
+
+    def add_bus(self, bus: Bus) -> None:
+        """Add a bus with validation.
+
+        Validates that the bus ID does not already exist in the system
+        before adding. Use this method instead of direct list append
+        for safer system modification.
+
+        Args:
+            bus: Bus to add
+
+        Raises:
+            ValueError: If bus_id already exists in the system.
+
+        Example:
+            >>> system.add_bus(Bus(bus_id=15, bus_type=1, base_kv=33.0))
+        """
+        if any(b.bus_id == bus.bus_id for b in self.buses):
+            raise ValueError(
+                f"Bus {bus.bus_id} already exists. "
+                f"Use a unique bus_id (current max: {max(b.bus_id for b in self.buses)})."
+            )
+        self.buses.append(bus)
+
+    def add_branch(self, branch: Branch) -> None:
+        """Add a branch with validation.
+
+        Validates that both from_bus and to_bus exist in the system
+        before adding.
+
+        Args:
+            branch: Branch to add
+
+        Raises:
+            ValueError: If from_bus or to_bus not found in system.
+
+        Example:
+            >>> system.add_branch(Branch(from_bus=14, to_bus=15, r_pu=0.01, x_pu=0.05))
+        """
+        bus_ids = {b.bus_id for b in self.buses}
+        if branch.from_bus not in bus_ids:
+            raise ValueError(
+                f"from_bus {branch.from_bus} not found in system. "
+                f"Available bus IDs: {sorted(bus_ids)}"
+            )
+        if branch.to_bus not in bus_ids:
+            raise ValueError(
+                f"to_bus {branch.to_bus} not found in system. Available bus IDs: {sorted(bus_ids)}"
+            )
+        self.branches.append(branch)
+
+    def add_generator(self, generator: Generator) -> None:
+        """Add a generator with validation.
+
+        Validates that the generator's bus_id exists in the system.
+
+        Args:
+            generator: Generator to add
+
+        Raises:
+            ValueError: If bus_id not found in system.
+
+        Example:
+            >>> system.add_generator(Generator(bus_id=15, p_gen=0.5, gen_id="PV1"))
+        """
+        if not any(b.bus_id == generator.bus_id for b in self.buses):
+            raise ValueError(
+                f"Bus {generator.bus_id} not found in system. Add the bus first with add_bus()."
+            )
+        self.generators.append(generator)
+
+    def add_shunt(self, shunt: Shunt) -> None:
+        """Add a shunt device with validation.
+
+        Validates that the shunt's bus_id exists in the system.
+
+        Args:
+            shunt: Shunt to add
+
+        Raises:
+            ValueError: If bus_id not found in system.
+
+        Example:
+            >>> system.add_shunt(Shunt(bus_id=15, b_pu=0.05))
+        """
+        if not any(b.bus_id == shunt.bus_id for b in self.buses):
+            raise ValueError(
+                f"Bus {shunt.bus_id} not found in system. Add the bus first with add_bus()."
+            )
+        self.shunts.append(shunt)
+
+    def add_load(self, load: Load) -> None:
+        """Add a load with validation.
+
+        Validates that the load's bus_id exists in the system.
+
+        Args:
+            load: Load to add
+
+        Raises:
+            ValueError: If bus_id not found in system.
+
+        Example:
+            >>> system.add_load(Load(bus_id=15, p_load=0.3, q_load=0.1))
+        """
+        if not any(b.bus_id == load.bus_id for b in self.buses):
+            raise ValueError(
+                f"Bus {load.bus_id} not found in system. Add the bus first with add_bus()."
+            )
+        self.loads.append(load)
+
+    # =========================================================================
+    # Validation
+    # =========================================================================
+
+    def validate(self) -> list[str]:
+        """Validate system consistency.
+
+        Checks structural integrity of the system data, including:
+        - Duplicate bus IDs
+        - Slack bus existence
+        - Branch bus references (from_bus, to_bus)
+        - Generator, load, and shunt bus references
+
+        Returns a list of error messages. An empty list means the system
+        is valid and ready for power flow calculation.
+
+        Returns:
+            List of validation error messages. Empty list means valid.
+
+        Example:
+            >>> errors = system.validate()
+            >>> if errors:
+            ...     for e in errors:
+            ...         print(f"ERROR: {e}")
+            ... else:
+            ...     print("System is valid")
+        """
+        errors: list[str] = []
+        bus_ids = {b.bus_id for b in self.buses}
+
+        # Duplicate bus IDs
+        if len(bus_ids) != len(self.buses):
+            seen: set[int] = set()
+            for b in self.buses:
+                if b.bus_id in seen:
+                    errors.append(f"Duplicate bus_id: {b.bus_id}")
+                seen.add(b.bus_id)
+
+        # Slack bus existence
+        slack_buses = [b for b in self.buses if b.bus_type == 3]
+        if not slack_buses:
+            errors.append("No slack bus (bus_type=3) found")
+
+        # Branch bus references
+        for i, br in enumerate(self.branches):
+            if br.from_bus not in bus_ids:
+                errors.append(
+                    f"Branch[{i}] ({br.from_bus}-{br.to_bus}): from_bus {br.from_bus} not in system"
+                )
+            if br.to_bus not in bus_ids:
+                errors.append(
+                    f"Branch[{i}] ({br.from_bus}-{br.to_bus}): to_bus {br.to_bus} not in system"
+                )
+
+        # Generator bus references
+        for gen in self.generators:
+            if gen.bus_id not in bus_ids:
+                errors.append(f"Generator '{gen.gen_id}' at bus {gen.bus_id}: bus not in system")
+
+        # Load bus references
+        for load in self.loads:
+            if load.bus_id not in bus_ids:
+                errors.append(f"Load '{load.load_id}' at bus {load.bus_id}: bus not in system")
+
+        # Shunt bus references
+        for shunt in self.shunts:
+            if shunt.bus_id not in bus_ids:
+                errors.append(f"Shunt '{shunt.shunt_id}' at bus {shunt.bus_id}: bus not in system")
+
+        return errors
+
+    # =========================================================================
     # Count methods
     # =========================================================================
 
