@@ -17,6 +17,7 @@ from psforge_grid.models import (
     BusType,
     ConvergenceStatus,
     Generator,
+    GeneratorCost,
     LimitsConfig,
     Load,
     LoadingStatus,
@@ -27,7 +28,7 @@ from psforge_grid.models import (
     VoltageStatus,
 )
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 __all__ = [
     # Version
@@ -37,6 +38,7 @@ __all__ = [
     "Bus",
     "Branch",
     "Generator",
+    "GeneratorCost",
     "Load",
     "Shunt",
     # Enums

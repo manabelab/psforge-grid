@@ -6,8 +6,9 @@
 
 ### Responsibilities
 
-- Common data classes (`System`, `Bus`, `Branch`, `Generator`, `Load`, `Shunt`)
+- Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
 - PSS/E RAW file parser (v33/v34)
+- MATPOWER .m file parser (pglib-opf compatible)
 - Shared utilities for power system analysis
 - **Foundation for LLM-friendly output structures**
 
@@ -23,14 +24,17 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Code                                │
 │         system = System.from_raw("ieee14.raw")              │
-│         # or: system = parse_raw("ieee14.raw")              │
+│         system = System.from_matpower("case14.m")           │
+│         system = System.from_file("data.raw")  # auto-detect│
 ├─────────────────────────────────────────────────────────────┤
 │                    Factory Methods: System (models/system.py)│
 │         - System.from_raw(): Create from PSS/E file         │
+│         - System.from_matpower(): Create from MATPOWER file  │
 │         - System.from_file(): Auto-detect format            │
 ├─────────────────────────────────────────────────────────────┤
 │                    Factory: ParserFactory (io/factories.py) │
 │         - ParserFactory.create("raw") → RawParser           │
+│         - ParserFactory.create("matpower") → MatpowerParser  │
 │         - ParserFactory.from_path(...) → auto-detect        │
 ├─────────────────────────────────────────────────────────────┤
 │                    Interface: IParser (io/protocols.py)     │
@@ -39,7 +43,7 @@
 ├─────────────────────────────────────────────────────────────┤
 │                    Implementations: io/                     │
 │         - RawParser: PSS/E RAW format (v33/v34)             │
-│         - [MatpowerParser]: MATPOWER format [planned]       │
+│         - MatpowerParser: MATPOWER format (.m files)        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,13 +58,15 @@ psforge_grid/
 │   ├── bus.py
 │   ├── branch.py
 │   ├── generator.py
+│   ├── generator_cost.py  # OPF/UC cost functions
 │   ├── load.py
 │   └── shunt.py
 └── io/                  # File I/O (Interface-Factory pattern)
     ├── __init__.py      # Public exports
     ├── protocols.py     # IParser interface
     ├── factories.py     # ParserFactory
-    └── raw_parser.py    # RawParser implementation
+    ├── raw_parser.py    # RawParser implementation
+    └── matpower_parser.py # MatpowerParser implementation
 ```
 
 ### VSCode Navigation

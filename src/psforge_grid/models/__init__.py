@@ -21,6 +21,7 @@ from psforge_grid.models.enums import (
     VoltageStatus,
 )
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.limits import LimitsConfig
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
@@ -31,6 +32,7 @@ __all__ = [
     "Bus",
     "Branch",
     "Generator",
+    "GeneratorCost",
     "Load",
     "Shunt",
     "System",

@@ -5,6 +5,7 @@ This module defines the Branch class representing transmission lines and transfo
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -30,6 +31,10 @@ class Branch:
         rate_a: Continuous thermal rating [MVA] (default: None, unlimited)
         rate_b: Short-term thermal rating [MVA] (default: None)
         rate_c: Emergency thermal rating [MVA] (default: None)
+        angmin: Minimum angle difference (theta_from - theta_to) [rad]
+            (default: None, unlimited). Used in OPF constraints.
+        angmax: Maximum angle difference (theta_from - theta_to) [rad]
+            (default: None, unlimited). Used in OPF constraints.
         status: Operating status (1: in-service, 0: out-of-service)
         circuit_id: Circuit identifier for parallel branches (default: "1")
         name: Branch name (optional)
@@ -61,6 +66,8 @@ class Branch:
     rate_a: float | None = None
     rate_b: float | None = None
     rate_c: float | None = None
+    angmin: float | None = None
+    angmax: float | None = None
     status: int = 1
     circuit_id: str = "1"
     name: str | None = None
@@ -129,11 +136,18 @@ class Branch:
             lines.append(f"  Charging: B = {self.b_pu:.4f} pu")
 
         if self.is_transformer:
-            shift_deg = self.shift_angle * 180.0 / 3.14159265359
+            shift_deg = self.shift_angle * 180.0 / math.pi
             lines.append(f"  Tap: {self.tap_ratio:.4f}, Shift: {shift_deg:.2f}°")
 
         if self.rate_a is not None:
             lines.append(f"  Rating: {self.rate_a:.1f} MVA")
+
+        if self.angmin is not None or self.angmax is not None:
+            angmin_deg = math.degrees(self.angmin) if self.angmin is not None else None
+            angmax_deg = math.degrees(self.angmax) if self.angmax is not None else None
+            min_str = f"{angmin_deg:.1f}°" if angmin_deg is not None else "-∞"
+            max_str = f"{angmax_deg:.1f}°" if angmax_deg is not None else "+∞"
+            lines.append(f"  Angle limits: [{min_str}, {max_str}]")
 
         lines.append(f"  Status: {status_str}")
 

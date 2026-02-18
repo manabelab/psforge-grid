@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psforge-grid"
-version = "0.2.1"
+version = "0.3.0"
 description = "Core data models and I/O for the psforge power system analysis ecosystem. LLM-friendly design for AI-assisted analysis."
 readme = "README.md"
 license = "MIT"
