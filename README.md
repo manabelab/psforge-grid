@@ -291,22 +291,24 @@ psforge is a modular power system analysis ecosystem built on a **Hub & Spoke** 
                     │   (Hub: Data & I/O)  │
                     └──────────┬───────────┘
                                │
-            ┌──────────────────┼──────────────────┐
-            │                  │                  │
-   ┌────────▼────────┐ ┌──────▼───────┐ ┌────────▼────────┐
-   │  psforge-flow   │ │psforge-      │ │psforge-         │
-   │  (AC Power Flow)│ │stability     │ │schedule         │
-   │                 │ │(Transient    │ │(Unit Commitment) │
-   │                 │ │ Stability)   │ │                 │
-   └─────────────────┘ └──────────────┘ └─────────────────┘
+     ┌─────────────┬───────────┼───────────┬─────────────┐
+     │             │           │           │             │
+┌────▼────┐  ┌────▼────┐ ┌────▼─────┐ ┌───▼────┐  ┌────▼────┐
+│ psforge │  │ psforge │ │ psforge- │ │psforge-│  │ psforge │
+│  -flow  │  │ -fault  │ │stability │ │schedule│  │ -turbo  │
+│ (Power  │  │ (Fault  │ │(Transient│ │ (Unit  │  │  (C++   │
+│  Flow)  │  │Analysis)│ │Stability)│ │Commit.)│  │ Engine) │
+└─────────┘  └─────────┘ └──────────┘ └────────┘  └─────────┘
 ```
 
 | Package | PyPI Name | Description | Status |
 |---------|-----------|-------------|--------|
 | **psforge-grid** (this) | `psforge-grid` | Core data models, parsers (RAW, MATPOWER), and CLI | Active |
 | **psforge-flow** | `psforge-flow` | AC power flow (Newton-Raphson) and optimal power flow | Active |
+| **psforge-fault** | `psforge-fault` | Short-circuit fault analysis (symmetrical components) | Active |
 | **psforge-stability** | `psforge-stability` | Transient stability analysis (DAE solver) | Planned |
 | **psforge-schedule** | `psforge-schedule` | Unit commitment optimization (HiGHS/Gurobi) | Planned |
+| **psforge-turbo** | `psforge-turbo` | High-performance C++ engine (Phase 2) | Frozen |
 
 All packages are developed and maintained by [Manabe Lab LLC](https://github.com/manabelab).
 
