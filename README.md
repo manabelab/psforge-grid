@@ -18,8 +18,14 @@ pip install psforge-grid
 ```python
 from psforge_grid import System
 
-# Load a PSS/E RAW file
+# Load from PSS/E RAW format
 system = System.from_raw("ieee14.raw")
+
+# Load from MATPOWER format (pglib-opf compatible)
+system = System.from_matpower("pglib_opf_case14_ieee.m")
+
+# Auto-detect format by file extension
+system = System.from_file("case14.m")
 
 # Explore the system
 print(f"Buses: {len(system.buses)}, Branches: {len(system.branches)}")
@@ -31,7 +37,7 @@ print(system.to_summary())
 ```bash
 # Or use the CLI
 psforge-grid info ieee14.raw
-psforge-grid show ieee14.raw buses -f json
+psforge-grid show pglib_opf_case14_ieee.m buses -f json
 ```
 
 ## Why psforge-grid?
@@ -42,14 +48,16 @@ psforge-grid show ieee14.raw buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **PSS/E RAW support** | v33/v34 core sections | Varies |
+| **Multi-format I/O** | PSS/E RAW + MATPOWER (.m) | Usually single format |
 
 ## Overview
 
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
-- Common data classes (`System`, `Bus`, `Branch`, `Generator`, `Load`, `Shunt`)
+- Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
 - PSS/E RAW file parser (v33/v34 partial support)
+- MATPOWER .m file parser ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible)
+- OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
 - Shared utilities for power system analysis
 
 ## LLM Affinity Design
@@ -137,9 +145,39 @@ Parser has been validated with IEEE test cases from multiple sources:
 
 ### Future Plans
 
-1. **Phase 2**: Three-winding transformer support
-2. **Phase 3**: Switched shunt data support
-3. **Future**: HVDC, FACTS device support (as needed)
+1. Three-winding transformer support
+2. Switched shunt data support
+3. HVDC, FACTS device support (as needed)
+
+## MATPOWER Format Support
+
+psforge-grid supports [MATPOWER](https://matpower.app/) `.m` files, enabling direct use of [pglib-opf](https://github.com/power-grid-lib/pglib-opf) benchmark cases.
+
+### Supported Sections
+
+| Section | Status | Notes |
+|---------|--------|-------|
+| Bus Data (13 columns) | Yes | All bus types, Vmin/Vmax for OPF |
+| Generator Data (10 columns) | Yes | Pmin/Pmax, Qmin/Qmax |
+| Branch Data (13 columns) | Yes | Including angmin/angmax for OPF |
+| Generator Cost Data | Yes | Polynomial (model=2) and piecewise-linear (model=1) |
+| baseMVA | Yes | System base MVA |
+
+### Generator Cost Functions
+
+```python
+from psforge_grid import System
+
+system = System.from_matpower("pglib_opf_case14_ieee.m")
+
+# Access generator cost data (for OPF)
+for cost in system.generator_costs:
+    print(cost.to_description())
+    # "Generator Cost (polynomial, degree 2): 0.0430 * P^2 + 20.00 * P + 0.00"
+
+    # Evaluate cost at a given power output
+    cost_value = cost.evaluate(p_mw=50.0)  # $/hr
+```
 
 ## Installation
 
@@ -243,16 +281,34 @@ This project includes `.vscode/` configuration for seamless development:
 - `ms-python.mypy-type-checker` - Mypy type checker
 - `ms-python.python` - Python language support
 
-## Related Projects
+## psforge Ecosystem (Hub & Spoke Architecture)
 
-psforge is a modular power system analysis ecosystem:
+psforge is a modular power system analysis ecosystem built on a **Hub & Spoke** architecture. **psforge-grid** is the Hub — all Spoke packages depend on it for common data models and I/O.
 
-| Package | Description | Status |
-|---------|-------------|--------|
-| **psforge-grid** (this) | Core data models and I/O (Hub) | Active |
-| [psforge-flow](https://github.com/manabelab/psforge-flow) | AC power flow calculation | Active |
-| psforge-stability | Transient stability analysis | Planned |
-| psforge-schedule | Unit commitment optimization | Planned |
+```
+                    ┌──────────────────────┐
+                    │    psforge-grid      │
+                    │   (Hub: Data & I/O)  │
+                    └──────────┬───────────┘
+                               │
+            ┌──────────────────┼──────────────────┐
+            │                  │                  │
+   ┌────────▼────────┐ ┌──────▼───────┐ ┌────────▼────────┐
+   │  psforge-flow   │ │psforge-      │ │psforge-         │
+   │  (AC Power Flow)│ │stability     │ │schedule         │
+   │                 │ │(Transient    │ │(Unit Commitment) │
+   │                 │ │ Stability)   │ │                 │
+   └─────────────────┘ └──────────────┘ └─────────────────┘
+```
+
+| Package | PyPI Name | Description | Status |
+|---------|-----------|-------------|--------|
+| **psforge-grid** (this) | `psforge-grid` | Core data models, parsers (RAW, MATPOWER), and CLI | Active |
+| **psforge-flow** | `psforge-flow` | AC power flow (Newton-Raphson) and optimal power flow | Active |
+| **psforge-stability** | `psforge-stability` | Transient stability analysis (DAE solver) | Planned |
+| **psforge-schedule** | `psforge-schedule` | Unit commitment optimization (HiGHS/Gurobi) | Planned |
+
+All packages are developed and maintained by [Manabe Lab LLC](https://github.com/manabelab).
 
 ## Contributing
 
