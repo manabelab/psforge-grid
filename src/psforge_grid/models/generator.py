@@ -29,6 +29,16 @@ class Generator:
             Used for converting machine-specific parameters
         status: Operating status (1: in-service, 0: out-of-service)
         gen_id: Generator identifier for multiple generators on same bus
+        xd_pu: Synchronous reactance Xd [p.u. on mbase] (default: None)
+        xdp_pu: Transient reactance Xd' [p.u. on mbase] (default: None)
+        xdpp_pu: Sub-transient reactance Xd'' [p.u. on mbase] (default: None)
+        xqpp_pu: q-axis sub-transient reactance Xq'' [p.u. on mbase] (default: None)
+        x2_pu: Negative-sequence reactance X2 [p.u. on mbase] (default: None)
+        x0_pu: Zero-sequence reactance X0 [p.u. on mbase] (default: None)
+        ra_pu: Armature resistance Ra [p.u. on mbase] (default: None)
+        ta_s: Armature time constant Ta [seconds] (default: None)
+            If ra_pu is None but ta_s and xdpp_pu are given,
+            Ra can be computed as Xd'' / (omega * Ta).
         name: Generator name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -62,6 +72,14 @@ class Generator:
     mbase: float = 100.0
     status: int = 1
     gen_id: str = "1"
+    xd_pu: float | None = None
+    xdp_pu: float | None = None
+    xdpp_pu: float | None = None
+    xqpp_pu: float | None = None
+    x2_pu: float | None = None
+    x0_pu: float | None = None
+    ra_pu: float | None = None
+    ta_s: float | None = None
     name: str | None = None
     description: str | None = None
 
@@ -103,6 +121,53 @@ class Generator:
             within = False
 
         return within, limited
+
+    def get_fault_reactance(self, xtype: str = "xdqpp") -> float | None:
+        """Get generator reactance for fault calculation.
+
+        The T-method supports multiple generator reactance options.
+        Default is (Xd'' + Xq'')/2 as recommended by CPAT.
+
+        Args:
+            xtype: Reactance type to use.
+                "xdqpp" (default): (Xd'' + Xq'')/2
+                "xdpp": Xd'' (sub-transient)
+                "xdp": Xd' (transient)
+                "xd": Xd (synchronous)
+
+        Returns:
+            Generator reactance in p.u. on mbase, or None if data unavailable.
+        """
+        if xtype == "xdqpp":
+            if self.xdpp_pu is not None and self.xqpp_pu is not None:
+                return (self.xdpp_pu + self.xqpp_pu) / 2.0
+            return self.xdpp_pu
+        elif xtype == "xdpp":
+            return self.xdpp_pu
+        elif xtype == "xdp":
+            return self.xdp_pu
+        elif xtype == "xd":
+            return self.xd_pu
+        return None
+
+    def get_armature_resistance(self, frequency_hz: float = 60.0) -> float | None:
+        """Get armature resistance Ra for DC decay calculation.
+
+        If ra_pu is directly specified, return it.
+        Otherwise, compute from Xd'' and Ta: Ra = Xd'' / (omega * Ta).
+
+        Args:
+            frequency_hz: System frequency in Hz (default: 60.0)
+
+        Returns:
+            Armature resistance in p.u. on mbase, or None if data unavailable.
+        """
+        if self.ra_pu is not None:
+            return self.ra_pu
+        if self.xdpp_pu is not None and self.ta_s is not None and self.ta_s > 0:
+            omega = 2.0 * 3.141592653589793 * frequency_hz
+            return self.xdpp_pu / (omega * self.ta_s)
+        return None
 
     def to_description(self) -> str:
         """Generate human/LLM-readable description of this generator.
