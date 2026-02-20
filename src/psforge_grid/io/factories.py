@@ -31,7 +31,7 @@ class ParserFactory:
 
     Available Formats:
         - "raw": PSS/E RAW format (v33/v34, default)
-        - "matpower": MATPOWER format [planned]
+        - "matpower": MATPOWER format (.m files)
         - "cim": CIM/XML format [planned]
 
     Example:
@@ -48,7 +48,7 @@ class ParserFactory:
     # Registry of available formats
     _FORMATS = {
         "raw": "psforge_grid.io.raw_parser.RawParser",
-        # "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",  # planned
+        "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",
         # "cim": "psforge_grid.io.cim_parser.CimParser",  # planned
     }
 
@@ -56,7 +56,7 @@ class ParserFactory:
     _EXTENSION_MAP = {
         "raw": "raw",
         "RAW": "raw",
-        # "m": "matpower",  # planned
+        "m": "matpower",
         # "xml": "cim",  # planned
     }
 
@@ -67,7 +67,7 @@ class ParserFactory:
         Args:
             format_type: Parser format type. Available options:
                 - "raw": PSS/E RAW format (v33/v34, default)
-                - "matpower": MATPOWER format [planned]
+                - "matpower": MATPOWER format (.m files)
                 - "cim": CIM/XML format [planned]
 
         Returns:
@@ -86,10 +86,14 @@ class ParserFactory:
             from psforge_grid.io.raw_parser import RawParser
 
             return RawParser()
-        elif format_type in ("matpower", "cim"):
+        elif format_type == "matpower":
+            from psforge_grid.io.matpower_parser import MatpowerParser
+
+            return MatpowerParser()
+        elif format_type == "cim":
             raise NotImplementedError(
-                f"{format_type.upper()} parser is planned for future release. "
-                "Currently only 'raw' format is available."
+                "CIM parser is planned for future release. "
+                "Currently 'raw' and 'matpower' formats are available."
             )
         else:
             available = ParserFactory.available_formats()
@@ -162,8 +166,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        # Currently only raw is fully implemented
-        return ["raw"]
+        return ["raw", "matpower"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
