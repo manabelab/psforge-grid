@@ -135,6 +135,68 @@ class System:
         return parse_matpower(filepath)
 
     @classmethod
+    def from_pop(cls, filepath: str | Path) -> System:
+        """Create a System from a CPAT .pop file.
+
+        Factory method for creating System instances from CPAT-GUI native
+        format (.pop = ZIP archive containing XML files).
+
+        Args:
+            filepath: Path to the .pop file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_pop("WEST10peak.pop")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_raw(): Load PSS/E RAW format
+            - from_file(): Auto-detect format from extension
+            - parse_pop(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.pop_parser import parse_pop
+
+        return parse_pop(filepath)
+
+    @classmethod
+    def from_dyna(cls, filepath: str | Path) -> System:
+        """Create a System from a CPAT dyna card format file.
+
+        Factory method for creating System instances from CPAT Fortran
+        fixed-column card format files (.dyna).
+
+        Args:
+            filepath: Path to the .dyna file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_dyna("cpat_model.dyna")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_pop(): Load CPAT .pop (ZIP+XML) format
+            - from_file(): Auto-detect format from extension
+            - parse_dyna(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.dyna_parser import parse_dyna
+
+        return parse_dyna(filepath)
+
+    @classmethod
     def from_file(cls, filepath: str | Path) -> System:
         """Create a System from a power system data file.
 

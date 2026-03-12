@@ -29,6 +29,7 @@ Advanced Usage:
 
 from psforge_grid.io.factories import ParserFactory
 from psforge_grid.io.matpower_parser import MatpowerParser, parse_matpower
+from psforge_grid.io.pop_parser import PopParser, parse_pop
 from psforge_grid.io.protocols import IParser
 from psforge_grid.io.raw_parser import RawParser, parse_raw
 
@@ -36,10 +37,12 @@ __all__ = [
     # Main functions
     "parse_raw",
     "parse_matpower",
+    "parse_pop",
     # Interface and factory
     "IParser",
     "ParserFactory",
     # Implementations
     "RawParser",
     "MatpowerParser",
+    "PopParser",
 ]

@@ -20,10 +20,10 @@ class Branch:
     Attributes:
         from_bus: From-bus ID (sending end)
         to_bus: To-bus ID (receiving end)
-        r_pu: Series resistance [p.u.] on system base
-        x_pu: Series reactance [p.u.] on system base
+        r_pu: Series resistance [p.u.] on system base (positive sequence)
+        x_pu: Series reactance [p.u.] on system base (positive sequence)
         b_pu: Total line charging susceptance [p.u.] (default: 0.0)
-            For pi-model, B/2 is placed at each end
+            For pi-model, B/2 is placed at each end (positive sequence)
         tap_ratio: Off-nominal tap ratio (default: 1.0)
             For transformers: tap_ratio = V_from / V_to (typically)
         shift_angle: Phase shift angle [rad] (default: 0.0)
@@ -37,6 +37,12 @@ class Branch:
             (default: None, unlimited). Used in OPF constraints.
         status: Operating status (1: in-service, 0: out-of-service)
         circuit_id: Circuit identifier for parallel branches (default: "1")
+        r0_pu: Zero-sequence series resistance [p.u.] (default: None)
+            Used for unbalanced fault analysis (1LG, 2LG).
+        x0_pu: Zero-sequence series reactance [p.u.] (default: None)
+            Used for unbalanced fault analysis (1LG, 2LG).
+        b0_pu: Zero-sequence total line charging susceptance [p.u.] (default: None)
+            Used for unbalanced fault analysis (1LG, 2LG).
         name: Branch name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -70,6 +76,9 @@ class Branch:
     angmax: float | None = None
     status: int = 1
     circuit_id: str = "1"
+    r0_pu: float | None = None
+    x0_pu: float | None = None
+    b0_pu: float | None = None
     name: str | None = None
     description: str | None = None
 
@@ -107,8 +116,24 @@ class Branch:
 
     @property
     def impedance_pu(self) -> complex:
-        """Get series impedance as complex number [p.u.]."""
+        """Get positive-sequence series impedance as complex number [p.u.]."""
         return complex(self.r_pu, self.x_pu)
+
+    @property
+    def zero_sequence_impedance_pu(self) -> complex | None:
+        """Get zero-sequence series impedance as complex number [p.u.].
+
+        Returns:
+            Complex impedance if zero-sequence data is available, None otherwise.
+        """
+        if self.r0_pu is not None and self.x0_pu is not None:
+            return complex(self.r0_pu, self.x0_pu)
+        return None
+
+    @property
+    def has_zero_sequence_data(self) -> bool:
+        """Check if zero-sequence impedance data is available."""
+        return self.r0_pu is not None and self.x0_pu is not None
 
     def to_description(self) -> str:
         """Generate human/LLM-readable description of this branch.
