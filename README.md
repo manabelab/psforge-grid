@@ -24,6 +24,10 @@ system = System.from_raw("ieee14.raw")
 # Load from MATPOWER format (pglib-opf compatible)
 system = System.from_matpower("pglib_opf_case14_ieee.m")
 
+# Load from CPAT formats (IEEJ standard models)
+system = System.from_pop("WEST10peak.pop")    # CPAT-GUI project file (ZIP/XML)
+system = System.from_dyna("model.dyna")        # CPAT Fortran card format
+
 # Auto-detect format by file extension
 system = System.from_file("case14.m")
 
@@ -48,7 +52,7 @@ psforge-grid show pglib_opf_case14_ieee.m buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **Multi-format I/O** | PSS/E RAW + MATPOWER (.m) | Usually single format |
+| **Multi-format I/O** | PSS/E RAW, MATPOWER, CPAT (.pop/.dyna) | Usually single format |
 
 ## Overview
 
@@ -57,7 +61,11 @@ psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
 - PSS/E RAW file parser (v33/v34 partial support)
 - MATPOWER .m file parser ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible)
+- CPAT .pop file parser (CPAT-GUI ZIP/XML project format)
+- CPAT dyna card format parser (Fortran fixed-column format)
 - OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
+- Zero-sequence impedance data (`Branch.r0_pu`, `x0_pu`, `b0_pu`) for fault analysis
+- Generator machine parameters (`Generator.xd_pu`, `xdp_pu`, `xdpp_pu`, etc.) for fault/stability analysis
 - Shared utilities for power system analysis
 
 ## LLM Affinity Design
@@ -178,6 +186,56 @@ for cost in system.generator_costs:
     # Evaluate cost at a given power output
     cost_value = cost.evaluate(p_mw=50.0)  # $/hr
 ```
+
+## CPAT Format Support
+
+psforge-grid supports two [CPAT](https://www.jpower.co.jp/bs/cpat/) (Computer Program for Analysis of Power Transmission) input formats, enabling direct use of IEEJ standard model systems.
+
+### .pop Format (Recommended)
+
+The `.pop` format is the native project file format of CPAT-GUI. It is a ZIP archive containing XML data files.
+
+```python
+from psforge_grid import System
+
+# Load from .pop file (CPAT-GUI project)
+system = System.from_pop("WEST10peak.pop")
+```
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| System data (pnsd) | Yes | Nodes, branches, generators, loads |
+| Generator machine data | Yes | G1-G5 card fields (Xd, Xd', Xd'', etc.) |
+| Zero-sequence data | Yes | Branch and generator zero-sequence impedances |
+| GUI drawing data (pnsw) | No | Drawing layout is ignored |
+
+### .dyna Card Format
+
+The `.dyna` format is the legacy Fortran fixed-column (80-character) card format used by CPAT's text-based interface.
+
+```python
+from psforge_grid import System
+
+# Load from dyna card format
+system = System.from_dyna("model.dyna")
+```
+
+| Card Type | Description | Status |
+|-----------|-------------|--------|
+| DATA | System name, base MVA, frequency | Yes |
+| T card | Transmission lines (positive & zero sequence) | Yes |
+| X card | Transformers (tap ratio, impedance) | Yes |
+| N card | Nodes (voltage, generation, load) | Yes |
+| G1-G5 | Generator machine parameters | Yes |
+
+### CPAT Test Data
+
+Parser validation uses IEEJ standard model systems:
+
+| Fixture | Description | Buses | Branches | Generators |
+|---------|-------------|-------|----------|------------|
+| `WEST10peak.pop` | IEEJ WEST 10-machine peak model | 27 | 35 | 10 |
+| `cpat_model11.dyna` | CPAT Manual p.26 model system | 10 | 14 | 4 |
 
 ## Installation
 
