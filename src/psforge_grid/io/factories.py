@@ -50,6 +50,7 @@ class ParserFactory:
         "raw": "psforge_grid.io.raw_parser.RawParser",
         "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",
         "pop": "psforge_grid.io.pop_parser.PopParser",
+        "dyna": "psforge_grid.io.dyna_parser.DynaParser",
         # "cim": "psforge_grid.io.cim_parser.CimParser",  # planned
     }
 
@@ -59,6 +60,7 @@ class ParserFactory:
         "RAW": "raw",
         "m": "matpower",
         "pop": "pop",
+        "dyna": "dyna",
         # "xml": "cim",  # planned
     }
 
@@ -96,6 +98,10 @@ class ParserFactory:
             from psforge_grid.io.pop_parser import PopParser
 
             return PopParser()
+        elif format_type == "dyna":
+            from psforge_grid.io.dyna_parser import DynaParser
+
+            return DynaParser()
         elif format_type == "cim":
             raise NotImplementedError(
                 "CIM parser is planned for future release. "
@@ -172,7 +178,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        return ["raw", "matpower", "pop"]
+        return ["raw", "matpower", "pop", "dyna"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
