@@ -166,6 +166,37 @@ class System:
         return parse_pop(filepath)
 
     @classmethod
+    def from_dyna(cls, filepath: str | Path) -> System:
+        """Create a System from a CPAT dyna card format file.
+
+        Factory method for creating System instances from CPAT Fortran
+        fixed-column card format files (.dyna).
+
+        Args:
+            filepath: Path to the .dyna file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file format is invalid or cannot be parsed
+
+        Example:
+            >>> system = System.from_dyna("cpat_model.dyna")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_pop(): Load CPAT .pop (ZIP+XML) format
+            - from_file(): Auto-detect format from extension
+            - parse_dyna(): Standalone function alternative
+        """
+        # Lazy import to avoid circular dependency
+        from psforge_grid.io.dyna_parser import parse_dyna
+
+        return parse_dyna(filepath)
+
+    @classmethod
     def from_file(cls, filepath: str | Path) -> System:
         """Create a System from a power system data file.
 
