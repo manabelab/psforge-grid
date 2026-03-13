@@ -1,0 +1,399 @@
+{
+  "case5_pjm": {
+    "converged": true,
+    "iterations": 5,
+    "base_mva": 100.0,
+    "buses": [
+      {
+        "bus_id": 1,
+        "name": "Bus1",
+        "base_kv": 230.0,
+        "v_mag_pu": 1.0,
+        "v_angle_deg": 1.2053
+      },
+      {
+        "bus_id": 2,
+        "name": "Bus2",
+        "base_kv": 230.0,
+        "v_mag_pu": 0.989381,
+        "v_angle_deg": -2.4254
+      },
+      {
+        "bus_id": 3,
+        "name": "Bus3",
+        "base_kv": 230.0,
+        "v_mag_pu": 1.0,
+        "v_angle_deg": -2.0044
+      },
+      {
+        "bus_id": 4,
+        "name": "Bus4",
+        "base_kv": 230.0,
+        "v_mag_pu": 1.0,
+        "v_angle_deg": 0.0
+      },
+      {
+        "bus_id": 5,
+        "name": "Bus5",
+        "base_kv": 230.0,
+        "v_mag_pu": 1.0,
+        "v_angle_deg": 1.9049
+      }
+    ],
+    "branches": [
+      {
+        "from_bus": 1,
+        "to_bus": 2,
+        "name": "1-2",
+        "p_flow_pu": 2.251945,
+        "q_flow_pu": 0.219811
+      },
+      {
+        "from_bus": 1,
+        "to_bus": 4,
+        "name": "1-4",
+        "p_flow_pu": 0.685794,
+        "q_flow_pu": -0.064591
+      },
+      {
+        "from_bus": 1,
+        "to_bus": 5,
+        "name": "1-5",
+        "p_flow_pu": -1.887739,
+        "q_flow_pu": 0.184791
+      },
+      {
+        "from_bus": 2,
+        "to_bus": 3,
+        "name": "2-3",
+        "p_flow_pu": -0.762445,
+        "q_flow_pu": -0.903148
+      },
+      {
+        "from_bus": 3,
+        "to_bus": 4,
+        "name": "3-4",
+        "p_flow_pu": -1.163969,
+        "q_flow_pu": 0.133629
+      },
+      {
+        "from_bus": 4,
+        "to_bus": 5,
+        "name": "4-5",
+        "p_flow_pu": -1.10627,
+        "q_flow_pu": 0.125863
+      }
+    ],
+    "generators": [
+      {
+        "bus_id": 1,
+        "gen_id": "1",
+        "p_gen_pu": 0.2000000001787571,
+        "q_gen_pu": 0.06476403555716172
+      },
+      {
+        "bus_id": 1,
+        "gen_id": "2",
+        "p_gen_pu": 0.8500000007597177,
+        "q_gen_pu": 0.27524715111793724
+      },
+      {
+        "bus_id": 3,
+        "gen_id": "1",
+        "p_gen_pu": 2.600000006202385,
+        "q_gen_pu": 2.0197859507129645
+      },
+      {
+        "bus_id": 4,
+        "gen_id": "1",
+        "p_gen_pu": 3.3774253003508807,
+        "q_gen_pu": 1.4134133829846698
+      },
+      {
+        "bus_id": 5,
+        "gen_id": "1",
+        "p_gen_pu": 2.9999999999999964,
+        "q_gen_pu": -0.28874659823372895
+      }
+    ]
+  },
+  "ieee14": {
+    "converged": true,
+    "iterations": 3,
+    "base_mva": 100.0,
+    "buses": [
+      {
+        "bus_id": 1,
+        "name": "Bus 1       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.06,
+        "v_angle_deg": 0.0
+      },
+      {
+        "bus_id": 2,
+        "name": "Bus 2       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.045,
+        "v_angle_deg": -4.9826
+      },
+      {
+        "bus_id": 3,
+        "name": "Bus 3       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.01,
+        "v_angle_deg": -12.7251
+      },
+      {
+        "bus_id": 4,
+        "name": "Bus 4       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.017671,
+        "v_angle_deg": -10.3129
+      },
+      {
+        "bus_id": 5,
+        "name": "Bus 5       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.019514,
+        "v_angle_deg": -8.7739
+      },
+      {
+        "bus_id": 6,
+        "name": "Bus 6       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.07,
+        "v_angle_deg": -14.2209
+      },
+      {
+        "bus_id": 7,
+        "name": "Bus 7       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.06152,
+        "v_angle_deg": -13.3596
+      },
+      {
+        "bus_id": 8,
+        "name": "Bus 8       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.09,
+        "v_angle_deg": -13.3596
+      },
+      {
+        "bus_id": 9,
+        "name": "Bus 9       ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.055932,
+        "v_angle_deg": -14.9385
+      },
+      {
+        "bus_id": 10,
+        "name": "Bus 10      ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.050985,
+        "v_angle_deg": -15.0973
+      },
+      {
+        "bus_id": 11,
+        "name": "Bus 11      ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.056907,
+        "v_angle_deg": -14.7906
+      },
+      {
+        "bus_id": 12,
+        "name": "Bus 12      ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.055189,
+        "v_angle_deg": -15.0756
+      },
+      {
+        "bus_id": 13,
+        "name": "Bus 13      ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.050382,
+        "v_angle_deg": -15.1563
+      },
+      {
+        "bus_id": 14,
+        "name": "Bus 14      ",
+        "base_kv": 138.0,
+        "v_mag_pu": 1.03553,
+        "v_angle_deg": -16.0336
+      }
+    ],
+    "branches": [
+      {
+        "from_bus": 1,
+        "to_bus": 2,
+        "name": "1-2",
+        "p_flow_pu": 1.568829,
+        "q_flow_pu": -0.204043
+      },
+      {
+        "from_bus": 1,
+        "to_bus": 5,
+        "name": "1-5",
+        "p_flow_pu": 0.755104,
+        "q_flow_pu": 0.03855
+      },
+      {
+        "from_bus": 2,
+        "to_bus": 3,
+        "name": "2-3",
+        "p_flow_pu": 0.732376,
+        "q_flow_pu": 0.035602
+      },
+      {
+        "from_bus": 2,
+        "to_bus": 4,
+        "name": "2-4",
+        "p_flow_pu": 0.561315,
+        "q_flow_pu": -0.015504
+      },
+      {
+        "from_bus": 2,
+        "to_bus": 5,
+        "name": "2-5",
+        "p_flow_pu": 0.415162,
+        "q_flow_pu": 0.01171
+      },
+      {
+        "from_bus": 3,
+        "to_bus": 4,
+        "name": "3-4",
+        "p_flow_pu": -0.232857,
+        "q_flow_pu": 0.044731
+      },
+      {
+        "from_bus": 4,
+        "to_bus": 5,
+        "name": "4-5",
+        "p_flow_pu": -0.611582,
+        "q_flow_pu": 0.158236
+      },
+      {
+        "from_bus": 6,
+        "to_bus": 11,
+        "name": "6-11",
+        "p_flow_pu": 0.073533,
+        "q_flow_pu": 0.035605
+      },
+      {
+        "from_bus": 6,
+        "to_bus": 12,
+        "name": "6-12",
+        "p_flow_pu": 0.077861,
+        "q_flow_pu": 0.025034
+      },
+      {
+        "from_bus": 6,
+        "to_bus": 13,
+        "name": "6-13",
+        "p_flow_pu": 0.17748,
+        "q_flow_pu": 0.072166
+      },
+      {
+        "from_bus": 7,
+        "to_bus": 8,
+        "name": "7-8",
+        "p_flow_pu": 0.0,
+        "q_flow_pu": -0.17163
+      },
+      {
+        "from_bus": 7,
+        "to_bus": 9,
+        "name": "7-9",
+        "p_flow_pu": 0.280742,
+        "q_flow_pu": 0.057787
+      },
+      {
+        "from_bus": 9,
+        "to_bus": 10,
+        "name": "9-10",
+        "p_flow_pu": 0.052275,
+        "q_flow_pu": 0.042191
+      },
+      {
+        "from_bus": 9,
+        "to_bus": 14,
+        "name": "9-14",
+        "p_flow_pu": 0.094264,
+        "q_flow_pu": 0.0361
+      },
+      {
+        "from_bus": 10,
+        "to_bus": 11,
+        "name": "10-11",
+        "p_flow_pu": -0.037853,
+        "q_flow_pu": -0.016151
+      },
+      {
+        "from_bus": 12,
+        "to_bus": 13,
+        "name": "12-13",
+        "p_flow_pu": 0.016143,
+        "q_flow_pu": 0.00754
+      },
+      {
+        "from_bus": 13,
+        "to_bus": 14,
+        "name": "13-14",
+        "p_flow_pu": 0.056439,
+        "q_flow_pu": 0.017472
+      },
+      {
+        "from_bus": 4,
+        "to_bus": 7,
+        "name": "4-7",
+        "p_flow_pu": 0.280742,
+        "q_flow_pu": -0.096811
+      },
+      {
+        "from_bus": 4,
+        "to_bus": 9,
+        "name": "4-9",
+        "p_flow_pu": 0.160798,
+        "q_flow_pu": -0.004276
+      },
+      {
+        "from_bus": 5,
+        "to_bus": 6,
+        "name": "5-6",
+        "p_flow_pu": 0.440873,
+        "q_flow_pu": 0.124707
+      }
+    ],
+    "generators": [
+      {
+        "bus_id": 1,
+        "gen_id": "1 ",
+        "p_gen_pu": 2.3239327241292993,
+        "q_gen_pu": -0.16549299890986546
+      },
+      {
+        "bus_id": 2,
+        "gen_id": "1 ",
+        "p_gen_pu": 0.4000000023226308,
+        "q_gen_pu": 0.4355710106237132
+      },
+      {
+        "bus_id": 3,
+        "gen_id": "1 ",
+        "p_gen_pu": 5.702348593317197e-10,
+        "q_gen_pu": 0.2507534862834189
+      },
+      {
+        "bus_id": 6,
+        "gen_id": "1 ",
+        "p_gen_pu": -1.3638673856952721e-08,
+        "q_gen_pu": 0.1273094185402302
+      },
+      {
+        "bus_id": 8,
+        "gen_id": "1 ",
+        "p_gen_pu": 0.0,
+        "q_gen_pu": 0.17623450394963847
+      }
+    ]
+  }
+}

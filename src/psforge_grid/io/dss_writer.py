@@ -107,7 +107,8 @@ class DSSWriter(IWriter):
                 f"New Circuit.{sys_name} "
                 f"basekv={swing_kv:.4f} pu={swing_pu:.6f} "
                 f"phases=3 bus1={swing_name} "
-                f"basefreq={freq:.1f}"
+                f"basefreq={freq:.1f} "
+                f"Mvasc3=1e10 Mvasc1=1e10"
             )
             lines.append(f"Set DefaultBaseFreq={freq:.1f}")
             lines.append("")
@@ -139,7 +140,7 @@ class DSSWriter(IWriter):
             for gen in non_swing_gens:
                 gen_kv = gen.kv if gen.kv is not None else bus_kv.get(gen.bus_id, 1.0)
                 gen_conn = gen.connection or "wye"
-                gen_model = gen.model_type if gen.model_type is not None else 3
+                gen_model = gen.model_type if gen.model_type is not None else 1
                 p_kw = gen.p_gen * base_mva * 1000.0
                 q_kvar = gen.q_gen * base_mva * 1000.0
                 gen_name = self._sanitize_name(gen.name or f"G{gen.gen_id}_Bus{gen.bus_id}")
@@ -320,7 +321,7 @@ class DSSWriter(IWriter):
             f'conns="{conn_from} {conn_to}" '
             f'kvs="{kv_from:.4f} {kv_to:.4f}" '
             f'kvas="{rated_kva:.2f} {rated_kva:.2f}" '
-            f"XHL={xhl:.6f} %R={pct_r:.6f}"
+            f"XHL={xhl:.6f} %loadloss={pct_r:.6f} %noloadloss=0"
         )
 
         # Tap setting

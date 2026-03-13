@@ -183,6 +183,9 @@ class TestDSSWriterOutput:
         assert "delta wye" in content.lower() or "delta" in content.lower()
         assert "500" in content
         assert "220" in content
+        # %loadloss sets both winding resistances (not %R which only sets one)
+        assert "%loadloss=" in content
+        assert "%R=" not in content
 
     def test_sanitize_names_with_spaces(self):
         """Test that bus/element names with spaces are sanitized."""
