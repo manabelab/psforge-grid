@@ -337,6 +337,10 @@ def _build_branches(
 
         shift_angle = get_float(xfmr_data, "Tapi", 0.0)
 
+        # Zero-sequence data
+        r0 = get_float(xfmr_data, "Zor", 0.0)
+        x0 = get_float(xfmr_data, "Zox", 0.0)
+
         branch = Branch(
             from_bus=from_bus,
             to_bus=to_bus,
@@ -347,6 +351,11 @@ def _build_branches(
             name=cluster.name,
             circuit_id=str(cluster.code_number),
         )
+        if r0 != 0.0:
+            branch.r0_pu = r0
+        if x0 != 0.0:
+            branch.x0_pu = x0
+
         branches.append(branch)
 
     return branches
@@ -416,8 +425,8 @@ def _build_generators(
         xdp = get_float(gen_data, "Xdd") or None
         xdpp = get_float(gen_data, "Xddd") or None
         xqpp = get_float(gen_data, "Xqdd") or None
-        x0 = get_float(gen_data, "X0_Saturation") or None
-        x2 = get_float(gen_data, "X2_Saturation") or None
+        x0 = get_float(gen_data, "X0") or None
+        x2 = get_float(gen_data, "X2") or None
         ta = get_float(gen_data, "Ta") or None
         ra = get_float(gen_data, "Ra") or None
 
