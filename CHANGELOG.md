@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `IWriter` abstract interface (`io/protocols.py`) — symmetric counterpart of `IParser`
+- `WriterFactory` (`io/factories.py`) with `create()`, `from_extension()`, `from_path()`, `available_formats()`, `supported_extensions()`
+- `RawWriter` — exports System to PSS/E RAW v33 format
+- `MatpowerWriter` — exports System to MATPOWER .m format (including gencost)
+- `PopWriter` — exports System to CPAT .pop format (ZIP archive with 3 XML files)
+- `DynaWriter` — exports System to CPAT dyna card format (80-char fixed-column)
+- `System.to_raw()`, `to_matpower()`, `to_pop()`, `to_dyna()` facade methods
+- `System.to_file()` — auto-detect format by file extension
+- `write_raw()`, `write_matpower()`, `write_pop()`, `write_dyna()` convenience functions
+- 25 writer tests including round-trip verification for all 4 formats
+
 ## [0.4.0] - 2026-03-12
 
 ### Added

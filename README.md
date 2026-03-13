@@ -31,6 +31,13 @@ system = System.from_dyna("model.dyna")        # CPAT Fortran card format
 # Auto-detect format by file extension
 system = System.from_file("case14.m")
 
+# Export to any supported format
+system.to_raw("output.raw")              # PSS/E RAW format
+system.to_matpower("output.m")           # MATPOWER format
+system.to_pop("output.pop")              # CPAT Pop format
+system.to_dyna("output.dyna")            # CPAT Dyna format
+system.to_file("output.m")              # Auto-detect by extension
+
 # Explore the system
 print(f"Buses: {len(system.buses)}, Branches: {len(system.branches)}")
 
@@ -52,17 +59,16 @@ psforge-grid show pglib_opf_case14_ieee.m buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **Multi-format I/O** | PSS/E RAW, MATPOWER, CPAT (.pop/.dyna) | Usually single format |
+| **Multi-format I/O** | Read & write: PSS/E RAW, MATPOWER, CPAT (.pop/.dyna) | Usually single format |
 
 ## Overview
 
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
-- PSS/E RAW file parser (v33/v34 partial support)
-- MATPOWER .m file parser ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible)
-- CPAT .pop file parser (CPAT-GUI ZIP/XML project format)
-- CPAT dyna card format parser (Fortran fixed-column format)
+- **Parsers** (read): PSS/E RAW (v33/v34), MATPOWER .m ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible), CPAT .pop (ZIP/XML), CPAT .dyna (Fortran cards)
+- **Writers** (export): PSS/E RAW (v33), MATPOWER .m, CPAT .pop, CPAT .dyna — symmetric counterpart of parsers
+- **Factory pattern**: `ParserFactory` / `WriterFactory` for format-agnostic creation, `IParser` / `IWriter` interfaces
 - OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
 - Zero-sequence impedance data (`Branch.r0_pu`, `x0_pu`, `b0_pu`) for fault analysis
 - Generator machine parameters (`Generator.xd_pu`, `xdp_pu`, `xdpp_pu`, etc.) for fault/stability analysis
@@ -236,6 +242,43 @@ Parser validation uses IEEJ standard model systems:
 |---------|-------------|-------|----------|------------|
 | `WEST10peak.pop` | IEEJ WEST 10-machine peak model | 27 | 35 | 10 |
 | `cpat_model11.dyna` | CPAT Manual p.26 model system | 10 | 14 | 4 |
+
+## Export (Writer) Support
+
+psforge-grid supports exporting `System` objects to all supported formats via `IWriter` / `WriterFactory` — the symmetric counterpart of `IParser` / `ParserFactory`.
+
+### Usage
+
+```python
+from psforge_grid import System
+
+system = System.from_raw("ieee14.raw")
+
+# Facade methods (recommended)
+system.to_raw("output.raw")
+system.to_matpower("output.m")
+system.to_pop("output.pop")
+system.to_dyna("output.dyna")
+system.to_file("output.m")  # Auto-detect by extension
+
+# Factory pattern (advanced)
+from psforge_grid.io import WriterFactory
+writer = WriterFactory.create("matpower")
+writer.write(system, "output.m")
+
+# Cross-format conversion
+system = System.from_raw("ieee14.raw")
+system.to_matpower("ieee14.m")  # RAW → MATPOWER
+```
+
+### Format Support Matrix
+
+| Format | Parse | Write | Round-trip tested |
+|--------|-------|-------|-------------------|
+| PSS/E RAW (v33) | Yes | Yes | Yes |
+| MATPOWER .m | Yes | Yes | Yes (including gencost) |
+| CPAT .pop (ZIP/XML) | Yes | Yes | Yes |
+| CPAT .dyna (cards) | Yes | Yes | Yes |
 
 ## Installation
 

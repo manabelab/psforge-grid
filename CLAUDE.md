@@ -7,8 +7,10 @@
 ### Responsibilities
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
-- PSS/E RAW file parser (v33/v34)
-- MATPOWER .m file parser (pglib-opf compatible)
+- PSS/E RAW file parser and writer (v33/v34)
+- MATPOWER .m file parser and writer (pglib-opf compatible)
+- CPAT .pop file parser and writer (ZIP/XML format)
+- CPAT .dyna file parser and writer (Fortran card format)
 - Shared utilities for power system analysis
 - **Foundation for LLM-friendly output structures**
 
@@ -16,34 +18,34 @@
 
 ## Interface & Factory Architecture
 
-> **This repository implements the Interface-Factory pattern** for pluggable file format parsers.
+> **This repository implements the Interface-Factory pattern** for pluggable file format parsers and writers.
 
 ### Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Code                                │
-│         system = System.from_raw("ieee14.raw")              │
-│         system = System.from_matpower("case14.m")           │
+│  Read:  system = System.from_raw("ieee14.raw")              │
 │         system = System.from_file("data.raw")  # auto-detect│
+│  Write: system.to_raw("output.raw")                         │
+│         system.to_file("output.m")             # auto-detect│
 ├─────────────────────────────────────────────────────────────┤
-│                    Factory Methods: System (models/system.py)│
-│         - System.from_raw(): Create from PSS/E file         │
-│         - System.from_matpower(): Create from MATPOWER file  │
-│         - System.from_file(): Auto-detect format            │
+│              Facade: System (models/system.py)              │
+│  Read:  from_raw, from_matpower, from_pop, from_dyna        │
+│  Write: to_raw, to_matpower, to_pop, to_dyna, to_file       │
 ├─────────────────────────────────────────────────────────────┤
-│                    Factory: ParserFactory (io/factories.py) │
-│         - ParserFactory.create("raw") → RawParser           │
-│         - ParserFactory.create("matpower") → MatpowerParser  │
-│         - ParserFactory.from_path(...) → auto-detect        │
+│              Factories (io/factories.py)                    │
+│  ParserFactory.create("raw") → RawParser                    │
+│  WriterFactory.create("raw") → RawWriter                    │
+│  *.from_path(...) → auto-detect by extension                │
 ├─────────────────────────────────────────────────────────────┤
-│                    Interface: IParser (io/protocols.py)     │
-│         - Abstract base class (ABC)                         │
-│         - parse(filepath) → System                          │
+│              Interfaces (io/protocols.py)                   │
+│  IParser: parse(filepath) → System                          │
+│  IWriter: write(system, filepath) → None                    │
 ├─────────────────────────────────────────────────────────────┤
-│                    Implementations: io/                     │
-│         - RawParser: PSS/E RAW format (v33/v34)             │
-│         - MatpowerParser: MATPOWER format (.m files)        │
+│              Implementations: io/                           │
+│  Parsers: RawParser, MatpowerParser, PopParser, DynaParser  │
+│  Writers: RawWriter, MatpowerWriter, PopWriter, DynaWriter  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +56,7 @@ psforge_grid/
 ├── __init__.py          # Public API exports
 ├── models/              # Dataclass definitions
 │   ├── __init__.py
-│   ├── system.py        # System (with factory methods)
+│   ├── system.py        # System (with facade: from_*/to_* methods)
 │   ├── bus.py
 │   ├── branch.py
 │   ├── generator.py
@@ -63,16 +65,22 @@ psforge_grid/
 │   └── shunt.py
 └── io/                  # File I/O (Interface-Factory pattern)
     ├── __init__.py      # Public exports
-    ├── protocols.py     # IParser interface
-    ├── factories.py     # ParserFactory
+    ├── protocols.py     # IParser, IWriter interfaces
+    ├── factories.py     # ParserFactory, WriterFactory
     ├── raw_parser.py    # RawParser implementation
-    └── matpower_parser.py # MatpowerParser implementation
+    ├── raw_writer.py    # RawWriter implementation
+    ├── matpower_parser.py # MatpowerParser implementation
+    ├── matpower_writer.py # MatpowerWriter implementation
+    ├── pop_parser.py    # PopParser implementation
+    ├── pop_writer.py    # PopWriter implementation
+    ├── dyna_parser.py   # DynaParser implementation
+    └── dyna_writer.py   # DynaWriter implementation
 ```
 
 ### VSCode Navigation
 
-- **F12 on System.from_raw()**: Goes to factory method
-- **Ctrl+F12 on IParser.parse()**: Lists all implementations (RawParser, etc.)
+- **F12 on System.from_raw()** or **System.to_raw()**: Goes to facade method
+- **Ctrl+F12 on IParser.parse()** or **IWriter.write()**: Lists all implementations
 - Docstrings include "See Also" cross-references
 
 ---
