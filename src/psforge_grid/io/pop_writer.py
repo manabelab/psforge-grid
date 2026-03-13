@@ -276,14 +276,16 @@ def _build_pnsw(system: System, ci: _ClusterIndexAssigner) -> Element:
         _add_text_elem(lni, "unsignedLong", str(ci.node_ci[br.from_bus]))
         _add_text_elem(lni, "unsignedLong", str(ci.node_ci[br.to_bus]))
 
-    # Transformer clusters
+    # Transformer clusters (use sequential code number for uniqueness)
+    xfmr_code = 0
     for i, br in enumerate(system.branches):
         if not br.is_transformer:
             continue
+        xfmr_code += 1
         cluster = SubElement(root, "Cluster")
         cluster.set("xsi:type", "Transformer")
         _add_text_elem(cluster, "ClusterIndex", str(ci.xfmr_ci[i]))
-        _add_text_elem(cluster, "CodeNumber", br.circuit_id)
+        _add_text_elem(cluster, "CodeNumber", str(xfmr_code))
         _add_text_elem(cluster, "ClusterName", br.name or f"XFMR{br.from_bus}-{br.to_bus}")
         lni = SubElement(cluster, "LinkNodeIndex")
         _add_text_elem(lni, "unsignedLong", str(ci.node_ci[br.from_bus]))
@@ -356,18 +358,19 @@ def _build_pnsj(system: System) -> Element:
         _add_text_elem(snode, "BUse", "true")
         _add_text_elem(snode, "GeneratorName", gen_name if gen_name else "（発電機データなし）")
 
-    # DictX (transformer case data)
+    # DictX (transformer case data — keys must match CodeNumber in pnsw)
     dictx = SubElement(root, "DictX")
-    for i, br in enumerate(system.branches):
+    xfmr_code = 0
+    for br in system.branches:
         if not br.is_transformer:
             continue
+        xfmr_code += 1
         item = SubElement(dictx, "item")
         key = SubElement(item, "key")
-        code = int(br.circuit_id) if br.circuit_id.isdigit() else i
-        _add_text_elem(key, "int", str(code))
+        _add_text_elem(key, "int", str(xfmr_code))
         val = SubElement(item, "value")
         strans = SubElement(val, "STransformer")
-        _add_text_elem(strans, "Number", str(code))
+        _add_text_elem(strans, "Number", str(xfmr_code))
         _add_text_elem(strans, "Name", br.name or f"XFMR{br.from_bus}-{br.to_bus}")
         _add_text_elem(strans, "Tap", str(br.tap_ratio))
         _add_text_elem(strans, "BUse", "true" if br.status == 1 else "false")
