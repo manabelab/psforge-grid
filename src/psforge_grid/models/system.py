@@ -2,11 +2,13 @@
 
 This module defines the System class as the central container for all power system components.
 
-Factory Methods:
-    The System class provides factory methods for creating instances from files:
-    - from_raw(): Create from PSS/E RAW file
-    - from_matpower(): Create from MATPOWER .m file
+Factory Methods (import):
+    - from_raw(), from_matpower(), from_pop(), from_dyna(): Create from specific formats
     - from_file(): Create from any supported format (auto-detect)
+
+Export Methods (write):
+    - to_raw(), to_matpower(), to_pop(), to_dyna(): Write to specific formats
+    - to_file(): Write to any supported format (auto-detect)
 """
 
 from __future__ import annotations
@@ -195,6 +197,106 @@ class System:
         from psforge_grid.io.dyna_parser import parse_dyna
 
         return parse_dyna(filepath)
+
+    # =========================================================================
+    # Export methods (write to file)
+    # =========================================================================
+
+    def to_raw(self, filepath: str | Path) -> None:
+        """Export this System to a PSS/E RAW file.
+
+        Args:
+            filepath: Output file path (.raw)
+
+        Example:
+            >>> system.to_raw("output.raw")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_raw(): Standalone function alternative
+        """
+        from psforge_grid.io.raw_writer import write_raw
+
+        write_raw(self, filepath)
+
+    def to_matpower(self, filepath: str | Path) -> None:
+        """Export this System to a MATPOWER .m file.
+
+        Args:
+            filepath: Output file path (.m)
+
+        Example:
+            >>> system.to_matpower("output.m")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_matpower(): Standalone function alternative
+        """
+        from psforge_grid.io.matpower_writer import write_matpower
+
+        write_matpower(self, filepath)
+
+    def to_pop(self, filepath: str | Path) -> None:
+        """Export this System to a CPAT .pop file.
+
+        Args:
+            filepath: Output file path (.pop)
+
+        Example:
+            >>> system.to_pop("output.pop")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_pop(): Standalone function alternative
+        """
+        from psforge_grid.io.pop_writer import write_pop
+
+        write_pop(self, filepath)
+
+    def to_dyna(self, filepath: str | Path) -> None:
+        """Export this System to a CPAT .dyna file.
+
+        Args:
+            filepath: Output file path (.dyna)
+
+        Example:
+            >>> system.to_dyna("output.dyna")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_dyna(): Standalone function alternative
+        """
+        from psforge_grid.io.dyna_writer import write_dyna
+
+        write_dyna(self, filepath)
+
+    def to_file(self, filepath: str | Path) -> None:
+        """Export this System to a file, auto-detecting format from extension.
+
+        Args:
+            filepath: Output file path (extension determines format)
+
+        Raises:
+            ValueError: If the file extension is not recognized
+
+        Example:
+            >>> system.to_file("output.raw")   # PSS/E format
+            >>> system.to_file("output.m")     # MATPOWER format
+            >>> system.to_file("output.pop")   # CPAT Pop format
+            >>> system.to_file("output.dyna")  # CPAT Dyna format
+
+        See Also:
+            - to_raw(), to_matpower(), to_pop(), to_dyna(): Explicit format
+            - WriterFactory: Direct writer access
+        """
+        from psforge_grid.io.factories import WriterFactory
+
+        writer = WriterFactory.from_path(filepath)
+        writer.write(self, filepath)
+
+    # =========================================================================
+    # Factory methods (class methods - read from file)
+    # =========================================================================
 
     @classmethod
     def from_file(cls, filepath: str | Path) -> System:
