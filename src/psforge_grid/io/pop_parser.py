@@ -288,21 +288,30 @@ def _build_branches(
         r0 = get_float(tline_data, "Zor", 0.0)
         x0 = get_float(tline_data, "Zox", 0.0)
 
-        branch = Branch(
-            from_bus=from_bus,
-            to_bus=to_bus,
-            r_pu=r_pu,
-            x_pu=x_pu,
-            b_pu=b_pu,
-            name=cluster.name,
-            circuit_id=str(cluster.code_number),
-        )
-        if r0 != 0.0:
-            branch.r0_pu = r0
-        if x0 != 0.0:
-            branch.x0_pu = x0
+        # Number of parallel circuits (NL).  When NL > 1 the stored
+        # impedance/admittance values are per-circuit values.  We
+        # create NL identical branches so the Y-bus gets the correct
+        # combined admittance (Y_total = NL * Y_per_circuit).
+        nl = get_int(tline_data, "NL", 1)
+        if nl < 1:
+            nl = 1
 
-        branches.append(branch)
+        for cct in range(1, nl + 1):
+            branch = Branch(
+                from_bus=from_bus,
+                to_bus=to_bus,
+                r_pu=r_pu,
+                x_pu=x_pu,
+                b_pu=b_pu,
+                name=cluster.name,
+                circuit_id=f"{cluster.code_number}_{cct}" if nl > 1 else str(cluster.code_number),
+            )
+            if r0 != 0.0:
+                branch.r0_pu = r0
+            if x0 != 0.0:
+                branch.x0_pu = x0
+
+            branches.append(branch)
 
     # Transformers
     xfmr_dict = _build_pnsd_dict(archive.pnsd_root, "DictDataTransformer", "DataTransformer")
