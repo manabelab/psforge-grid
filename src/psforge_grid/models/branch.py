@@ -60,6 +60,11 @@ class Branch:
             None means the source format did not provide this information.
         mag_b: Magnetizing susceptance [p.u. on system base] (default: None).
             None means the source format did not provide this information.
+        is_xfmr: Explicit transformer flag from source format (default: None).
+            True if the source format explicitly identified this branch as a
+            transformer (e.g., parsed from PSS/E TRANSFORMER DATA section).
+            None means the source format did not provide this information.
+            Used by is_transformer property as a primary indicator.
         name: Branch name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -102,6 +107,7 @@ class Branch:
     sbase_mva: float | None = None
     mag_g: float | None = None
     mag_b: float | None = None
+    is_xfmr: bool | None = None
     name: str | None = None
     description: str | None = None
 
@@ -120,7 +126,15 @@ class Branch:
 
     @property
     def is_transformer(self) -> bool:
-        """Check if this branch is a transformer (tap_ratio != 1.0 or shift_angle != 0.0)."""
+        """Check if this branch is a transformer.
+
+        A branch is identified as a transformer if any of:
+        - is_xfmr is True (explicitly flagged by source format parser)
+        - tap_ratio != 1.0 (off-nominal turns ratio)
+        - shift_angle != 0.0 (phase-shifting transformer)
+        """
+        if self.is_xfmr is True:
+            return True
         return self.tap_ratio != 1.0 or self.shift_angle != 0.0
 
     @property

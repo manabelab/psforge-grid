@@ -814,6 +814,7 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
                 sbase_mva=sbase_mva,
                 mag_g=mag_g,
                 mag_b=mag_b,
+                is_xfmr=True,
             )
             branches.append(branch)
 

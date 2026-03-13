@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Branch.is_xfmr` field: Explicit transformer flag set by source format parsers
+  - `True` when parsed from PSS/E TRANSFORMER DATA section
+  - `None` (default) when the source format does not distinguish transformers
+  - `is_transformer` property checks `is_xfmr` first, then falls back to tap_ratio/shift_angle heuristics
+  - Fixes IEEE 9-bus DSSWriter misclassification (step-up transformers with tap_ratio=1.0 were exported as Lines)
+- OpenDSS verification notebook (`opendss_verification.ipynb`): Added IEEE 9-bus test case and `_normalize_bus_name()` for cross-tool bus name matching
 - `IWriter` abstract interface (`io/protocols.py`) — symmetric counterpart of `IParser`
 - `WriterFactory` (`io/factories.py`) with `create()`, `from_extension()`, `from_path()`, `available_formats()`, `supported_extensions()`
 - `RawWriter` — exports System to PSS/E RAW v33 format

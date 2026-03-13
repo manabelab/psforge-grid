@@ -119,6 +119,43 @@ class TestBranch:
         assert xfmr_tap.is_transformer is True
         assert xfmr_shift.is_transformer is True
 
+    def test_branch_is_xfmr_flag(self):
+        """Test is_xfmr explicit transformer flag.
+
+        When is_xfmr=True, is_transformer returns True even if tap_ratio=1.0
+        and shift_angle=0.0. This covers step-up transformers in PSS/E RAW
+        format where tap ratios are on system base (WINDV1/WINDV2=1.0).
+        """
+        # is_xfmr=None (default): behaves like before
+        line_default = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1)
+        assert line_default.is_xfmr is None
+        assert line_default.is_transformer is False
+
+        # is_xfmr=True with unity tap: still a transformer
+        xfmr_unity_tap = Branch(
+            from_bus=1, to_bus=2, r_pu=0.0, x_pu=0.05, tap_ratio=1.0, is_xfmr=True
+        )
+        assert xfmr_unity_tap.is_xfmr is True
+        assert xfmr_unity_tap.is_transformer is True
+
+        # is_xfmr=False with unity tap: not a transformer
+        line_explicit = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1, is_xfmr=False)
+        assert line_explicit.is_transformer is False
+
+        # is_xfmr=False but non-unity tap: still a transformer (tap overrides)
+        xfmr_tap_override = Branch(
+            from_bus=1, to_bus=2, r_pu=0.0, x_pu=0.05, tap_ratio=1.05, is_xfmr=False
+        )
+        assert xfmr_tap_override.is_transformer is True
+
+    def test_branch_is_xfmr_branch_type_name(self):
+        """Test branch_type_name with is_xfmr flag."""
+        xfmr = Branch(from_bus=1, to_bus=2, r_pu=0.0, x_pu=0.05, is_xfmr=True)
+        assert xfmr.branch_type_name == "Transformer"
+
+        line = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1)
+        assert line.branch_type_name == "Transmission Line"
+
     def test_branch_status(self):
         """Test branch status."""
         branch_in = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1, status=1)
