@@ -74,6 +74,7 @@ psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 - **Writers** (export): PSS/E RAW (v33), MATPOWER .m, CPAT .pop, CPAT .dyna, OpenDSS .dss — symmetric counterpart of parsers
 - **Factory pattern**: `ParserFactory` / `WriterFactory` for format-agnostic creation, `IParser` / `IWriter` interfaces
 - OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
+- Transformer modeling: explicit `is_xfmr` flag from source format, magnetizing admittance (`mag_g`, `mag_b`)
 - Zero-sequence impedance data (`Branch.r0_pu`, `x0_pu`, `b0_pu`) for fault analysis
 - Generator machine parameters (`Generator.xd_pu`, `xdp_pu`, `xdpp_pu`, etc.) for fault/stability analysis
 - Shared utilities for power system analysis
@@ -139,7 +140,7 @@ The parser supports **core power flow data** required for basic AC power flow an
 | Fixed Shunt Data | Yes | Yes | Capacitors and reactors |
 | Generator Data | Yes | Yes | P, Q, voltage setpoint, Q limits |
 | Branch Data | Yes | Yes | Transmission lines |
-| Transformer Data | Yes | Yes | Two-winding transformers only |
+| Transformer Data | Yes | Yes | Two-winding transformers, magnetizing admittance (`mag_g`, `mag_b`), `is_xfmr=True` flag |
 
 ### Not Yet Supported
 
