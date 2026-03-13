@@ -1,15 +1,15 @@
-"""Parser protocols for power system data files.
+"""Protocols for power system data file I/O.
 
-This module defines abstract interfaces for file parsers,
-enabling support for multiple data formats (PSS/E, MATPOWER, etc.).
+This module defines abstract interfaces for file parsers and writers,
+enabling support for multiple data formats (PSS/E, MATPOWER, CPAT, etc.).
 
 The design enables:
-    - Transparent format switching via ParserFactory
+    - Transparent format switching via ParserFactory / WriterFactory
     - Extensibility for new file formats
-    - Testing with mock parsers
+    - Testing with mock parsers / writers
 
 IDE Navigation Tips:
-    - Press F12 on IParser to see this interface definition
+    - Press F12 on IParser/IWriter to see interface definitions
     - Press Ctrl+F12 (Mac: Cmd+F12) to jump to implementations
 """
 
@@ -91,6 +91,84 @@ class IParser(ABC):
 
         Returns:
             List of file extensions (without dot) that this parser supports.
+            For example: ["raw", "RAW"] for PSS/E format.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def format_name(self) -> str:
+        """Return human-readable format name.
+
+        Returns:
+            Format name for display purposes.
+            For example: "PSS/E RAW" or "MATPOWER".
+        """
+        pass
+
+
+class IWriter(ABC):
+    """Abstract base class for power system file writers.
+
+    All file format writers must implement this interface to ensure
+    consistent API across different data formats. Symmetric counterpart
+    of IParser.
+
+    Implementations:
+        - :class:`~psforge_grid.io.raw_writer.RawWriter`:
+          PSS/E RAW format (v33)
+        - :class:`~psforge_grid.io.matpower_writer.MatpowerWriter`:
+          MATPOWER format (.m files)
+        - :class:`~psforge_grid.io.pop_writer.PopWriter`:
+          CPAT Pop format (.pop, ZIP+XML)
+        - :class:`~psforge_grid.io.dyna_writer.DynaWriter`:
+          CPAT Dyna format (.dyna, fixed-column cards)
+
+    See Also:
+        - WriterFactory: io/factories.py
+        - IParser: The symmetric read interface
+
+    Example:
+        >>> from psforge_grid.io.factories import WriterFactory
+        >>> writer = WriterFactory.create("raw")
+        >>> writer.write(system, "output.raw")
+    """
+
+    @abstractmethod
+    def write(self, system: System, filepath: str | Path) -> None:
+        """Write a power system to a data file.
+
+        Serializes a System object to the file format supported by
+        this writer implementation.
+
+        Args:
+            system: System object containing all power system components.
+            filepath: Path to the output file. Parent directory must exist.
+
+        Raises:
+            ValueError: If the system data cannot be represented in this format
+            PermissionError: If the file cannot be written due to permissions
+            OSError: If there is an I/O error during writing
+
+        Note:
+            - Per-unit values are converted back to physical units as required
+              by the specific file format
+            - Voltage angles are converted from radians to degrees where needed
+            - Fields not supported by the target format are silently ignored
+
+        See Also:
+            - IParser.parse(): The symmetric read operation
+            - System: Container class for power system data
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def supported_extensions(self) -> list[str]:
+        """Return list of supported file extensions for writing.
+
+        Returns:
+            List of file extensions (without dot) that this writer supports.
             For example: ["raw", "RAW"] for PSS/E format.
         """
         pass

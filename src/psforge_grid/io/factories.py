@@ -1,17 +1,19 @@
-"""Factory for creating power system file parsers.
+"""Factory for creating power system file parsers and writers.
 
-This module provides a factory pattern implementation for
-instantiating the appropriate parser based on file format.
+This module provides factory pattern implementations for
+instantiating the appropriate parser or writer based on file format.
 
 The factory pattern enables:
-    - Runtime format selection (PSS/E, MATPOWER, etc.)
+    - Runtime format selection (PSS/E, MATPOWER, CPAT, etc.)
     - Automatic format detection from file extension
     - Future extensibility for new formats
 
 Example:
-    >>> from psforge_grid.io.factories import ParserFactory
+    >>> from psforge_grid.io.factories import ParserFactory, WriterFactory
     >>> parser = ParserFactory.create("raw")  # PSS/E format
     >>> system = parser.parse("ieee14.raw")
+    >>> writer = WriterFactory.create("matpower")
+    >>> writer.write(system, "output.m")
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from psforge_grid.io.protocols import IParser
+    from psforge_grid.io.protocols import IParser, IWriter
 
 
 class ParserFactory:
@@ -192,3 +194,140 @@ class ParserFactory:
             >>> print(extensions)  # ['raw', 'RAW']
         """
         return list(ParserFactory._EXTENSION_MAP.keys())
+
+
+class WriterFactory:
+    """Factory for creating power system file writers.
+
+    Supports format selection between PSS/E RAW, MATPOWER, CPAT Pop,
+    and CPAT Dyna formats. Symmetric counterpart of ParserFactory.
+
+    Available Formats:
+        - "raw": PSS/E RAW format (v33)
+        - "matpower": MATPOWER format (.m files)
+        - "pop": CPAT Pop format (.pop, ZIP+XML)
+        - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+
+    Example:
+        >>> writer = WriterFactory.create("raw")
+        >>> writer.write(system, "output.raw")
+        >>>
+        >>> # Auto-detect from extension
+        >>> writer = WriterFactory.from_extension(".m")
+        >>> writer.write(system, "output.m")
+    """
+
+    # Extension to format mapping (same as ParserFactory)
+    _EXTENSION_MAP = {
+        "raw": "raw",
+        "RAW": "raw",
+        "m": "matpower",
+        "pop": "pop",
+        "dyna": "dyna",
+    }
+
+    @staticmethod
+    def create(format_type: str = "raw") -> IWriter:
+        """Create a writer instance.
+
+        Args:
+            format_type: Writer format type. Available options:
+                - "raw": PSS/E RAW format (v33, default)
+                - "matpower": MATPOWER format (.m files)
+                - "pop": CPAT Pop format (.pop, ZIP+XML)
+                - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+
+        Returns:
+            IWriter implementation ready for use
+
+        Raises:
+            ValueError: If unknown format specified
+
+        Example:
+            >>> writer = WriterFactory.create("raw")
+            >>> writer.write(system, "output.raw")
+        """
+        if format_type == "raw":
+            from psforge_grid.io.raw_writer import RawWriter
+
+            return RawWriter()
+        elif format_type == "matpower":
+            from psforge_grid.io.matpower_writer import MatpowerWriter
+
+            return MatpowerWriter()
+        elif format_type == "pop":
+            from psforge_grid.io.pop_writer import PopWriter
+
+            return PopWriter()
+        elif format_type == "dyna":
+            from psforge_grid.io.dyna_writer import DynaWriter
+
+            return DynaWriter()
+        else:
+            available = WriterFactory.available_formats()
+            raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
+
+    @staticmethod
+    def from_extension(extension: str) -> IWriter:
+        """Create a writer based on file extension.
+
+        Args:
+            extension: File extension (with or without leading dot)
+
+        Returns:
+            IWriter implementation for the detected format
+
+        Raises:
+            ValueError: If extension is not recognized
+
+        Example:
+            >>> writer = WriterFactory.from_extension(".raw")
+        """
+        ext = extension.lstrip(".")
+
+        if ext in WriterFactory._EXTENSION_MAP:
+            format_type = WriterFactory._EXTENSION_MAP[ext]
+            return WriterFactory.create(format_type)
+        else:
+            supported = list(WriterFactory._EXTENSION_MAP.keys())
+            raise ValueError(f"Unknown extension: '{extension}'. Supported extensions: {supported}")
+
+    @staticmethod
+    def from_path(filepath: str | Path) -> IWriter:
+        """Create a writer based on file path.
+
+        Args:
+            filepath: Path to the output file
+
+        Returns:
+            IWriter implementation for the detected format
+
+        Raises:
+            ValueError: If file extension is not recognized
+
+        Example:
+            >>> writer = WriterFactory.from_path("output.raw")
+        """
+        path = Path(filepath)
+        extension = path.suffix
+        if not extension:
+            raise ValueError(f"Cannot determine format: file has no extension: {path}")
+        return WriterFactory.from_extension(extension)
+
+    @staticmethod
+    def available_formats() -> list[str]:
+        """Get list of available writer formats.
+
+        Returns:
+            List of format names that can be passed to create()
+        """
+        return ["raw", "matpower", "pop", "dyna"]
+
+    @staticmethod
+    def supported_extensions() -> list[str]:
+        """Get list of all supported file extensions for writing.
+
+        Returns:
+            List of file extensions (without dot) that are recognized
+        """
+        return list(WriterFactory._EXTENSION_MAP.keys())
