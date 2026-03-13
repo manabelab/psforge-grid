@@ -221,10 +221,11 @@ class TestDSSCompilation:
         import subprocess
         import sys
 
+        safe_path = str(dss_path.resolve()).replace("\\", "/")
         script = (
             "import opendssdirect as dss; "
             "dss.Basic.ClearAll(); "
-            f"r = dss.run_command('Compile \"{dss_path.resolve()}\"'); "
+            f"r = dss.run_command('Compile \"{safe_path}\"'); "
             "import sys; "
             "sys.exit(1 if r and 'error' in r.lower() else 0)"
         )
@@ -304,10 +305,12 @@ class TestDSSRoundTrip:
         import subprocess
         import sys
 
+        # Use forward slashes for cross-platform compatibility (Windows \U = unicode escape)
+        safe_path = str(dss_path.resolve()).replace("\\", "/")
         script = (
             "import json; "
             "from psforge_grid.models import System; "
-            f's = System.from_dss("{dss_path.resolve()}"); '
+            f's = System.from_dss("{safe_path}"); '
             "print(json.dumps({"
             '"num_buses": len(s.buses), '
             '"num_branches": len(s.branches), '
@@ -389,10 +392,11 @@ class TestDSSRoundTrip:
         import subprocess
         import sys
 
+        safe_path = str(dss_path.resolve()).replace("\\", "/")
         script = (
             "import json; "
             "from psforge_grid.models import System; "
-            f's = System.from_dss("{dss_path.resolve()}"); '
+            f's = System.from_dss("{safe_path}"); '
             "print(json.dumps({"
             '"swing_bus_count": sum(1 for b in s.buses if b.bus_type == 3), '
             '"pv_bus_count": sum(1 for b in s.buses if b.bus_type == 2), '
