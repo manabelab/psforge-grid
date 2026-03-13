@@ -57,6 +57,14 @@ class DSSParser(IParser):
     def parse(self, filepath: str | Path) -> System:
         """Parse an OpenDSS .dss file into a System object.
 
+        Handles two OpenDSS-specific issues:
+        1. Internal bus filtering: OpenDSS creates internal buses for
+           transformer modeling. Only buses referenced by user-defined
+           elements are included in the output.
+        2. Swing bus generator recovery: The Circuit source (Vsource) is
+           extracted as a swing generator, since OpenDSS does not include
+           it in the Generators iterator.
+
         Args:
             filepath: Path to the .dss file
 
@@ -84,17 +92,13 @@ class DSSParser(IParser):
         sys_name = dss.Circuit.Name()
         base_freq = dss.Solution.Frequency()
 
-        # We need to determine base_mva from the circuit
         # OpenDSS doesn't have a single "base MVA" concept like PSS/E
-        # Use 100.0 as default, which is standard
         base_mva = 100.0
 
-        # Extract buses
-        buses = self._extract_buses()
-
-        # Build bus name -> id mapping
-        bus_name_to_id = {bus.name: bus.bus_id for bus in buses if bus.name}
-        bus_kv = {bus.bus_id: bus.base_kv for bus in buses}
+        # Extract ALL buses (including OpenDSS internal buses)
+        all_buses = self._extract_buses()
+        bus_name_to_id = {bus.name: bus.bus_id for bus in all_buses if bus.name}
+        bus_kv = {bus.bus_id: bus.base_kv for bus in all_buses}
 
         # Extract elements
         branches = self._extract_lines(bus_name_to_id, bus_kv, base_mva)
@@ -104,6 +108,35 @@ class DSSParser(IParser):
         generators = self._extract_generators(bus_name_to_id, base_mva)
         loads = self._extract_loads(bus_name_to_id, base_mva)
         shunts = self._extract_shunts(bus_name_to_id, base_mva)
+
+        # Issue 2: Extract Circuit source (Vsource) as swing generator
+        swing_gen, swing_bus_id = self._extract_vsource_generator(bus_name_to_id, base_mva)
+        if swing_gen is not None:
+            generators.insert(0, swing_gen)
+
+        # Issue 1: Filter internal buses (keep only those referenced by elements)
+        referenced_ids: set[int] = set()
+        for br in branches:
+            referenced_ids.add(br.from_bus)
+            referenced_ids.add(br.to_bus)
+        for g in generators:
+            referenced_ids.add(g.bus_id)
+        for lo in loads:
+            referenced_ids.add(lo.bus_id)
+        for sh in shunts:
+            referenced_ids.add(sh.bus_id)
+
+        buses = [b for b in all_buses if b.bus_id in referenced_ids]
+
+        # Set bus types: swing (3), PV (2), PQ (1)
+        gen_bus_ids = {g.bus_id for g in generators}
+        for bus in buses:
+            if bus.bus_id == swing_bus_id:
+                bus.bus_type = 3
+            elif bus.bus_id in gen_bus_ids:
+                bus.bus_type = 2
+            else:
+                bus.bus_type = 1
 
         return System(
             buses=buses,
@@ -449,6 +482,55 @@ class DSSParser(IParser):
             flag = dss.Reactors.Next()
 
         return shunts
+
+    def _extract_vsource_generator(
+        self, bus_name_to_id: dict[str, int], base_mva: float
+    ) -> tuple[Generator | None, int | None]:
+        """Extract the Circuit source (Vsource) as a swing Generator.
+
+        OpenDSS represents the Circuit source as a Vsource element, which
+        is not included in the Generators iterator. This method recovers
+        the swing bus generator from the first Vsource.
+
+        Returns:
+            Tuple of (Generator or None, swing_bus_id or None)
+        """
+        flag = dss.Vsources.First()
+        if flag == 0:
+            return None, None
+
+        name = dss.Vsources.Name()
+        bus_names = dss.CktElement.BusNames()
+        bus1 = bus_names[0] if bus_names else ""
+        bus_id = self._get_bus_id(bus1, bus_name_to_id)
+
+        if bus_id is None:
+            return None, None
+
+        v_pu = dss.Vsources.PU()
+
+        # Get solved power output from CktElement.Powers()
+        # Returns [P1, Q1, P2, Q2, ...] per phase, power INTO the element.
+        # For a source delivering power, negate to get generated power.
+        powers = dss.CktElement.Powers()
+        p_kw = 0.0
+        q_kvar = 0.0
+        if len(powers) >= 6:
+            # 3-phase: sum phases 1-3 (indices 0,2,4 for P; 1,3,5 for Q)
+            p_kw = -(powers[0] + powers[2] + powers[4])
+            q_kvar = -(powers[1] + powers[3] + powers[5])
+
+        p_pu = p_kw / (base_mva * 1000.0) if base_mva > 0 else 0.0
+        q_pu = q_kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
+
+        gen = Generator(
+            bus_id=bus_id,
+            p_gen=p_pu,
+            q_gen=q_pu,
+            v_setpoint=v_pu,
+            name=name,
+        )
+        return gen, bus_id
 
 
 def parse_dss(filepath: str | Path) -> System:

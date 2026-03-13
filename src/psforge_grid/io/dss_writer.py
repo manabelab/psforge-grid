@@ -77,6 +77,14 @@ class DSSWriter(IWriter):
         # Build bus_id -> base_kv lookup
         bus_kv = {bus.bus_id: bus.base_kv for bus in system.buses}
 
+        # Pre-compute consistent bus_id -> OpenDSS name mapping
+        bus_id_to_name: dict[int, str] = {}
+        for bus in system.buses:
+            if bus.name:
+                bus_id_to_name[bus.bus_id] = self._sanitize_name(bus.name)
+            else:
+                bus_id_to_name[bus.bus_id] = f"Bus{bus.bus_id}"
+
         # Find swing bus for Circuit definition
         swing_buses = [b for b in system.buses if b.bus_type == 3]
         if not swing_buses:
@@ -88,7 +96,7 @@ class DSSWriter(IWriter):
         if swing_bus is not None:
             swing_kv = swing_bus.base_kv
             swing_pu = swing_bus.v_magnitude
-            swing_name = self._sanitize_name(swing_bus.name or f"Bus{swing_bus.bus_id}")
+            swing_name = bus_id_to_name.get(swing_bus.bus_id, f"Bus{swing_bus.bus_id}")
             sys_name = self._sanitize_name(system.name or "System")
 
             lines.append("! psforge-grid OpenDSS export")
@@ -109,7 +117,7 @@ class DSSWriter(IWriter):
         if tx_lines:
             lines.append("! === Transmission Lines ===")
             for br in tx_lines:
-                lines.append(self._branch_to_line(br, bus_kv, base_mva))
+                lines.append(self._branch_to_line(br, bus_id_to_name, bus_kv, base_mva))
             lines.append("")
 
         # --- Transformers ---
@@ -117,7 +125,7 @@ class DSSWriter(IWriter):
         if xfmrs:
             lines.append("! === Transformers ===")
             for br in xfmrs:
-                lines.extend(self._branch_to_transformer(br, bus_kv, base_mva))
+                lines.extend(self._branch_to_transformer(br, bus_id_to_name, bus_kv, base_mva))
             lines.append("")
 
         # --- Generators (non-swing) ---
@@ -135,7 +143,7 @@ class DSSWriter(IWriter):
                 p_kw = gen.p_gen * base_mva * 1000.0
                 q_kvar = gen.q_gen * base_mva * 1000.0
                 gen_name = self._sanitize_name(gen.name or f"G{gen.gen_id}_Bus{gen.bus_id}")
-                bus_name = self._bus_name(gen.bus_id, system)
+                bus_name = bus_id_to_name.get(gen.bus_id, f"Bus{gen.bus_id}")
 
                 line = (
                     f"New Generator.{gen_name} "
@@ -157,7 +165,7 @@ class DSSWriter(IWriter):
                 p_kw = lo.p_load * base_mva * 1000.0
                 q_kvar = lo.q_load * base_mva * 1000.0
                 lo_name = self._sanitize_name(lo.name or f"L{lo.load_id}_Bus{lo.bus_id}")
-                bus_name = self._bus_name(lo.bus_id, system)
+                bus_name = bus_id_to_name.get(lo.bus_id, f"Bus{lo.bus_id}")
 
                 line = (
                     f"New Load.{lo_name} "
@@ -175,7 +183,7 @@ class DSSWriter(IWriter):
             for sh in active_shunts:
                 sh_kv = sh.kv if sh.kv is not None else bus_kv.get(sh.bus_id, 1.0)
                 sh_conn = sh.connection or "wye"
-                bus_name = self._bus_name(sh.bus_id, system)
+                bus_name = bus_id_to_name.get(sh.bus_id, f"Bus{sh.bus_id}")
 
                 # Convert susceptance from p.u. to kvar at rated voltage
                 # Q_kvar = B_pu * S_base * 1000
@@ -228,14 +236,13 @@ class DSSWriter(IWriter):
             sanitized = f"N{sanitized}"
         return sanitized or "unnamed"
 
-    def _bus_name(self, bus_id: int, system: System) -> str:
-        """Get bus name for OpenDSS reference."""
-        bus = system.get_bus(bus_id)
-        if bus is not None and bus.name:
-            return self._sanitize_name(bus.name)
-        return f"Bus{bus_id}"
-
-    def _branch_to_line(self, br: Branch, bus_kv: dict[int, float], base_mva: float) -> str:
+    def _branch_to_line(
+        self,
+        br: Branch,
+        bus_id_to_name: dict[int, str],
+        bus_kv: dict[int, float],
+        base_mva: float,
+    ) -> str:
         """Convert a transmission line Branch to OpenDSS Line element."""
         from_kv = bus_kv.get(br.from_bus, 1.0)
         z_base = from_kv**2 / base_mva  # ohm
@@ -249,8 +256,8 @@ class DSSWriter(IWriter):
         b_us = br.b_pu / z_base * 1e6 if z_base > 0 else 0.0
 
         br_name = self._sanitize_name(br.name or f"Br{br.from_bus}_{br.to_bus}_{br.circuit_id}")
-        from_name = f"Bus{br.from_bus}"
-        to_name = f"Bus{br.to_bus}"
+        from_name = bus_id_to_name.get(br.from_bus, f"Bus{br.from_bus}")
+        to_name = bus_id_to_name.get(br.to_bus, f"Bus{br.to_bus}")
 
         line = (
             f"New Line.{br_name} "
@@ -268,7 +275,11 @@ class DSSWriter(IWriter):
         return line
 
     def _branch_to_transformer(
-        self, br: Branch, bus_kv: dict[int, float], base_mva: float
+        self,
+        br: Branch,
+        bus_id_to_name: dict[int, str],
+        bus_kv: dict[int, float],
+        base_mva: float,
     ) -> list[str]:
         """Convert a transformer Branch to OpenDSS Transformer element."""
         lines: list[str] = []
@@ -299,8 +310,8 @@ class DSSWriter(IWriter):
         pct_r = br.r_pu * (rated_mva / base_mva) * 100.0
 
         br_name = self._sanitize_name(br.name or f"Xfmr{br.from_bus}_{br.to_bus}_{br.circuit_id}")
-        from_name = f"Bus{br.from_bus}"
-        to_name = f"Bus{br.to_bus}"
+        from_name = bus_id_to_name.get(br.from_bus, f"Bus{br.from_bus}")
+        to_name = bus_id_to_name.get(br.to_bus, f"Bus{br.to_bus}")
 
         lines.append(
             f"New Transformer.{br_name} "

@@ -309,11 +309,11 @@ class TestDSSRoundTrip:
             "from psforge_grid.models import System; "
             f's = System.from_dss("{dss_path.resolve()}"); '
             "print(json.dumps({"
-            '"num_buses": s.num_buses(), '
-            '"num_branches": s.num_branches(), '
-            '"num_generators": s.num_generators(), '
-            '"num_loads": s.num_loads(), '
-            '"num_shunts": s.num_shunts(), '
+            '"num_buses": len(s.buses), '
+            '"num_branches": len(s.branches), '
+            '"num_generators": len(s.generators), '
+            '"num_loads": len(s.loads), '
+            '"num_shunts": len(s.shunts), '
             '"frequency_hz": s.frequency_hz'
             "}))"
         )
@@ -351,8 +351,64 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        # OpenDSS may count branches differently due to internal nodes
-        assert counts["num_branches"] >= system.num_branches() - 1
+        assert counts["num_branches"] == system.num_branches()
+
+    def test_round_trip_preserves_bus_count(self):
+        """Bus count should be preserved (internal buses filtered out)."""
+        system = System.from_raw(FIXTURES / "ieee14.raw")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.dss"
+            system.to_dss(path)
+            counts = self._round_trip_counts(path)
+        assert counts["num_buses"] == system.num_buses()
+
+    def test_round_trip_preserves_generator_count(self):
+        """Generator count should be preserved (including swing bus generator)."""
+        system = System.from_raw(FIXTURES / "ieee14.raw")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.dss"
+            system.to_dss(path)
+            counts = self._round_trip_counts(path)
+        assert counts["num_generators"] == system.num_generators()
+
+    def test_round_trip_swing_bus_type(self):
+        """Swing bus should be recovered as bus_type=3."""
+        system = System.from_raw(FIXTURES / "ieee14.raw")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "test.dss"
+            system.to_dss(path)
+            # Extended subprocess to check bus types
+            counts = self._round_trip_detail(path)
+        assert counts["swing_bus_count"] == 1
+        assert counts["pv_bus_count"] >= 1
+
+    @staticmethod
+    def _round_trip_detail(dss_path: Path) -> dict[str, float]:
+        """Parse .dss in subprocess and return detailed info as JSON."""
+        import json
+        import subprocess
+        import sys
+
+        script = (
+            "import json; "
+            "from psforge_grid.models import System; "
+            f's = System.from_dss("{dss_path.resolve()}"); '
+            "print(json.dumps({"
+            '"swing_bus_count": sum(1 for b in s.buses if b.bus_type == 3), '
+            '"pv_bus_count": sum(1 for b in s.buses if b.bus_type == 2), '
+            '"pq_bus_count": sum(1 for b in s.buses if b.bus_type == 1)'
+            "}))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Round-trip subprocess failed: {result.stderr}")
+        data: dict[str, float] = json.loads(result.stdout.strip())
+        return data
 
     def test_round_trip_frequency(self):
         system = System(
