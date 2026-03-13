@@ -11,6 +11,7 @@
 - MATPOWER .m file parser and writer (pglib-opf compatible)
 - CPAT .pop file parser and writer (ZIP/XML format)
 - CPAT .dyna file parser and writer (Fortran card format)
+- OpenDSS .dss file parser and writer (via opendssdirect.py)
 - Shared utilities for power system analysis
 - **Foundation for LLM-friendly output structures**
 
@@ -31,8 +32,8 @@
 │         system.to_file("output.m")             # auto-detect│
 ├─────────────────────────────────────────────────────────────┤
 │              Facade: System (models/system.py)              │
-│  Read:  from_raw, from_matpower, from_pop, from_dyna        │
-│  Write: to_raw, to_matpower, to_pop, to_dyna, to_file       │
+│  Read:  from_raw, from_matpower, from_pop, from_dyna, from_dss│
+│  Write: to_raw, to_matpower, to_pop, to_dyna, to_dss, to_file│
 ├─────────────────────────────────────────────────────────────┤
 │              Factories (io/factories.py)                    │
 │  ParserFactory.create("raw") → RawParser                    │
@@ -44,8 +45,10 @@
 │  IWriter: write(system, filepath) → None                    │
 ├─────────────────────────────────────────────────────────────┤
 │              Implementations: io/                           │
-│  Parsers: RawParser, MatpowerParser, PopParser, DynaParser  │
-│  Writers: RawWriter, MatpowerWriter, PopWriter, DynaWriter  │
+│  Parsers: RawParser, MatpowerParser, PopParser, DynaParser,  │
+│           DSSParser                                          │
+│  Writers: RawWriter, MatpowerWriter, PopWriter, DynaWriter,  │
+│           DSSWriter                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +77,9 @@ psforge_grid/
     ├── pop_parser.py    # PopParser implementation
     ├── pop_writer.py    # PopWriter implementation
     ├── dyna_parser.py   # DynaParser implementation
-    └── dyna_writer.py   # DynaWriter implementation
+    ├── dyna_writer.py   # DynaWriter implementation
+    ├── dss_parser.py    # DSSParser implementation (opendssdirect.py)
+    └── dss_writer.py    # DSSWriter implementation
 ```
 
 ### VSCode Navigation
@@ -151,15 +156,55 @@ class Bus:
 
 ---
 
+## Data Model Design: "Optional + None = Source Not Provided"
+
+> **Core Principle**: Use `Optional[T] = None` to represent data that the source format does not provide, rather than using sentinel values or raising errors.
+
+psforge-grid's data models serve as a **universal interchange format** across multiple file formats (PSS/E RAW, MATPOWER, CPAT, OpenDSS). Each format provides different subsets of information. The "Optional + None = Source Not Provided" principle ensures lossless cross-format conversion.
+
+### Rules
+
+1. **Format-specific fields use `T | None = None`**: Fields that only some formats provide (e.g., `winding_connection`, `kv`, `frequency_hz`) default to `None`
+2. **Core fields use concrete types with defaults**: Fields present in all formats (e.g., `r_pu`, `x_pu`, `bus_id`) use non-optional types
+3. **None means "not provided by the source"**, not "zero" or "unknown". Writers must handle `None` by using format-appropriate defaults
+4. **Parsers set only what the format provides**: Do not infer or calculate values that the source format does not explicitly contain
+5. **Writers fall back gracefully**: When a field is `None`, use the target format's default or omit the element
+
+### Example
+
+```python
+@dataclass
+class Branch:
+    # Core fields (all formats provide these)
+    from_bus: int
+    to_bus: int
+    r_pu: float = 0.0
+    x_pu: float = 0.01
+
+    # Format-specific fields (Optional + None = source not provided)
+    winding_connection: str | None = None   # "wye-wye", "delta-wye", etc.
+    nomv_from: float | None = None          # Winding rated voltage [kV]
+    sbase_mva: float | None = None          # Transformer rated capacity [MVA]
+```
+
+### When Adding New Fields
+
+- If the field is only available in some formats: use `T | None = None`
+- If the field is universally available: use a concrete type with a sensible default
+- Document which formats populate the field in the docstring
+
+---
+
 ## Instructions for AI Agents
 
 ### When Modifying Data Classes
 
 1. **Always include unit suffix** in field names (`_pu`, `_mw`, `_mvar`, `_kv`, `_deg`, `_rad`)
-2. **Add status enums** for values that can be evaluated (voltage, loading, etc.)
-3. **Write educational docstrings** explaining physical meaning
-4. **Implement `to_description()`** for all public data classes
-5. **Consider both education and business use cases**
+2. **Use `T | None = None` for format-specific fields** (follow "Optional + None = Source Not Provided" principle)
+3. **Add status enums** for values that can be evaluated (voltage, loading, etc.)
+4. **Write educational docstrings** explaining physical meaning
+5. **Implement `to_description()`** for all public data classes
+6. **Consider both education and business use cases**
 
 ### Type Hints
 
