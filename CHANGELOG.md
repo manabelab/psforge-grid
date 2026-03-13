@@ -15,10 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MatpowerWriter` — exports System to MATPOWER .m format (including gencost)
 - `PopWriter` — exports System to CPAT .pop format (ZIP archive with 3 XML files)
 - `DynaWriter` — exports System to CPAT dyna card format (80-char fixed-column)
-- `System.to_raw()`, `to_matpower()`, `to_pop()`, `to_dyna()` facade methods
+- `DSSWriter` — exports System to OpenDSS .dss script format (per-unit → physical unit conversion)
+- `DSSParser` — imports OpenDSS .dss files via `opendssdirect.py` API (compile-then-extract approach)
+- `System.to_raw()`, `to_matpower()`, `to_pop()`, `to_dyna()`, `to_dss()` facade methods
+- `System.from_dss()` facade method for OpenDSS import
 - `System.to_file()` — auto-detect format by file extension
-- `write_raw()`, `write_matpower()`, `write_pop()`, `write_dyna()` convenience functions
+- `write_raw()`, `write_matpower()`, `write_pop()`, `write_dyna()`, `write_dss()` convenience functions
+- Cross-format model fields: `Branch.winding_connection`, `nomv_from`, `nomv_to`, `sbase_mva`, `mag_g`, `mag_b`; `Generator.kv`, `connection`, `model_type`, `rneut`, `xneut`; `Load.kv`, `connection`, `model_type`; `Shunt.kv`, `connection`, `num_steps`; `System.frequency_hz`
+- `opendssdirect.py` as core dependency for OpenDSS interoperability
+- 28 DSS writer/parser tests (factory, output, compilation, round-trip with bus/gen count verification)
 - 25 writer tests including round-trip verification for all 4 formats
+
+### Fixed
+
+- DSSParser: Internal buses created by OpenDSS transformer modeling are now filtered out
+- DSSParser: Swing bus generator (Circuit Vsource) is now recovered as a Generator with bus_type=3
+- DSSParser: Bus types (swing/PV/PQ) are correctly assigned based on connected elements
+- DSSWriter: Bus naming is now consistent across all element types (Circuit, Line, Transformer, Generator, Load, Shunt)
 
 ## [0.4.0] - 2026-03-12
 

@@ -40,6 +40,9 @@ class System:
         shunts: List of Shunt objects representing capacitors/reactors
         generator_costs: List of GeneratorCost objects for OPF/UC formulations
         base_mva: System base MVA for per-unit conversion (default: 100.0)
+        frequency_hz: System frequency [Hz] (default: None).
+            50 Hz for Japan/Europe, 60 Hz for North America.
+            None means the source format did not provide this information.
         name: System name (optional, default: empty string)
         description: Free-text description providing context about the system.
             For LLM-friendly output.
@@ -66,6 +69,7 @@ class System:
     shunts: list[Shunt] = field(default_factory=list)
     generator_costs: list[GeneratorCost] = field(default_factory=list)
     base_mva: float = 100.0
+    frequency_hz: float | None = None
     name: str = ""
     description: str | None = None
 
@@ -168,6 +172,35 @@ class System:
         return parse_pop(filepath)
 
     @classmethod
+    def from_dss(cls, filepath: str | Path) -> System:
+        """Create a System from an OpenDSS .dss file.
+
+        Factory method for creating System instances from OpenDSS script
+        format files (.dss). Uses opendssdirect.py to compile and extract data.
+
+        Args:
+            filepath: Path to the .dss file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file cannot be compiled by OpenDSS
+
+        Example:
+            >>> system = System.from_dss("network.dss")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_dss(): Standalone function alternative
+        """
+        from psforge_grid.io.dss_parser import parse_dss
+
+        return parse_dss(filepath)
+
+    @classmethod
     def from_dyna(cls, filepath: str | Path) -> System:
         """Create a System from a CPAT dyna card format file.
 
@@ -252,6 +285,23 @@ class System:
         from psforge_grid.io.pop_writer import write_pop
 
         write_pop(self, filepath)
+
+    def to_dss(self, filepath: str | Path) -> None:
+        """Export this System to an OpenDSS .dss file.
+
+        Args:
+            filepath: Output file path (.dss)
+
+        Example:
+            >>> system.to_dss("output.dss")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_dss(): Standalone function alternative
+        """
+        from psforge_grid.io.dss_writer import write_dss
+
+        write_dss(self, filepath)
 
     def to_dyna(self, filepath: str | Path) -> None:
         """Export this System to a CPAT .dyna file.

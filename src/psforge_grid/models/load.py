@@ -22,6 +22,15 @@ class Load:
         q_load: Reactive power demand [p.u.] on system base (default: 0.0)
         status: Operating status (1: in-service, 0: out-of-service)
         load_id: Load identifier for multiple loads on same bus
+        kv: Rated voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the connected bus base_kv if None.
+        connection: Winding connection type (default: None).
+            Values: "wye" or "delta".
+            None means the source format did not provide this information.
+        model_type: Load model type (default: None).
+            OpenDSS convention: 1=constant PQ, 2=constant Z, 5=ZIP, etc.
+            None means the source format did not provide this information.
         name: Load name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -45,6 +54,9 @@ class Load:
     q_load: float = 0.0
     status: int = 1
     load_id: str = "1"
+    kv: float | None = None
+    connection: str | None = None
+    model_type: int | None = None
     name: str | None = None
     description: str | None = None
 
