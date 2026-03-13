@@ -1,0 +1,469 @@
+"""Parser for OpenDSS script format files (.dss).
+
+This module provides functionality to parse OpenDSS .dss files into System
+objects using the opendssdirect.py API. Instead of text parsing, the .dss
+file is compiled by the OpenDSS engine, and element data is extracted via API.
+
+This approach handles all OpenDSS scripting features (variables, redirects,
+master scripts) transparently.
+
+Example:
+    >>> from psforge_grid.io.dss_parser import parse_dss
+    >>> system = parse_dss("network.dss")
+"""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import opendssdirect as dss
+
+from psforge_grid.io.protocols import IParser
+from psforge_grid.models.branch import Branch
+from psforge_grid.models.bus import Bus
+from psforge_grid.models.generator import Generator
+from psforge_grid.models.load import Load
+from psforge_grid.models.shunt import Shunt
+from psforge_grid.models.system import System
+
+if TYPE_CHECKING:
+    pass
+
+
+class DSSParser(IParser):
+    """Parser for OpenDSS script format (.dss).
+
+    Uses opendssdirect.py to compile .dss files and extract circuit
+    element data via the OpenDSS API.
+
+    See Also:
+        - DSSWriter: Writes System objects to .dss files
+        - ParserFactory.create("dss"): Factory creation
+        - System.from_dss(): Facade method
+    """
+
+    @property
+    def supported_extensions(self) -> list[str]:
+        """Supported file extensions for OpenDSS format."""
+        return ["dss", "DSS"]
+
+    @property
+    def format_name(self) -> str:
+        """Human-readable format name."""
+        return "OpenDSS Script"
+
+    def parse(self, filepath: str | Path) -> System:
+        """Parse an OpenDSS .dss file into a System object.
+
+        Args:
+            filepath: Path to the .dss file
+
+        Returns:
+            System object containing parsed power system data
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the file cannot be compiled by OpenDSS
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"File not found: {filepath}")
+
+        # Reset OpenDSS and compile the file
+        dss.Basic.ClearAll()
+        result = dss.run_command(f'Compile "{filepath.resolve()}"')
+        if result and "error" in result.lower():
+            raise ValueError(f"OpenDSS compilation error: {result}")
+
+        # Solve to initialize the circuit (snapshot mode)
+        dss.run_command("Solve Mode=Snapshot")
+
+        # Extract system info
+        sys_name = dss.Circuit.Name()
+        base_freq = dss.Solution.Frequency()
+
+        # We need to determine base_mva from the circuit
+        # OpenDSS doesn't have a single "base MVA" concept like PSS/E
+        # Use 100.0 as default, which is standard
+        base_mva = 100.0
+
+        # Extract buses
+        buses = self._extract_buses()
+
+        # Build bus name -> id mapping
+        bus_name_to_id = {bus.name: bus.bus_id for bus in buses if bus.name}
+        bus_kv = {bus.bus_id: bus.base_kv for bus in buses}
+
+        # Extract elements
+        branches = self._extract_lines(bus_name_to_id, bus_kv, base_mva)
+        xfmr_branches = self._extract_transformers(bus_name_to_id, base_mva)
+        branches.extend(xfmr_branches)
+
+        generators = self._extract_generators(bus_name_to_id, base_mva)
+        loads = self._extract_loads(bus_name_to_id, base_mva)
+        shunts = self._extract_shunts(bus_name_to_id, base_mva)
+
+        return System(
+            buses=buses,
+            branches=branches,
+            generators=generators,
+            loads=loads,
+            shunts=shunts,
+            base_mva=base_mva,
+            frequency_hz=base_freq,
+            name=sys_name,
+        )
+
+    def _extract_buses(self) -> list[Bus]:
+        """Extract bus data from the compiled OpenDSS circuit."""
+        buses: list[Bus] = []
+        bus_names = dss.Circuit.AllBusNames()
+
+        for i, name in enumerate(bus_names):
+            dss.Circuit.SetActiveBus(name)
+            kv_base = dss.Bus.kVBase()
+            # Voltage magnitude in per-unit (use phase A for balanced)
+            v_mag_pu_list = dss.Bus.puVmagAngle()
+
+            v_mag = 1.0
+            v_ang = 0.0
+            if len(v_mag_pu_list) >= 2:
+                v_mag = v_mag_pu_list[0]
+                v_ang = v_mag_pu_list[1] * math.pi / 180.0  # deg -> rad
+
+            # Bus type: determine from connected elements later
+            # Default to PQ (1), will be updated based on generators
+            bus_type = 1
+
+            buses.append(
+                Bus(
+                    bus_id=i + 1,
+                    bus_type=bus_type,
+                    v_magnitude=v_mag,
+                    v_angle=v_ang,
+                    base_kv=kv_base * math.sqrt(3),  # OpenDSS kVBase is line-to-neutral
+                    name=name,
+                )
+            )
+
+        return buses
+
+    def _get_bus_id(self, bus_name: str, bus_name_to_id: dict[str, int]) -> int | None:
+        """Resolve OpenDSS bus name to bus ID.
+
+        OpenDSS bus names may include node suffixes like 'bus1.1.2.3'.
+        Strip the node part to match.
+        """
+        # Strip node suffix (e.g., "bus1.1.2.3" -> "bus1")
+        base_name = bus_name.split(".")[0].lower()
+        for name, bid in bus_name_to_id.items():
+            if name.lower() == base_name:
+                return bid
+        return None
+
+    def _extract_lines(
+        self,
+        bus_name_to_id: dict[str, int],
+        bus_kv: dict[int, float],
+        base_mva: float,
+    ) -> list[Branch]:
+        """Extract Line elements as Branch objects."""
+        branches: list[Branch] = []
+
+        flag = dss.Lines.First()
+        while flag > 0:
+            name = dss.Lines.Name()
+            bus1 = dss.Lines.Bus1()
+            bus2 = dss.Lines.Bus2()
+
+            from_id = self._get_bus_id(bus1, bus_name_to_id)
+            to_id = self._get_bus_id(bus2, bus_name_to_id)
+
+            if from_id is not None and to_id is not None:
+                r1_ohm = dss.Lines.R1()
+                x1_ohm = dss.Lines.X1()
+                c1_nf = dss.Lines.C1()  # nanofarads per unit length
+                length = dss.Lines.Length()
+
+                from_kv = bus_kv.get(from_id, 1.0)
+                z_base = from_kv**2 / base_mva if base_mva > 0 else 1.0
+
+                # Convert physical to per-unit
+                r_pu = (r1_ohm * length) / z_base if z_base > 0 else 0.0
+                x_pu = (x1_ohm * length) / z_base if z_base > 0 else 0.0
+                # C1 is in nF/unit_length. B = 2*pi*f*C
+                # But OpenDSS also stores B directly when set via b1 parameter
+                # For lines set with b1 (microsiemens), C1 = b1 / (2*pi*f) * 1e3
+                # Convert back: b_us = C1_nf * 2 * pi * f * length / 1e3
+                freq = dss.Solution.Frequency()
+                b_us = c1_nf * 2 * math.pi * freq * length / 1e3
+                b_pu = b_us * z_base * 1e-6 if z_base > 0 else 0.0
+
+                # Ratings
+                normamps = dss.Lines.NormAmps()
+                rate_a = None
+                if normamps > 0 and from_kv > 0:
+                    rate_a = normamps * math.sqrt(3) * from_kv / 1000.0
+
+                branches.append(
+                    Branch(
+                        from_bus=from_id,
+                        to_bus=to_id,
+                        r_pu=r_pu,
+                        x_pu=x_pu,
+                        b_pu=b_pu,
+                        rate_a=rate_a,
+                        name=name,
+                    )
+                )
+
+            flag = dss.Lines.Next()
+
+        return branches
+
+    def _extract_transformers(
+        self,
+        bus_name_to_id: dict[str, int],
+        base_mva: float,
+    ) -> list[Branch]:
+        """Extract Transformer elements as Branch objects."""
+        branches: list[Branch] = []
+
+        flag = dss.Transformers.First()
+        while flag > 0:
+            name = dss.Transformers.Name()
+            num_windings = dss.Transformers.NumWindings()
+
+            if num_windings >= 2:
+                # Get winding 1 info
+                dss.Transformers.Wdg(1)
+                bus1 = dss.CktElement.BusNames()[0] if dss.CktElement.BusNames() else ""
+                kv1 = dss.Transformers.kV()
+                kva1 = dss.Transformers.kVA()
+                tap1 = dss.Transformers.Tap()
+
+                # Get winding 2 info
+                dss.Transformers.Wdg(2)
+                bus2 = dss.CktElement.BusNames()[1] if len(dss.CktElement.BusNames()) > 1 else ""
+                kv2 = dss.Transformers.kV()
+                tap2 = dss.Transformers.Tap()
+
+                from_id = self._get_bus_id(bus1, bus_name_to_id)
+                to_id = self._get_bus_id(bus2, bus_name_to_id)
+
+                if from_id is not None and to_id is not None:
+                    # XHL and %R
+                    xhl = dss.Transformers.Xhl()
+                    pct_r = dss.Transformers.R()  # %R for current winding
+
+                    rated_mva = kva1 / 1000.0
+
+                    # Convert from transformer-base percent to system-base p.u.
+                    # Z_pu = %Z / 100 * (base_mva / rated_mva)
+                    x_pu = (xhl / 100.0) * (base_mva / rated_mva) if rated_mva > 0 else 0.0
+                    r_pu = (pct_r / 100.0) * (base_mva / rated_mva) if rated_mva > 0 else 0.0
+
+                    # Tap ratio
+                    tap_ratio = tap1 / tap2 if tap2 != 0 else tap1
+
+                    # Connection types
+                    # OpenDSS: IsDelta() for current winding
+                    dss.Transformers.Wdg(1)
+                    is_delta1 = dss.Transformers.IsDelta()
+                    dss.Transformers.Wdg(2)
+                    is_delta2 = dss.Transformers.IsDelta()
+
+                    conn1 = "delta" if is_delta1 else "wye"
+                    conn2 = "delta" if is_delta2 else "wye"
+                    winding_connection = f"{conn1}-{conn2}"
+
+                    # Shift angle from connection type
+                    shift_angle = 0.0
+                    if is_delta1 and not is_delta2:
+                        shift_angle = math.pi / 6.0  # +30 degrees
+                    elif not is_delta1 and is_delta2:
+                        shift_angle = -math.pi / 6.0  # -30 degrees
+
+                    branches.append(
+                        Branch(
+                            from_bus=from_id,
+                            to_bus=to_id,
+                            r_pu=r_pu,
+                            x_pu=x_pu,
+                            b_pu=0.0,
+                            tap_ratio=tap_ratio,
+                            shift_angle=shift_angle,
+                            winding_connection=winding_connection,
+                            nomv_from=kv1,
+                            nomv_to=kv2,
+                            sbase_mva=rated_mva,
+                            name=name,
+                        )
+                    )
+
+            flag = dss.Transformers.Next()
+
+        return branches
+
+    def _extract_generators(
+        self, bus_name_to_id: dict[str, int], base_mva: float
+    ) -> list[Generator]:
+        """Extract Generator elements."""
+        generators: list[Generator] = []
+
+        flag = dss.Generators.First()
+        while flag > 0:
+            name = dss.Generators.Name()
+
+            # Get bus from CktElement
+            bus_names = dss.CktElement.BusNames()
+            bus1 = bus_names[0] if bus_names else ""
+            bus_id = self._get_bus_id(bus1, bus_name_to_id)
+
+            if bus_id is not None:
+                kw = dss.Generators.kW()
+                kvar = dss.Generators.kvar()
+                kv = dss.Generators.kV()
+                model = dss.Generators.Model()
+                is_delta = dss.Generators.IsDelta()
+
+                p_pu = kw / (base_mva * 1000.0) if base_mva > 0 else 0.0
+                q_pu = kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
+
+                generators.append(
+                    Generator(
+                        bus_id=bus_id,
+                        p_gen=p_pu,
+                        q_gen=q_pu,
+                        kv=kv,
+                        connection="delta" if is_delta else "wye",
+                        model_type=model,
+                        name=name,
+                    )
+                )
+
+            flag = dss.Generators.Next()
+
+        return generators
+
+    def _extract_loads(self, bus_name_to_id: dict[str, int], base_mva: float) -> list[Load]:
+        """Extract Load elements."""
+        loads: list[Load] = []
+
+        flag = dss.Loads.First()
+        while flag > 0:
+            name = dss.Loads.Name()
+
+            bus_names = dss.CktElement.BusNames()
+            bus1 = bus_names[0] if bus_names else ""
+            bus_id = self._get_bus_id(bus1, bus_name_to_id)
+
+            if bus_id is not None:
+                kw = dss.Loads.kW()
+                kvar = dss.Loads.kvar()
+                kv = dss.Loads.kV()
+                model = dss.Loads.Model()
+                is_delta = dss.Loads.IsDelta()
+
+                p_pu = kw / (base_mva * 1000.0) if base_mva > 0 else 0.0
+                q_pu = kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
+
+                loads.append(
+                    Load(
+                        bus_id=bus_id,
+                        p_load=p_pu,
+                        q_load=q_pu,
+                        kv=kv,
+                        connection="delta" if is_delta else "wye",
+                        model_type=model,
+                        name=name,
+                    )
+                )
+
+            flag = dss.Loads.Next()
+
+        return loads
+
+    def _extract_shunts(self, bus_name_to_id: dict[str, int], base_mva: float) -> list[Shunt]:
+        """Extract Capacitor and Reactor elements as Shunt objects."""
+        shunts: list[Shunt] = []
+
+        # Capacitors
+        flag = dss.Capacitors.First()
+        while flag > 0:
+            name = dss.Capacitors.Name()
+            bus_names = dss.CktElement.BusNames()
+            bus1 = bus_names[0] if bus_names else ""
+            bus_id = self._get_bus_id(bus1, bus_name_to_id)
+
+            if bus_id is not None:
+                kvar = dss.Capacitors.kvar()
+                kv = dss.Capacitors.kV()
+                is_delta = dss.Capacitors.IsDelta()
+                num_steps = dss.Capacitors.NumSteps()
+
+                b_pu = kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
+
+                shunts.append(
+                    Shunt(
+                        bus_id=bus_id,
+                        g_pu=0.0,
+                        b_pu=b_pu,
+                        kv=kv,
+                        connection="delta" if is_delta else "wye",
+                        num_steps=num_steps if num_steps > 1 else None,
+                        name=name,
+                    )
+                )
+
+            flag = dss.Capacitors.Next()
+
+        # Reactors
+        flag = dss.Reactors.First()
+        while flag > 0:
+            name = dss.Reactors.Name()
+            bus_names = dss.CktElement.BusNames()
+            bus1 = bus_names[0] if bus_names else ""
+            bus_id = self._get_bus_id(bus1, bus_name_to_id)
+
+            if bus_id is not None:
+                kvar = dss.Reactors.kvar()
+                kv = dss.Reactors.kV()
+                is_delta = dss.Reactors.IsDelta()
+
+                b_pu = -kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
+
+                shunts.append(
+                    Shunt(
+                        bus_id=bus_id,
+                        g_pu=0.0,
+                        b_pu=b_pu,
+                        kv=kv,
+                        connection="delta" if is_delta else "wye",
+                        name=name,
+                    )
+                )
+
+            flag = dss.Reactors.Next()
+
+        return shunts
+
+
+def parse_dss(filepath: str | Path) -> System:
+    """Parse an OpenDSS .dss file into a System object.
+
+    Convenience function that creates a DSSParser and parses.
+
+    Args:
+        filepath: Path to the .dss file
+
+    Returns:
+        System object containing parsed power system data
+
+    Example:
+        >>> from psforge_grid.io.dss_parser import parse_dss
+        >>> system = parse_dss("network.dss")
+    """
+    return DSSParser().parse(filepath)

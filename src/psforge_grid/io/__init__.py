@@ -30,6 +30,8 @@ Advanced Usage:
     >>> writer.write(system, "ieee14.m")
 """
 
+from psforge_grid.io.dss_parser import DSSParser, parse_dss
+from psforge_grid.io.dss_writer import DSSWriter, write_dss
 from psforge_grid.io.dyna_writer import DynaWriter, write_dyna
 from psforge_grid.io.factories import ParserFactory, WriterFactory
 from psforge_grid.io.matpower_parser import MatpowerParser, parse_matpower
@@ -46,11 +48,13 @@ __all__ = [
     "parse_matpower",
     "parse_pop",
     "parse_dyna",
+    "parse_dss",
     # Write functions
     "write_raw",
     "write_matpower",
     "write_pop",
     "write_dyna",
+    "write_dss",
     # Interfaces
     "IParser",
     "IWriter",
@@ -61,9 +65,11 @@ __all__ = [
     "RawParser",
     "MatpowerParser",
     "PopParser",
+    "DSSParser",
     # Writer implementations
     "RawWriter",
     "MatpowerWriter",
     "PopWriter",
     "DynaWriter",
+    "DSSWriter",
 ]

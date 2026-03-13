@@ -43,6 +43,23 @@ class Branch:
             Used for unbalanced fault analysis (1LG, 2LG).
         b0_pu: Zero-sequence total line charging susceptance [p.u.] (default: None)
             Used for unbalanced fault analysis (1LG, 2LG).
+        winding_connection: Transformer winding connection type (default: None).
+            Values: "wye-wye", "delta-wye", "wye-delta", "delta-delta".
+            None means the source format did not provide this information.
+            Writers may infer from shift_angle if None.
+        nomv_from: From-side winding nominal voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the from_bus base_kv if None.
+        nomv_to: To-side winding nominal voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the to_bus base_kv if None.
+        sbase_mva: Transformer rated capacity [MVA] (default: None).
+            None means the source format did not provide this information.
+            Writers may use system base_mva if None.
+        mag_g: Magnetizing conductance [p.u. on system base] (default: None).
+            None means the source format did not provide this information.
+        mag_b: Magnetizing susceptance [p.u. on system base] (default: None).
+            None means the source format did not provide this information.
         name: Branch name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -79,6 +96,12 @@ class Branch:
     r0_pu: float | None = None
     x0_pu: float | None = None
     b0_pu: float | None = None
+    winding_connection: str | None = None
+    nomv_from: float | None = None
+    nomv_to: float | None = None
+    sbase_mva: float | None = None
+    mag_g: float | None = None
+    mag_b: float | None = None
     name: str | None = None
     description: str | None = None
 

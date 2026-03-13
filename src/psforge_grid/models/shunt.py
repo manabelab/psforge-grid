@@ -24,6 +24,15 @@ class Shunt:
             Positive for capacitors, negative for reactors
         status: Operating status (1: in-service, 0: out-of-service)
         shunt_id: Shunt identifier for multiple shunts on same bus
+        kv: Rated voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the connected bus base_kv if None.
+        connection: Winding connection type (default: None).
+            Values: "wye" or "delta".
+            None means the source format did not provide this information.
+        num_steps: Number of switchable steps (default: None).
+            None means the source format did not provide this information
+            or the shunt is a fixed (non-switched) device.
         name: Shunt name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -47,6 +56,9 @@ class Shunt:
     b_pu: float = 0.0
     status: int = 1
     shunt_id: str = "1"
+    kv: float | None = None
+    connection: str | None = None
+    num_steps: int | None = None
     name: str | None = None
     description: str | None = None
 

@@ -53,7 +53,7 @@ class ParserFactory:
         "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",
         "pop": "psforge_grid.io.pop_parser.PopParser",
         "dyna": "psforge_grid.io.dyna_parser.DynaParser",
-        # "cim": "psforge_grid.io.cim_parser.CimParser",  # planned
+        "dss": "psforge_grid.io.dss_parser.DSSParser",
     }
 
     # Extension to format mapping
@@ -63,7 +63,8 @@ class ParserFactory:
         "m": "matpower",
         "pop": "pop",
         "dyna": "dyna",
-        # "xml": "cim",  # planned
+        "dss": "dss",
+        "DSS": "dss",
     }
 
     @staticmethod
@@ -104,11 +105,10 @@ class ParserFactory:
             from psforge_grid.io.dyna_parser import DynaParser
 
             return DynaParser()
-        elif format_type == "cim":
-            raise NotImplementedError(
-                "CIM parser is planned for future release. "
-                "Currently 'raw' and 'matpower' formats are available."
-            )
+        elif format_type == "dss":
+            from psforge_grid.io.dss_parser import DSSParser
+
+            return DSSParser()
         else:
             available = ParserFactory.available_formats()
             raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
@@ -180,7 +180,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        return ["raw", "matpower", "pop", "dyna"]
+        return ["raw", "matpower", "pop", "dyna", "dss"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
@@ -224,6 +224,8 @@ class WriterFactory:
         "m": "matpower",
         "pop": "pop",
         "dyna": "dyna",
+        "dss": "dss",
+        "DSS": "dss",
     }
 
     @staticmethod
@@ -263,6 +265,10 @@ class WriterFactory:
             from psforge_grid.io.dyna_writer import DynaWriter
 
             return DynaWriter()
+        elif format_type == "dss":
+            from psforge_grid.io.dss_writer import DSSWriter
+
+            return DSSWriter()
         else:
             available = WriterFactory.available_formats()
             raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
@@ -321,7 +327,7 @@ class WriterFactory:
         Returns:
             List of format names that can be passed to create()
         """
-        return ["raw", "matpower", "pop", "dyna"]
+        return ["raw", "matpower", "pop", "dyna", "dss"]
 
     @staticmethod
     def supported_extensions() -> list[str]:

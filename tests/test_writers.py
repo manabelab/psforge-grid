@@ -152,6 +152,7 @@ class TestWriterFactory:
         assert "matpower" in formats
         assert "pop" in formats
         assert "dyna" in formats
+        assert "dss" in formats
 
     def test_supported_extensions(self) -> None:
         exts = WriterFactory.supported_extensions()
@@ -159,6 +160,7 @@ class TestWriterFactory:
         assert "m" in exts
         assert "pop" in exts
         assert "dyna" in exts
+        assert "dss" in exts
 
 
 # =============================================================================
@@ -169,7 +171,7 @@ class TestWriterFactory:
 class TestIWriterInterface:
     """Tests that all writers implement IWriter correctly."""
 
-    @pytest.mark.parametrize("fmt", ["raw", "matpower", "pop", "dyna"])
+    @pytest.mark.parametrize("fmt", ["raw", "matpower", "pop", "dyna", "dss"])
     def test_writer_has_required_properties(self, fmt: str) -> None:
         writer = WriterFactory.create(fmt)
         assert isinstance(writer.supported_extensions, list)
