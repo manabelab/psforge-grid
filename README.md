@@ -28,6 +28,9 @@ system = System.from_matpower("pglib_opf_case14_ieee.m")
 system = System.from_pop("WEST10peak.pop")    # CPAT-GUI project file (ZIP/XML)
 system = System.from_dyna("model.dyna")        # CPAT Fortran card format
 
+# Load from OpenDSS format
+system = System.from_dss("network.dss")        # OpenDSS script format
+
 # Auto-detect format by file extension
 system = System.from_file("case14.m")
 
@@ -36,6 +39,7 @@ system.to_raw("output.raw")              # PSS/E RAW format
 system.to_matpower("output.m")           # MATPOWER format
 system.to_pop("output.pop")              # CPAT Pop format
 system.to_dyna("output.dyna")            # CPAT Dyna format
+system.to_dss("output.dss")             # OpenDSS script format
 system.to_file("output.m")              # Auto-detect by extension
 
 # Explore the system
@@ -59,15 +63,15 @@ psforge-grid show pglib_opf_case14_ieee.m buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **Multi-format I/O** | Read & write: PSS/E RAW, MATPOWER, CPAT (.pop/.dyna) | Usually single format |
+| **Multi-format I/O** | Read & write: PSS/E RAW, MATPOWER, CPAT (.pop/.dyna), OpenDSS (.dss) | Usually single format |
 
 ## Overview
 
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
-- **Parsers** (read): PSS/E RAW (v33/v34), MATPOWER .m ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible), CPAT .pop (ZIP/XML), CPAT .dyna (Fortran cards)
-- **Writers** (export): PSS/E RAW (v33), MATPOWER .m, CPAT .pop, CPAT .dyna — symmetric counterpart of parsers
+- **Parsers** (read): PSS/E RAW (v33/v34), MATPOWER .m ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible), CPAT .pop (ZIP/XML), CPAT .dyna (Fortran cards), OpenDSS .dss
+- **Writers** (export): PSS/E RAW (v33), MATPOWER .m, CPAT .pop, CPAT .dyna, OpenDSS .dss — symmetric counterpart of parsers
 - **Factory pattern**: `ParserFactory` / `WriterFactory` for format-agnostic creation, `IParser` / `IWriter` interfaces
 - OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
 - Zero-sequence impedance data (`Branch.r0_pu`, `x0_pu`, `b0_pu`) for fault analysis
@@ -243,6 +247,41 @@ Parser validation uses IEEJ standard model systems:
 | `WEST10peak.pop` | IEEJ WEST 10-machine peak model | 27 | 35 | 10 |
 | `cpat_model11.dyna` | CPAT Manual p.26 model system | 10 | 14 | 4 |
 
+## OpenDSS Format Support
+
+psforge-grid supports [OpenDSS](https://opendss.epri.com/) `.dss` script files via [opendssdirect.py](https://pypi.org/project/opendssdirect.py/), enabling interoperability with OpenDSS for validation and cross-tool comparison.
+
+### DSSWriter (Export)
+
+Converts psforge-grid `System` objects to OpenDSS scripts with per-unit → physical unit conversion.
+
+```python
+from psforge_grid import System
+
+system = System.from_raw("ieee14.raw")
+system.to_dss("ieee14.dss")  # Export to OpenDSS format
+```
+
+| System Element | OpenDSS Element | Notes |
+|---------------|-----------------|-------|
+| System (swing bus) | `New Circuit` | Swing bus → Vsource |
+| Branch (line) | `New Line` | pu → ohm/microsiemens |
+| Branch (transformer) | `New Transformer` | pu → percent impedance |
+| Generator | `New Generator` | Non-swing generators |
+| Load | `New Load` | pu → kW/kvar |
+| Shunt (b > 0) | `New Capacitor` | pu → kvar |
+| Shunt (b < 0) | `New Reactor` | pu → kvar |
+
+### DSSParser (Import)
+
+Parses `.dss` files by compiling them with OpenDSS and extracting data via API. Handles internal bus filtering and swing bus generator recovery.
+
+```python
+from psforge_grid import System
+
+system = System.from_dss("network.dss")
+```
+
 ## Export (Writer) Support
 
 psforge-grid supports exporting `System` objects to all supported formats via `IWriter` / `WriterFactory` — the symmetric counterpart of `IParser` / `ParserFactory`.
@@ -279,6 +318,7 @@ system.to_matpower("ieee14.m")  # RAW → MATPOWER
 | MATPOWER .m | Yes | Yes | Yes (including gencost) |
 | CPAT .pop (ZIP/XML) | Yes | Yes | Yes |
 | CPAT .dyna (cards) | Yes | Yes | Yes |
+| OpenDSS .dss | Yes | Yes | Yes (bus/branch/gen/load/shunt counts) |
 
 ## Installation
 
