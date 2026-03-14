@@ -178,7 +178,9 @@ def _build_pnsd(system: System, ci: _ClusterIndexAssigner) -> Element:
         tld = SubElement(val, "DataTransmissionLine")
         _add_text_elem(tld, "Z1r", str(br.r_pu))
         _add_text_elem(tld, "Z1x", str(br.x_pu))
-        _add_text_elem(tld, "Y1c", str(br.b_pu))
+        # CPAT convention: Y1C = Y/2 (half of total charging).
+        # Branch.b_pu stores total charging (PSS/E convention), so divide by 2.
+        _add_text_elem(tld, "Y1c", str(br.b_pu / 2.0))
         if br.r0_pu is not None:
             _add_text_elem(tld, "Zor", str(br.r0_pu))
         if br.x0_pu is not None:

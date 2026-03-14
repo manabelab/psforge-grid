@@ -65,6 +65,18 @@ class Branch:
             transformer (e.g., parsed from PSS/E TRANSFORMER DATA section).
             None means the source format did not provide this information.
             Used by is_transformer property as a primary indicator.
+        reg_control_mode: Voltage regulation control mode (default: None).
+            "secondary" for secondary-side voltage control,
+            "primary" for primary-side voltage control.
+            None means the source format did not provide this information
+            or the transformer does not regulate voltage.
+        reg_target_voltage_pu: Target voltage for voltage regulation [p.u.]
+            (default: None). None means the source format did not provide
+            this information or regulation is not active.
+        tap_max: Maximum tap ratio limit (default: None).
+            None means the source format did not provide this information.
+        tap_min: Minimum tap ratio limit (default: None).
+            None means the source format did not provide this information.
         name: Branch name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -108,6 +120,10 @@ class Branch:
     mag_g: float | None = None
     mag_b: float | None = None
     is_xfmr: bool | None = None
+    reg_control_mode: str | None = None
+    reg_target_voltage_pu: float | None = None
+    tap_max: float | None = None
+    tap_min: float | None = None
     name: str | None = None
     description: str | None = None
 

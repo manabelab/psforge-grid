@@ -298,7 +298,8 @@ class TestPopParserIntegration:
         for line in lines_1_2:
             assert line.r_pu == pytest.approx(0.0042)
             assert line.x_pu == pytest.approx(0.126)
-            assert line.b_pu == pytest.approx(0.061)
+            # CPAT Y1C=0.061 is Y/2; psforge converts to total B = 2*Y1C = 0.122
+            assert line.b_pu == pytest.approx(0.122)
 
     def test_parallel_circuit_expansion(self, west10_system: System) -> None:
         """NL=2 lines should create 2 branches with per-circuit impedance.
