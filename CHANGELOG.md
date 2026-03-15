@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-15
+
+### Added
+
+- `Modification`, `ScenarioDefinition`, `ScenarioSet` typed dataclasses (`models/scenario.py`)
+  - Replaces dict-based `load_scenarios()` / `write_scenario()` functions
+  - Type-safe scenario definitions with validation at construction time
+  - `ScenarioSet.from_json()` / `to_json()` for file I/O
+  - `ScenarioSet.resolve()` produces independent System objects per scenario
+  - `to_description()` methods for LLM-friendly output on all 3 classes
+- `psforge scenario list` CLI subcommand with `--format table|json|summary` output
+
+### Changed
+
+- `psforge_grid.io.scenario_loader` now re-exports `ScenarioSet` only (backward-compatible import path)
+
+### Removed
+
+- `load_scenarios()` and `write_scenario()` functions (use `ScenarioSet.from_json()` / `to_json()`)
+
 ## [0.5.0] - 2026-03-15
 
 ### Added
