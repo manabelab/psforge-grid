@@ -1034,5 +1034,107 @@ def _apply_where_filter(
     return filtered
 
 
+# =========================================================================
+# Scenario subcommand
+# =========================================================================
+
+scenario_app = typer.Typer(
+    name="scenario",
+    help="Inspect scenario definition files.",
+    add_completion=False,
+)
+app.add_typer(scenario_app, name="scenario")
+
+
+class ScenarioFormat(str, Enum):
+    """Output formats for scenario commands."""
+
+    table = "table"
+    json = "json"
+    summary = "summary"
+
+
+@scenario_app.command("list")
+def scenario_list(
+    filepath: Annotated[
+        str,
+        typer.Argument(help="Path to a scenario .psfg.json file"),
+    ],
+    format: Annotated[
+        ScenarioFormat,
+        typer.Option("-f", "--format", help="Output format"),
+    ] = ScenarioFormat.table,
+) -> None:
+    """List scenarios defined in a scenario file."""
+    import json as json_mod
+
+    from psforge_grid.models.scenario import ScenarioSet
+
+    path = Path(filepath)
+    if not path.exists():
+        error_console.print(f"[red]File not found: {filepath}[/red]")
+        raise typer.Exit(code=1)
+
+    try:
+        scenario_set = ScenarioSet.from_json(path)
+    except (ValueError, FileNotFoundError) as e:
+        error_console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(code=1) from None
+
+    if format == ScenarioFormat.json:
+        data = {
+            "file": str(path),
+            "base_case": scenario_set.base_case_path,
+            "base_summary": {
+                "buses": len(scenario_set.base.buses),
+                "branches": len(scenario_set.base.branches),
+                "generators": len(scenario_set.base.generators),
+                "loads": len(scenario_set.base.loads),
+            },
+            "num_scenarios": scenario_set.num_scenarios,
+            "scenarios": [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "num_modifications": len(s.modifications),
+                }
+                for s in scenario_set.scenarios
+            ],
+        }
+        print(json_mod.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    if format == ScenarioFormat.summary:
+        console.print(scenario_set.to_description())
+        return
+
+    # Table format (default)
+    from rich.table import Table
+
+    console.print(f"Scenario File: [bold]{path.name}[/bold]")
+    base_info = (
+        f"{scenario_set.base_case_path} "
+        f"({len(scenario_set.base.buses)} buses, "
+        f"{len(scenario_set.base.branches)} branches)"
+    )
+    console.print(f"Base Case: {base_info}")
+    console.print()
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Name")
+    table.add_column("Description")
+    table.add_column("Modifications", justify="right")
+
+    for s in scenario_set.scenarios:
+        table.add_row(
+            s.name,
+            s.description or "",
+            str(len(s.modifications)),
+        )
+
+    console.print(table)
+    console.print(f"\n{scenario_set.num_scenarios} scenarios defined")
+
+
 if __name__ == "__main__":
     app()

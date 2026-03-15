@@ -43,7 +43,7 @@ from psforge_grid.io.pop_writer import PopWriter, write_pop
 from psforge_grid.io.protocols import IParser, IWriter
 from psforge_grid.io.raw_parser import RawParser, parse_raw
 from psforge_grid.io.raw_writer import RawWriter, write_raw
-from psforge_grid.io.scenario_loader import load_scenarios, write_scenario
+from psforge_grid.io.scenario_loader import ScenarioSet
 
 __all__ = [
     # Parse functions
@@ -60,9 +60,8 @@ __all__ = [
     "write_dyna",
     "write_dss",
     "write_json",
-    # Scenario functions
-    "load_scenarios",
-    "write_scenario",
+    # Scenario
+    "ScenarioSet",
     # Interfaces
     "IParser",
     "IWriter",
