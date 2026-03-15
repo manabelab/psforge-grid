@@ -26,11 +26,15 @@ Example:
 
 from __future__ import annotations
 
+import copy
 import operator
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
+
+if TYPE_CHECKING:
+    from psforge_grid.models import Branch, Bus, Load
 
 import typer
 from rich.console import Console
@@ -230,10 +234,10 @@ def show(
             help="Element type to display: buses, branches, generators, loads, or all.",
         ),
     ],
-    element_id: Annotated[  # noqa: ARG001 - placeholder for future filtering
+    element_id: Annotated[
         int | None,
         typer.Argument(
-            help="Specific element ID to display. If not specified, shows all.",
+            help="Specific element ID to filter by. For buses/generators/loads: bus_id. For branches: list index.",
         ),
     ] = None,
     where: Annotated[
@@ -302,6 +306,10 @@ def show(
             console.print(f"[dim]Loading: {input_file}[/dim]")
 
         system = System.from_file(input_file)
+
+        # Apply element_id filter first (before --where)
+        if element_id is not None:
+            system = _apply_element_id_filter(system, element, element_id)
 
         # Apply --where filter if specified
         if where:
@@ -684,9 +692,9 @@ def diff(
 
 
 def _diff_buses(
-    buses_a: list,
-    buses_b: list,
-) -> list[dict]:
+    buses_a: list[Bus],
+    buses_b: list[Bus],
+) -> list[dict[str, Any]]:
     """Compute per-bus differences between two systems.
 
     Args:
@@ -696,7 +704,7 @@ def _diff_buses(
     Returns:
         List of change dicts with keys: type, id, action, and optionally fields.
     """
-    changes: list[dict] = []
+    changes: list[dict[str, Any]] = []
     map_a = {b.bus_id: b for b in buses_a}
     map_b = {b.bus_id: b for b in buses_b}
 
@@ -707,7 +715,7 @@ def _diff_buses(
             changes.append({"type": "bus", "id": bus_id, "action": "removed"})
         else:
             ba, bb = map_a[bus_id], map_b[bus_id]
-            field_changes: dict = {}
+            field_changes: dict[str, Any] = {}
             if ba.bus_type != bb.bus_type:
                 field_changes["bus_type"] = {"base": ba.bus_type, "modified": bb.bus_type}
             if abs(ba.v_magnitude - bb.v_magnitude) > 1e-6:
@@ -724,9 +732,9 @@ def _diff_buses(
 
 
 def _diff_branches(
-    branches_a: list,
-    branches_b: list,
-) -> list[dict]:
+    branches_a: list[Branch],
+    branches_b: list[Branch],
+) -> list[dict[str, Any]]:
     """Compute per-branch differences between two systems.
 
     Args:
@@ -736,7 +744,7 @@ def _diff_branches(
     Returns:
         List of change dicts with keys: type, id, action, and optionally fields.
     """
-    changes: list[dict] = []
+    changes: list[dict[str, Any]] = []
     map_a = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_a}
     map_b = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_b}
 
@@ -748,7 +756,7 @@ def _diff_branches(
             changes.append({"type": "branch", "id": label, "action": "removed"})
         else:
             br_a, br_b = map_a[br_key], map_b[br_key]
-            field_changes: dict = {}
+            field_changes: dict[str, Any] = {}
             if br_a.status != br_b.status:
                 field_changes["status"] = {"base": br_a.status, "modified": br_b.status}
             if abs(br_a.r_pu - br_b.r_pu) > 1e-6:
@@ -775,9 +783,9 @@ def _diff_branches(
 
 
 def _diff_loads(
-    loads_a: list,
-    loads_b: list,
-) -> list[dict]:
+    loads_a: list[Load],
+    loads_b: list[Load],
+) -> list[dict[str, Any]]:
     """Compute per-load differences between two systems.
 
     Args:
@@ -787,7 +795,7 @@ def _diff_loads(
     Returns:
         List of change dicts with keys: type, id, action, and optionally fields.
     """
-    changes: list[dict] = []
+    changes: list[dict[str, Any]] = []
     map_a = {(ld.bus_id, ld.load_id): ld for ld in loads_a}
     map_b = {(ld.bus_id, ld.load_id): ld for ld in loads_b}
 
@@ -799,7 +807,7 @@ def _diff_loads(
             changes.append({"type": "load", "id": label, "action": "removed"})
         else:
             ld_a, ld_b = map_a[ld_key], map_b[ld_key]
-            field_changes: dict = {}
+            field_changes: dict[str, Any] = {}
             if abs(ld_a.p_load - ld_b.p_load) > 1e-6:
                 field_changes["p_load"] = {
                     "base": round(ld_a.p_load, 4),
@@ -823,13 +831,13 @@ def _compute_diff(
     sys_b: System,
     name_a: str,
     name_b: str,
-) -> dict:
+) -> dict[str, Any]:
     """Compute differences between two systems.
 
     Orchestrates element-level diff helpers and aggregates results into
     a single diff dict with summary counts and per-element changes.
     """
-    diff: dict = {
+    diff: dict[str, Any] = {
         "files": {"base": name_a, "modified": name_b},
         "summary": {},
         "changes": [],
@@ -878,7 +886,7 @@ def _compute_diff(
     return diff
 
 
-def _print_diff_text(differences: dict) -> None:
+def _print_diff_text(differences: dict[str, Any]) -> None:
     """Print diff results in human-readable text format."""
     files = differences["files"]
     console.print(f"Comparing: {files['base']} vs {files['modified']}")
@@ -962,6 +970,41 @@ def _matches_where(element: object, field: str, op_str: str, value_str: str) -> 
         return bool(_OPERATORS[op_str](str(attr), value_str))
 
 
+def _apply_element_id_filter(
+    system: System,
+    element: ElementType,
+    element_id: int,
+) -> System:
+    """Filter a system by element ID, returning a filtered copy.
+
+    For buses, generators, and loads: filters by bus_id.
+    For branches: filters by list index (0-based position).
+
+    Args:
+        system: The power system to filter.
+        element: Which element type to filter.
+        element_id: The ID value to filter by.
+
+    Returns:
+        A deep copy of the system with only matching elements.
+    """
+    filtered = copy.deepcopy(system)
+
+    if element == ElementType.buses or element == ElementType.all:
+        filtered.buses = [b for b in system.buses if b.bus_id == element_id]
+    if element == ElementType.branches or element == ElementType.all:
+        if 0 <= element_id < len(system.branches):
+            filtered.branches = [system.branches[element_id]]
+        else:
+            filtered.branches = []
+    if element == ElementType.generators or element == ElementType.all:
+        filtered.generators = [g for g in system.generators if g.bus_id == element_id]
+    if element == ElementType.loads or element == ElementType.all:
+        filtered.loads = [ld for ld in system.loads if ld.bus_id == element_id]
+
+    return filtered
+
+
 def _apply_where_filter(
     system: System,
     element: ElementType,
@@ -971,11 +1014,9 @@ def _apply_where_filter(
 
     Only filters the specified element type. Other components are kept as-is.
     """
-    import copy
-
     field, op_str, value_str = _parse_where(where)
 
-    filtered = copy.copy(system)
+    filtered = copy.deepcopy(system)
 
     if element == ElementType.buses or element == ElementType.all:
         filtered.buses = [b for b in system.buses if _matches_where(b, field, op_str, value_str)]
