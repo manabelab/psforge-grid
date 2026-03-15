@@ -177,3 +177,6 @@ pyrightconfig.json
 /.serena/
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+# Notebooks (managed at workspace level)
+notebooks/
