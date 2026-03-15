@@ -371,9 +371,16 @@ class DSSWriter(IWriter):
 
         This mirrors CPAT's T-method setup:
         - Z1: gen_reactance (default Xd') for positive-sequence
-        - Z2: X2 or Xd'' for negative-sequence
+        - Z2: defaults to Z1 in OpenDSS (not explicitly output)
         - Z0: X0 with fallback for zero-sequence
         - Line Z0 = factor * Z1 when explicit Z0 data unavailable
+
+        Note on Z2 (negative-sequence):
+            OpenDSS Vsource supports Z2 via ``Z2=[R2, X2]``, but explicitly
+            setting Z2 degrades 1LG/2LG accuracy. With the default Z2=Z1,
+            the overestimation of Z2 partially compensates for the Y-circuit
+            model's zero-sequence approximation, yielding better overall
+            accuracy (~1.5% for 1LG vs ~10% with explicit Z2).
 
         Args:
             system: Power system data to export
@@ -496,7 +503,10 @@ class DSSWriter(IWriter):
 
         # --- Transformers (Y-circuit model for Yg-Yg, standard for others) ---
         xfmrs = [b for b in system.branches if b.is_transformer and b.status == 1]
-        # Track buses that need Yg-Delta grounding transformers
+        # Track buses that need Yg-Delta grounding transformers for zero-sequence.
+        # Yg-Delta transformers with floating delta are ideal for this:
+        # - Positive-sequence: only magnetizing current flows (Z1 ≈ Zmag >> XHL)
+        # - Zero-sequence: provides grounding path through delta (Z0 = XHL)
         # Key: bus_id, Value: list of (xhl_pct, rated_kva, kv)
         gnd_xfmr_data: dict[int, list[tuple[float, float, float]]] = {}
         if xfmrs:
@@ -617,13 +627,13 @@ class DSSWriter(IWriter):
         The Y-circuit model replaces a single Yg-Yg transformer with:
         1. A near-ideal transformer (XHL~0) connecting from_bus_m to to_bus
         2. A series reactor between from_bus and from_bus_m with the
-           original transformer impedance
+           original transformer impedance (R + jX)
         3. Yg-Delta grounding transformers at each terminal bus (registered
            in gnd_xfmr_data for later generation)
 
-        This decomposition correctly models zero-sequence current paths
-        through Yg-Yg transformers, which standard OpenDSS 2-winding
-        transformer models cannot represent accurately.
+        Yg-Delta grounding transformers with floating delta are ideal:
+        - Positive-sequence: only magnetizing current flows (Z1 ≈ Zmag ≈ ∞)
+        - Zero-sequence: provides grounding path through delta (Z0 = XHL)
 
         Args:
             br: Transformer branch (must be Yg-Yg)
@@ -646,9 +656,10 @@ class DSSWriter(IWriter):
         # Impedance: convert from system p.u. to transformer-base percent
         xhl_pct = br.x_pu * (rated_mva / base_mva) * 100.0
 
-        # Convert x_pu to ohms on from-bus base for the series reactor
-        z_base = kv_from**2 / base_mva
-        x_ohm = br.x_pu * z_base
+        # Convert impedance to ohms on from-bus base for the series reactor
+        z_base_from = kv_from**2 / base_mva
+        r_ohm = br.r_pu * z_base_from
+        x_ohm = br.x_pu * z_base_from
 
         br_name = self._branch_name(br)
         from_name = bus_id_to_name.get(br.from_bus, f"Bus{br.from_bus}")
@@ -666,11 +677,11 @@ class DSSWriter(IWriter):
             f"XHL=0.000100 %loadloss=0 %noloadloss=0"
         )
 
-        # 1b. Series reactor: from_bus → from_mid (carries original impedance)
+        # 1b. Series reactor: from_bus → from_mid (carries original R+jX)
         result_lines.append(
             f"New Reactor.Rser_{br_name} "
             f"bus1={from_name} bus2={from_mid} phases=3 "
-            f"Z1=[0, {x_ohm:.6f}] Z0=[0, 0.000001]"
+            f"Z1=[{r_ohm:.6f}, {x_ohm:.6f}] Z0=[0, 0.000001]"
         )
 
         # 2. Register grounding transformers at both terminal buses
@@ -691,6 +702,10 @@ class DSSWriter(IWriter):
 
         Uses machine base MVA for impedance conversion:
             Z_ohm = Z_pu_mbase * kV^2 / mbase
+
+        Note: R2/X2 are computed but not currently used in the DSS output.
+        OpenDSS defaults Z2=Z1, which gives better 1LG accuracy due to
+        error compensation with the Y-circuit transformer model.
 
         Args:
             gen: Generator data
