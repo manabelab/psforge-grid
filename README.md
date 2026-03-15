@@ -273,6 +273,21 @@ system.to_dss("ieee14.dss")  # Export to OpenDSS format
 | Shunt (b > 0) | `New Capacitor` | pu → kvar |
 | Shunt (b < 0) | `New Reactor` | pu → kvar |
 
+#### Fault Study Mode
+
+`DSSWriter.write_fault_study()` exports fault-study-ready OpenDSS scripts with zero-sequence modeling:
+
+```python
+from psforge_grid.io import DSSWriter
+
+writer = DSSWriter()
+writer.write_fault_study(system, "fault_study.dss")
+```
+
+- **Y-circuit transformer model**: Yg-Yg transformers are decomposed into near-ideal transformer + series reactor + Yg-Delta grounding transformers, correctly modeling zero-sequence current paths
+- **Generator Vsource**: Z1 from generator reactance (Xd', Xd'', etc.), Z0 from zero-sequence data
+- **Line Z0 estimation**: Configurable factor (default 1.5×Z1) when explicit zero-sequence data is unavailable
+
 ### DSSParser (Import)
 
 Parses `.dss` files by compiling them with OpenDSS and extracting data via API. Handles internal bus filtering and swing bus generator recovery.
@@ -335,7 +350,7 @@ pip install -e .
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
 
 ### Install Development Dependencies

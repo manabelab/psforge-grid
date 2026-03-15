@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `None` (default) when the source format does not distinguish transformers
   - `is_transformer` property checks `is_xfmr` first, then falls back to tap_ratio/shift_angle heuristics
   - Fixes IEEE 9-bus DSSWriter misclassification (step-up transformers with tap_ratio=1.0 were exported as Lines)
-- OpenDSS verification notebook (`opendss_verification.ipynb`): Added IEEE 9-bus test case and `_normalize_bus_name()` for cross-tool bus name matching
 - `IWriter` abstract interface (`io/protocols.py`) — symmetric counterpart of `IParser`
 - `WriterFactory` (`io/factories.py`) with `create()`, `from_extension()`, `from_path()`, `available_formats()`, `supported_extensions()`
 - `RawWriter` — exports System to PSS/E RAW v33 format
@@ -23,17 +22,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DynaWriter` — exports System to CPAT dyna card format (80-char fixed-column)
 - `DSSWriter` — exports System to OpenDSS .dss script format (per-unit → physical unit conversion)
 - `DSSParser` — imports OpenDSS .dss files via `opendssdirect.py` API (compile-then-extract approach)
+- `DSSWriter.write_fault_study()` — fault study mode with Y-circuit transformer model
+  - Converts Yg-Yg transformers to Y-circuit equivalent (near-ideal transformer + series reactor + Yg-Delta grounding)
+  - Outputs generator Vsource with Z1 (gen reactance) and Z0 (zero-sequence impedance)
+  - Outputs line Z0 with configurable estimation factor when explicit zero-sequence data is unavailable
+  - Z2 defaults to Z1 in OpenDSS (not explicitly output) for better 1LG/2LG accuracy
 - `System.to_raw()`, `to_matpower()`, `to_pop()`, `to_dyna()`, `to_dss()` facade methods
 - `System.from_dss()` facade method for OpenDSS import
 - `System.to_file()` — auto-detect format by file extension
 - `write_raw()`, `write_matpower()`, `write_pop()`, `write_dyna()`, `write_dss()` convenience functions
 - Cross-format model fields: `Branch.winding_connection`, `nomv_from`, `nomv_to`, `sbase_mva`, `mag_g`, `mag_b`; `Generator.kv`, `connection`, `model_type`, `rneut`, `xneut`; `Load.kv`, `connection`, `model_type`; `Shunt.kv`, `connection`, `num_steps`; `System.frequency_hz`
+- `Branch.reg_control_mode`, `reg_target_voltage_pu`, `tap_max`, `tap_min` — voltage regulation fields from CPAT .pop
 - `opendssdirect.py` as core dependency for OpenDSS interoperability
 - 28 DSS writer/parser tests (factory, output, compilation, round-trip with bus/gen count verification)
 - 25 writer tests including round-trip verification for all 4 formats
 
 ### Fixed
 
+- PopParser: Handle parallel circuit count (NL) correctly for multi-circuit branches
+- PopParser: Read correct generator X0/X2 fields and transformer Z0 from .pop XML
+- PopParser: Detect CPAT placeholder X0_Saturation (== Xd_Saturation) and treat as undefined to avoid using Xd as X0
+- PopParser: Add X2_Saturation fallback when X2 field is empty
+- PopParser: Fix Y1C convention — convert from CPAT half-charging (Y/2) to PSS/E total B convention (b_pu = Y1C * 2.0)
+- PopWriter: Reverse Y1C conversion (Y1C = b_pu / 2.0)
+- DSSWriter: Include R component in Y-circuit series reactor (previously X-only)
 - DSSParser: Internal buses created by OpenDSS transformer modeling are now filtered out
 - DSSParser: Swing bus generator (Circuit Vsource) is now recovered as a Generator with bus_type=3
 - DSSParser: Bus types (swing/PV/PQ) are correctly assigned based on connected elements
