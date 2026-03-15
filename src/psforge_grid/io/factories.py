@@ -1,17 +1,19 @@
-"""Factory for creating power system file parsers.
+"""Factory for creating power system file parsers and writers.
 
-This module provides a factory pattern implementation for
-instantiating the appropriate parser based on file format.
+This module provides factory pattern implementations for
+instantiating the appropriate parser or writer based on file format.
 
 The factory pattern enables:
-    - Runtime format selection (PSS/E, MATPOWER, etc.)
+    - Runtime format selection (PSS/E, MATPOWER, CPAT, etc.)
     - Automatic format detection from file extension
     - Future extensibility for new formats
 
 Example:
-    >>> from psforge_grid.io.factories import ParserFactory
+    >>> from psforge_grid.io.factories import ParserFactory, WriterFactory
     >>> parser = ParserFactory.create("raw")  # PSS/E format
     >>> system = parser.parse("ieee14.raw")
+    >>> writer = WriterFactory.create("matpower")
+    >>> writer.write(system, "output.m")
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from psforge_grid.io.protocols import IParser
+    from psforge_grid.io.protocols import IParser, IWriter
 
 
 class ParserFactory:
@@ -51,7 +53,8 @@ class ParserFactory:
         "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",
         "pop": "psforge_grid.io.pop_parser.PopParser",
         "dyna": "psforge_grid.io.dyna_parser.DynaParser",
-        # "cim": "psforge_grid.io.cim_parser.CimParser",  # planned
+        "dss": "psforge_grid.io.dss_parser.DSSParser",
+        "json": "psforge_grid.io.json_parser.JsonParser",
     }
 
     # Extension to format mapping
@@ -61,7 +64,9 @@ class ParserFactory:
         "m": "matpower",
         "pop": "pop",
         "dyna": "dyna",
-        # "xml": "cim",  # planned
+        "dss": "dss",
+        "DSS": "dss",
+        "psfg.json": "json",
     }
 
     @staticmethod
@@ -102,11 +107,14 @@ class ParserFactory:
             from psforge_grid.io.dyna_parser import DynaParser
 
             return DynaParser()
-        elif format_type == "cim":
-            raise NotImplementedError(
-                "CIM parser is planned for future release. "
-                "Currently 'raw' and 'matpower' formats are available."
-            )
+        elif format_type == "dss":
+            from psforge_grid.io.dss_parser import DSSParser
+
+            return DSSParser()
+        elif format_type == "json":
+            from psforge_grid.io.json_parser import JsonParser
+
+            return JsonParser()
         else:
             available = ParserFactory.available_formats()
             raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
@@ -147,7 +155,8 @@ class ParserFactory:
         """Create a parser based on file path.
 
         Extracts the extension from the file path and creates
-        the appropriate parser.
+        the appropriate parser. Supports compound extensions
+        like ``.psfg.json``.
 
         Args:
             filepath: Path to the data file
@@ -160,8 +169,13 @@ class ParserFactory:
 
         Example:
             >>> parser = ParserFactory.from_path("path/to/ieee14.raw")
+            >>> parser = ParserFactory.from_path("data.psfg.json")
         """
         path = Path(filepath)
+        # Check compound extension first (e.g., .psfg.json)
+        compound_ext = "".join(path.suffixes).lstrip(".")
+        if compound_ext in ParserFactory._EXTENSION_MAP:
+            return ParserFactory.from_extension(compound_ext)
         extension = path.suffix
         if not extension:
             raise ValueError(f"Cannot determine format: file has no extension: {path}")
@@ -178,7 +192,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        return ["raw", "matpower", "pop", "dyna"]
+        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
@@ -189,6 +203,161 @@ class ParserFactory:
 
         Example:
             >>> extensions = ParserFactory.supported_extensions()
-            >>> print(extensions)  # ['raw', 'RAW']
+            >>> print(extensions)  # ['raw', 'RAW', 'psfg.json']
         """
         return list(ParserFactory._EXTENSION_MAP.keys())
+
+
+class WriterFactory:
+    """Factory for creating power system file writers.
+
+    Supports format selection between PSS/E RAW, MATPOWER, CPAT Pop,
+    and CPAT Dyna formats. Symmetric counterpart of ParserFactory.
+
+    Available Formats:
+        - "raw": PSS/E RAW format (v33)
+        - "matpower": MATPOWER format (.m files)
+        - "pop": CPAT Pop format (.pop, ZIP+XML)
+        - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+
+    Example:
+        >>> writer = WriterFactory.create("raw")
+        >>> writer.write(system, "output.raw")
+        >>>
+        >>> # Auto-detect from extension
+        >>> writer = WriterFactory.from_extension(".m")
+        >>> writer.write(system, "output.m")
+    """
+
+    # Extension to format mapping (same as ParserFactory)
+    _EXTENSION_MAP = {
+        "raw": "raw",
+        "RAW": "raw",
+        "m": "matpower",
+        "pop": "pop",
+        "dyna": "dyna",
+        "dss": "dss",
+        "DSS": "dss",
+        "psfg.json": "json",
+    }
+
+    @staticmethod
+    def create(format_type: str = "raw") -> IWriter:
+        """Create a writer instance.
+
+        Args:
+            format_type: Writer format type. Available options:
+                - "raw": PSS/E RAW format (v33, default)
+                - "matpower": MATPOWER format (.m files)
+                - "pop": CPAT Pop format (.pop, ZIP+XML)
+                - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+
+        Returns:
+            IWriter implementation ready for use
+
+        Raises:
+            ValueError: If unknown format specified
+
+        Example:
+            >>> writer = WriterFactory.create("raw")
+            >>> writer.write(system, "output.raw")
+        """
+        if format_type == "raw":
+            from psforge_grid.io.raw_writer import RawWriter
+
+            return RawWriter()
+        elif format_type == "matpower":
+            from psforge_grid.io.matpower_writer import MatpowerWriter
+
+            return MatpowerWriter()
+        elif format_type == "pop":
+            from psforge_grid.io.pop_writer import PopWriter
+
+            return PopWriter()
+        elif format_type == "dyna":
+            from psforge_grid.io.dyna_writer import DynaWriter
+
+            return DynaWriter()
+        elif format_type == "dss":
+            from psforge_grid.io.dss_writer import DSSWriter
+
+            return DSSWriter()
+        elif format_type == "json":
+            from psforge_grid.io.json_writer import JsonWriter
+
+            return JsonWriter()
+        else:
+            available = WriterFactory.available_formats()
+            raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
+
+    @staticmethod
+    def from_extension(extension: str) -> IWriter:
+        """Create a writer based on file extension.
+
+        Args:
+            extension: File extension (with or without leading dot)
+
+        Returns:
+            IWriter implementation for the detected format
+
+        Raises:
+            ValueError: If extension is not recognized
+
+        Example:
+            >>> writer = WriterFactory.from_extension(".raw")
+        """
+        ext = extension.lstrip(".")
+
+        if ext in WriterFactory._EXTENSION_MAP:
+            format_type = WriterFactory._EXTENSION_MAP[ext]
+            return WriterFactory.create(format_type)
+        else:
+            supported = list(WriterFactory._EXTENSION_MAP.keys())
+            raise ValueError(f"Unknown extension: '{extension}'. Supported extensions: {supported}")
+
+    @staticmethod
+    def from_path(filepath: str | Path) -> IWriter:
+        """Create a writer based on file path.
+
+        Supports compound extensions like ``.psfg.json``.
+
+        Args:
+            filepath: Path to the output file
+
+        Returns:
+            IWriter implementation for the detected format
+
+        Raises:
+            ValueError: If file extension is not recognized
+
+        Example:
+            >>> writer = WriterFactory.from_path("output.raw")
+            >>> writer = WriterFactory.from_path("output.psfg.json")
+        """
+        path = Path(filepath)
+        # Check compound extension first (e.g., .psfg.json)
+        compound_ext = "".join(path.suffixes).lstrip(".")
+        if compound_ext in WriterFactory._EXTENSION_MAP:
+            return WriterFactory.from_extension(compound_ext)
+        extension = path.suffix
+        if not extension:
+            raise ValueError(f"Cannot determine format: file has no extension: {path}")
+        return WriterFactory.from_extension(extension)
+
+    @staticmethod
+    def available_formats() -> list[str]:
+        """Get list of available writer formats.
+
+        Returns:
+            List of format names that can be passed to create()
+        """
+        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
+
+    @staticmethod
+    def supported_extensions() -> list[str]:
+        """Get list of all supported file extensions for writing.
+
+        Returns:
+            List of file extensions (without dot) that are recognized
+        """
+        return list(WriterFactory._EXTENSION_MAP.keys())

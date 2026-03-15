@@ -687,6 +687,20 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
             k_bus = int(fields1[2])  # 0 for 2-winding, non-zero for 3-winding
             circuit_id = fields1[3] if len(fields1) > 3 else "1"
 
+            # MAG1 (magnetizing G) at position 7, MAG2 (magnetizing B) at position 8
+            mag_g = None
+            mag_b = None
+            if len(fields1) > 7:
+                with contextlib.suppress(ValueError):
+                    val = float(fields1[7])
+                    if val != 0.0:
+                        mag_g = val
+            if len(fields1) > 8:
+                with contextlib.suppress(ValueError):
+                    val = float(fields1[8])
+                    if val != 0.0:
+                        mag_b = val
+
             # STAT is typically at position 11 in v34
             status = 1
             if len(fields1) > 11:
@@ -714,6 +728,14 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
             r_pu = float(fields2[0]) if len(fields2) > 0 else 0.0
             x_pu = float(fields2[1]) if len(fields2) > 1 else 0.0
 
+            # SBASE1-2 (transformer rated MVA) at position 2
+            sbase_mva = None
+            if len(fields2) > 2:
+                with contextlib.suppress(ValueError):
+                    val = float(fields2[2])
+                    if val > 0:
+                        sbase_mva = val
+
             # Line 3: Winding 1 data (WINDV1, NOMV1, ANG1, RATE1-1, ...)
             i += 1
             line3 = lines[i].strip()
@@ -725,6 +747,12 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
 
             fields3 = [f.strip() for f in line3.split(",")]
             windv1 = float(fields3[0]) if len(fields3) > 0 else 1.0
+            nomv1 = None
+            if len(fields3) > 1:
+                with contextlib.suppress(ValueError):
+                    val = float(fields3[1])
+                    if val > 0:
+                        nomv1 = val
             ang1_deg = float(fields3[2]) if len(fields3) > 2 else 0.0
             ang1_rad = ang1_deg * math.pi / 180.0
 
@@ -746,9 +774,21 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
 
             fields4 = [f.strip() for f in line4.split(",")]
             windv2 = float(fields4[0]) if len(fields4) > 0 else 1.0
+            nomv2 = None
+            if len(fields4) > 1:
+                with contextlib.suppress(ValueError):
+                    val = float(fields4[1])
+                    if val > 0:
+                        nomv2 = val
 
             # Calculate effective tap ratio
             tap_ratio = windv1 / windv2 if windv2 != 0 else windv1
+
+            # Infer winding connection from shift angle
+            winding_connection = None
+            if abs(ang1_rad) > 0.1:  # ~5.7 degrees threshold
+                winding_connection = "delta-wye" if ang1_rad > 0 else "wye-delta"
+            # Note: wye-wye vs delta-delta cannot be distinguished from angle alone
 
             # Skip winding 3 line for 3-winding transformers
             if is_three_winding:
@@ -768,6 +808,13 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
                 rate_a=rate_a,
                 status=status,
                 circuit_id=circuit_id,
+                winding_connection=winding_connection,
+                nomv_from=nomv1,
+                nomv_to=nomv2,
+                sbase_mva=sbase_mva,
+                mag_g=mag_g,
+                mag_b=mag_b,
+                is_xfmr=True,
             )
             branches.append(branch)
 

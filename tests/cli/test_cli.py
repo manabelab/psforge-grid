@@ -27,6 +27,9 @@ def strip_ansi(text: str) -> str:
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 IEEE14_RAW = FIXTURES_DIR / "ieee14.raw"
 IEEE9_RAW = FIXTURES_DIR / "ieee9.raw"
+IEEE14_MATPOWER = FIXTURES_DIR / "pglib_opf_case14_ieee.m"
+IEEE14_JSON = FIXTURES_DIR / "ieee14.psfg.json"
+WEST10_POP = FIXTURES_DIR / "WEST10peak.pop"
 
 
 class TestInfoCommand:
@@ -267,3 +270,259 @@ class TestLLMAffinityOutput:
 
         # Should include status annotations like (NORMAL)
         assert "NORMAL" in result.stdout or "LOW" in result.stdout or "HIGH" in result.stdout
+
+
+class TestMultiFormatInput:
+    """Tests for multi-format input support (auto-detection)."""
+
+    def test_info_matpower(self) -> None:
+        """Test info command with MATPOWER file."""
+        result = runner.invoke(app, ["info", str(IEEE14_MATPOWER)])
+        assert result.exit_code == 0
+
+    def test_info_matpower_json(self) -> None:
+        """Test info command with MATPOWER file and JSON output."""
+        result = runner.invoke(app, ["info", str(IEEE14_MATPOWER), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["counts"]["buses"] == 14
+
+    def test_info_json_format(self) -> None:
+        """Test info command with psforge JSON file."""
+        result = runner.invoke(app, ["info", str(IEEE14_JSON)])
+        assert result.exit_code == 0
+
+    def test_info_pop_format(self) -> None:
+        """Test info command with CPAT .pop file."""
+        result = runner.invoke(app, ["info", str(WEST10_POP), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["counts"]["buses"] == 27
+
+    def test_show_matpower_buses(self) -> None:
+        """Test show buses with MATPOWER file."""
+        result = runner.invoke(app, ["show", str(IEEE14_MATPOWER), "buses", "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["buses"]) == 14
+
+    def test_validate_matpower(self) -> None:
+        """Test validate with MATPOWER file."""
+        result = runner.invoke(app, ["validate", str(IEEE14_MATPOWER)])
+        assert result.exit_code in (0, 1)
+
+    def test_validate_json(self) -> None:
+        """Test validate with psforge JSON file."""
+        result = runner.invoke(app, ["validate", str(IEEE14_JSON)])
+        assert result.exit_code in (0, 1)
+
+
+class TestConvertCommand:
+    """Tests for the 'convert' command."""
+
+    def test_convert_raw_to_json(self, tmp_path: Path) -> None:
+        """Test converting RAW to psforge JSON."""
+        output = tmp_path / "ieee14.psfg.json"
+        result = runner.invoke(app, ["convert", str(IEEE14_RAW), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+        assert "14 buses" in result.stdout
+
+    def test_convert_raw_to_matpower(self, tmp_path: Path) -> None:
+        """Test converting RAW to MATPOWER."""
+        output = tmp_path / "ieee14.m"
+        result = runner.invoke(app, ["convert", str(IEEE14_RAW), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+
+    def test_convert_matpower_to_json(self, tmp_path: Path) -> None:
+        """Test converting MATPOWER to psforge JSON."""
+        output = tmp_path / "case14.psfg.json"
+        result = runner.invoke(app, ["convert", str(IEEE14_MATPOWER), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+
+    def test_convert_json_to_raw(self, tmp_path: Path) -> None:
+        """Test converting psforge JSON to RAW."""
+        output = tmp_path / "ieee14.raw"
+        result = runner.invoke(app, ["convert", str(IEEE14_JSON), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+
+    def test_convert_pop_to_json(self, tmp_path: Path) -> None:
+        """Test converting CPAT .pop to psforge JSON."""
+        output = tmp_path / "west10.psfg.json"
+        result = runner.invoke(app, ["convert", str(WEST10_POP), str(output)])
+        assert result.exit_code == 0
+        assert output.exists()
+
+    def test_convert_verbose(self, tmp_path: Path) -> None:
+        """Test convert command with verbose flag."""
+        output = tmp_path / "ieee14.psfg.json"
+        result = runner.invoke(app, ["convert", str(IEEE14_RAW), str(output), "-v"])
+        assert result.exit_code == 0
+        assert "Loading:" in result.stdout
+        assert "Written:" in result.stdout
+
+    def test_convert_nonexistent_input(self, tmp_path: Path) -> None:
+        """Test convert with non-existent input file."""
+        output = tmp_path / "out.psfg.json"
+        result = runner.invoke(app, ["convert", "nonexistent.raw", str(output)])
+        assert result.exit_code != 0
+
+    def test_convert_unknown_output_extension(self, tmp_path: Path) -> None:
+        """Test convert with unsupported output extension."""
+        output = tmp_path / "output.xyz"
+        result = runner.invoke(app, ["convert", str(IEEE14_RAW), str(output)])
+        assert result.exit_code != 0
+
+
+class TestDescribeCommand:
+    """Tests for the 'describe' command."""
+
+    def test_describe_normal(self) -> None:
+        """Test describe with default (normal) detail level."""
+        result = runner.invoke(app, ["describe", str(IEEE14_RAW)])
+        assert result.exit_code == 0
+        assert "Power System" in result.stdout
+        assert "Buses" in result.stdout or "buses" in result.stdout.lower()
+
+    def test_describe_brief(self) -> None:
+        """Test describe with brief detail level."""
+        result = runner.invoke(app, ["describe", str(IEEE14_RAW), "--detail", "brief"])
+        assert result.exit_code == 0
+        assert "Power System" in result.stdout
+        # Brief should be shorter than normal
+        brief_len = len(result.stdout)
+        normal = runner.invoke(app, ["describe", str(IEEE14_RAW)])
+        assert brief_len <= len(normal.stdout)
+
+    def test_describe_full(self) -> None:
+        """Test describe with full detail level."""
+        result = runner.invoke(app, ["describe", str(IEEE14_RAW), "--detail", "full"])
+        assert result.exit_code == 0
+        assert "Voltage Range" in result.stdout
+        assert "Branch Breakdown" in result.stdout
+
+    def test_describe_matpower(self) -> None:
+        """Test describe with MATPOWER file."""
+        result = runner.invoke(app, ["describe", str(IEEE14_MATPOWER)])
+        assert result.exit_code == 0
+
+    def test_describe_json(self) -> None:
+        """Test describe with psforge JSON file."""
+        result = runner.invoke(app, ["describe", str(IEEE14_JSON)])
+        assert result.exit_code == 0
+
+    def test_describe_text_format(self) -> None:
+        """Test describe with text format."""
+        result = runner.invoke(app, ["describe", str(IEEE14_RAW), "-f", "text"])
+        assert result.exit_code == 0
+        assert "Power System" in result.stdout
+
+
+class TestShowWhereFilter:
+    """Tests for the show --where filter."""
+
+    def test_filter_buses_by_type(self) -> None:
+        """Filter buses by bus_type==3 (slack)."""
+        result = runner.invoke(
+            app, ["show", str(IEEE14_RAW), "buses", "-f", "json", "--where", "bus_type==3"]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["buses"]) == 1
+        # JSON formatter uses "type" key (integer value)
+        assert data["buses"][0]["type"] == 3
+
+    def test_filter_buses_low_voltage(self) -> None:
+        """Filter buses with v_magnitude < 1.0."""
+        result = runner.invoke(
+            app, ["show", str(IEEE14_RAW), "buses", "-f", "json", "--where", "v_magnitude<1.0"]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        for bus in data["buses"]:
+            assert bus["voltage_pu"] < 1.0
+
+    def test_filter_branches_high_reactance(self) -> None:
+        """Filter branches with x_pu > 0.2."""
+        result = runner.invoke(
+            app,
+            ["show", str(IEEE14_RAW), "branches", "-f", "json", "--where", "x_pu>0.2"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["branches"]) > 0
+
+    def test_filter_generators(self) -> None:
+        """Filter generators by bus_id."""
+        result = runner.invoke(
+            app,
+            ["show", str(IEEE14_RAW), "generators", "-f", "json", "--where", "bus_id==1"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        for gen in data["generators"]:
+            assert gen["bus_id"] == 1
+
+    def test_filter_invalid_expression(self) -> None:
+        """Invalid filter expression shows error."""
+        result = runner.invoke(app, ["show", str(IEEE14_RAW), "buses", "--where", "invalid"])
+        assert result.exit_code != 0
+
+    def test_filter_empty_result(self) -> None:
+        """Filter that matches nothing returns empty."""
+        result = runner.invoke(
+            app,
+            ["show", str(IEEE14_RAW), "buses", "-f", "json", "--where", "bus_id==999"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["buses"]) == 0
+
+
+class TestDiffCommand:
+    """Tests for the 'diff' command."""
+
+    def test_diff_identical_files(self) -> None:
+        """Comparing a file with itself shows no differences."""
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE14_RAW)])
+        assert result.exit_code == 0
+        assert "No differences" in result.stdout
+
+    def test_diff_different_formats(self) -> None:
+        """Compare RAW and JSON versions of same system."""
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE14_JSON)])
+        assert result.exit_code == 0
+
+    def test_diff_json_output(self) -> None:
+        """Diff with JSON output format."""
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE14_JSON), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert "files" in data
+        assert "summary" in data
+        assert "changes" in data
+
+    def test_diff_with_scenario(self, tmp_path: Path) -> None:
+        """Diff base vs scenario-modified system."""
+        from psforge_grid.io import load_scenarios
+
+        scenarios = load_scenarios(FIXTURES_DIR / "ieee14_contingencies.psfg.json")
+        n1_path = tmp_path / "n1.psfg.json"
+        scenarios["N-1_Line_1-5"].to_json(n1_path)
+
+        result = runner.invoke(app, ["diff", str(IEEE14_JSON), str(n1_path), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        # Should detect the branch status change
+        branch_changes = [c for c in data["changes"] if c["type"] == "branch"]
+        assert len(branch_changes) > 0
+
+    def test_diff_different_systems(self) -> None:
+        """Diff two different systems shows count differences."""
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE9_RAW), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["summary"]["total_changes"] > 0

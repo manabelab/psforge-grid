@@ -15,9 +15,13 @@ from psforge_grid.models.system import System
 
 
 @pytest.fixture
-def ieee14_system() -> System:
-    """Load IEEE 14-bus system from RAW file."""
-    return System.from_raw("tests/fixtures/ieee14.raw")
+def ieee14_system(fixtures_dir) -> System:
+    """Load IEEE 14-bus system from RAW file.
+
+    Note: Function-scoped (not module-scoped) because tests mutate the system.
+    The ``fixtures_dir`` fixture comes from conftest.py.
+    """
+    return System.from_raw(fixtures_dir / "ieee14.raw")
 
 
 @pytest.fixture

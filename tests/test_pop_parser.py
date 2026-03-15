@@ -216,8 +216,12 @@ class TestPopParserIntegration:
         assert west10_system.num_buses() == 27
 
     def test_system_branch_count(self, west10_system: System) -> None:
-        """WEST10 should have 35 branches (25 lines + 10 transformers)."""
-        assert west10_system.num_branches() == 35
+        """WEST10 should have 42 branches (32 lines + 10 transformers).
+
+        The 32 lines come from 18 single-circuit lines (NL=1) plus
+        7 double-circuit lines (NL=2) expanded to 14 branch objects.
+        """
+        assert west10_system.num_branches() == 42
 
     def test_system_generator_count(self, west10_system: System) -> None:
         """WEST10 should have 10 generators."""
@@ -294,7 +298,21 @@ class TestPopParserIntegration:
         for line in lines_1_2:
             assert line.r_pu == pytest.approx(0.0042)
             assert line.x_pu == pytest.approx(0.126)
-            assert line.b_pu == pytest.approx(0.061)
+            # CPAT Y1C=0.061 is Y/2; psforge converts to total B = 2*Y1C = 0.122
+            assert line.b_pu == pytest.approx(0.122)
+
+    def test_parallel_circuit_expansion(self, west10_system: System) -> None:
+        """NL=2 lines should create 2 branches with per-circuit impedance.
+
+        LINE130 (bus 13→3) has NL=2 in the .pop file.  The stored
+        per-circuit impedance (r=0.0021, x=0.063) should be used
+        directly and 2 identical branch objects should be created.
+        """
+        lines_13_3 = [b for b in west10_system.branches if b.from_bus == 13 and b.to_bus == 3]
+        assert len(lines_13_3) == 2, "NL=2 should produce 2 branches"
+        for line in lines_13_3:
+            assert line.r_pu == pytest.approx(0.0021)
+            assert line.x_pu == pytest.approx(0.063)
 
     def test_transformer_impedance(self, west10_system: System) -> None:
         """Transformer G1-TR (21→1) should have correct reactance."""

@@ -5,6 +5,7 @@ This module defines the Bus class representing electrical buses in a power syste
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -110,7 +111,7 @@ class Bus:
               Limits: 0.90 - 1.10 pu
         """
         name_str = f" ({self.name})" if self.name else ""
-        v_angle_deg = self.v_angle * 180.0 / 3.14159265359
+        v_angle_deg = math.degrees(self.v_angle)
 
         lines = [
             f"Bus {self.bus_id}{name_str}: {self.bus_type_name} at {self.base_kv:.1f} kV",

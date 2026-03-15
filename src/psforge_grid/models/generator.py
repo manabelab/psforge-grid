@@ -5,6 +5,7 @@ This module defines the Generator class representing power generation units.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -39,6 +40,19 @@ class Generator:
         ta_s: Armature time constant Ta [seconds] (default: None)
             If ra_pu is None but ta_s and xdpp_pu are given,
             Ra can be computed as Xd'' / (omega * Ta).
+        kv: Rated voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the connected bus base_kv if None.
+        connection: Winding connection type (default: None).
+            Values: "wye" or "delta".
+            None means the source format did not provide this information.
+        model_type: Generator model type (default: None).
+            OpenDSS convention: 1=constant PQ, 3=constant V behind Z, etc.
+            None means the source format did not provide this information.
+        rneut: Grounding resistance [ohm] (default: None).
+            None means the source format did not provide this information.
+        xneut: Grounding reactance [ohm] (default: None).
+            None means the source format did not provide this information.
         name: Generator name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -80,6 +94,11 @@ class Generator:
     x0_pu: float | None = None
     ra_pu: float | None = None
     ta_s: float | None = None
+    kv: float | None = None
+    connection: str | None = None
+    model_type: int | None = None
+    rneut: float | None = None
+    xneut: float | None = None
     name: str | None = None
     description: str | None = None
 
@@ -165,7 +184,7 @@ class Generator:
         if self.ra_pu is not None:
             return self.ra_pu
         if self.xdpp_pu is not None and self.ta_s is not None and self.ta_s > 0:
-            omega = 2.0 * 3.141592653589793 * frequency_hz
+            omega = 2.0 * math.pi * frequency_hz
             return self.xdpp_pu / (omega * self.ta_s)
         return None
 

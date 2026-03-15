@@ -18,30 +18,30 @@ pip install psforge-grid
 ```python
 from psforge_grid import System
 
-# Load from PSS/E RAW format
-system = System.from_raw("ieee14.raw")
+# Load from any supported format
+system = System.from_raw("ieee14.raw")              # PSS/E RAW
+system = System.from_matpower("case14.m")            # MATPOWER
+system = System.from_pop("WEST10peak.pop")           # CPAT .pop
+system = System.from_dyna("model.dyna")              # CPAT .dyna
+system = System.from_dss("network.dss")              # OpenDSS
+system = System.from_json("ieee14.psfg.json")        # psforge JSON
+system = System.from_file("case14.m")                # Auto-detect
 
-# Load from MATPOWER format (pglib-opf compatible)
-system = System.from_matpower("pglib_opf_case14_ieee.m")
-
-# Load from CPAT formats (IEEJ standard models)
-system = System.from_pop("WEST10peak.pop")    # CPAT-GUI project file (ZIP/XML)
-system = System.from_dyna("model.dyna")        # CPAT Fortran card format
-
-# Auto-detect format by file extension
-system = System.from_file("case14.m")
+# Export to any format
+system.to_raw("output.raw")
+system.to_matpower("output.m")
+system.to_json("output.psfg.json")                   # Human/LLM-friendly
+system.to_file("output.m")                           # Auto-detect
 
 # Explore the system
 print(f"Buses: {len(system.buses)}, Branches: {len(system.branches)}")
-
-# Get LLM-friendly summary
 print(system.to_summary())
 ```
 
 ```bash
 # Or use the CLI
 psforge-grid info ieee14.raw
-psforge-grid show pglib_opf_case14_ieee.m buses -f json
+psforge-grid show case14.m buses -f json
 ```
 
 ## Why psforge-grid?
@@ -52,74 +52,37 @@ psforge-grid show pglib_opf_case14_ieee.m buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **Multi-format I/O** | PSS/E RAW, MATPOWER, CPAT (.pop/.dyna) | Usually single format |
+| **Multi-format I/O** | 7 formats: RAW, MATPOWER, CPAT, OpenDSS, JSON | Usually single format |
 
 ## Overview
 
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
-- PSS/E RAW file parser (v33/v34 partial support)
-- MATPOWER .m file parser ([pglib-opf](https://github.com/power-grid-lib/pglib-opf) compatible)
-- CPAT .pop file parser (CPAT-GUI ZIP/XML project format)
-- CPAT dyna card format parser (Fortran fixed-column format)
+- **Parsers & Writers** for 7 formats (see [Supported Formats](#supported-formats))
+- **Factory pattern**: `ParserFactory` / `WriterFactory` for format-agnostic I/O
+- **Scenario loading**: Base case + differential modifications for N-1 / parametric studies
 - OPF data support (`GeneratorCost` with polynomial and piecewise-linear cost models)
-- Zero-sequence impedance data (`Branch.r0_pu`, `x0_pu`, `b0_pu`) for fault analysis
-- Generator machine parameters (`Generator.xd_pu`, `xdp_pu`, `xdpp_pu`, etc.) for fault/stability analysis
-- Shared utilities for power system analysis
+- Zero-sequence impedance and generator machine parameters for fault/stability analysis
 
-## LLM Affinity Design
+## Supported Formats
 
-> **"Pickaxe in the Gold Rush"** - psforge is designed for seamless LLM integration.
+| Format | Parse | Write | Extension | Round-trip |
+|--------|-------|-------|-----------|------------|
+| PSS/E RAW (v33/v34) | Yes | Yes (v33) | `.raw` | Yes |
+| MATPOWER | Yes | Yes | `.m` | Yes |
+| CPAT .pop (ZIP/XML) | Yes | Yes | `.pop` | Yes |
+| CPAT .dyna (cards) | Yes | Yes | `.dyna` | Yes |
+| OpenDSS | Yes | Yes | `.dss` | Yes |
+| **psforge JSON** | Yes | Yes | `.psfg.json` | Yes |
+| psforge Scenario | Yes | Yes | `.psfg.json` | - |
 
-psforge-grid implements LLM-friendly data structures and CLI:
+<details>
+<summary>PSS/E RAW format details</summary>
 
-| Feature | Description |
-|---------|-------------|
-| **Explicit Units** | Field names include units (`voltage_pu`, `power_mw`) |
-| **Semantic Status** | Enum-based status annotations (`VoltageStatus.LOW`) |
-| **Self-Documenting** | Rich docstrings explaining physical meaning |
-| **to_description()** | Human/LLM-readable output methods |
+### PSS/E RAW
 
-```python
-# Example: LLM-friendly bus description
-bus = system.get_bus(14)
-print(bus.to_description())
-# Output: "Bus 14 (LOAD_BUS): 13.8 kV, PQ type"
-```
-
-### CLI for LLM Integration
-
-psforge-grid includes a CLI designed for LLM-friendly output:
-
-```bash
-# System summary in different formats
-psforge-grid info ieee14.raw              # Table format
-psforge-grid info ieee14.raw -f json      # JSON for API/LLM
-psforge-grid info ieee14.raw -f summary   # Compact for tokens
-
-# Display element details
-psforge-grid show ieee14.raw buses
-psforge-grid show ieee14.raw branches -f json
-
-# Validate system data
-psforge-grid validate ieee14.raw
-psforge-grid validate ieee14.raw --strict
-```
-
-**Output Formats:**
-- `table`: Human-readable tables (default)
-- `json`: Structured JSON for LLM/API processing
-- `summary`: Compact text for token-efficient LLM usage
-- `csv`: Comma-separated values for data analysis
-
-See [CLAUDE.md](CLAUDE.md) for detailed AI development guidelines.
-
-## PSS/E RAW Format Support
-
-### Current Status
-
-The parser supports **core power flow data** required for basic AC power flow analysis:
+The parser supports **core power flow data** for AC power flow analysis:
 
 | Section | v33 | v34 | Notes |
 |---------|-----|-----|-------|
@@ -129,219 +92,189 @@ The parser supports **core power flow data** required for basic AC power flow an
 | Fixed Shunt Data | Yes | Yes | Capacitors and reactors |
 | Generator Data | Yes | Yes | P, Q, voltage setpoint, Q limits |
 | Branch Data | Yes | Yes | Transmission lines |
-| Transformer Data | Yes | Yes | Two-winding transformers only |
+| Transformer Data | Yes | Yes | Two-winding, magnetizing admittance, `is_xfmr` flag |
 
-### Not Yet Supported
+**Not yet supported:** Area/Zone/Owner Data, DC lines, FACTS, Switched Shunts, Three-winding Transformers.
 
-The following sections are parsed but ignored (data is skipped):
-
-- Area Data, Zone Data, Owner Data
-- Two-Terminal DC Data, Multi-Terminal DC Data
-- VSC DC Line Data, FACTS Device Data
-- Switched Shunt Data (use Fixed Shunt instead)
-- Multi-Section Line Data, Impedance Correction Data
-- GNE Data, Induction Machine Data, Substation Data
-- Three-winding Transformers
-
-### Test Data Sources
-
-Parser has been validated with IEEE test cases from multiple sources:
-
+**Test data sources:**
 - IEEE 9-bus (v34): [GitHub - todstewart1001](https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-)
 - IEEE 14-bus (v33): [GitHub - ITI/models](https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/)
 - IEEE 118-bus (v33): [GitHub - powsybl](https://github.com/powsybl/powsybl-distribution/blob/main/resources/PSSE/IEEE_118_bus.raw)
 
-### Future Plans
+</details>
 
-1. Three-winding transformer support
-2. Switched shunt data support
-3. HVDC, FACTS device support (as needed)
+<details>
+<summary>MATPOWER format details</summary>
 
-## MATPOWER Format Support
+### MATPOWER
 
-psforge-grid supports [MATPOWER](https://matpower.app/) `.m` files, enabling direct use of [pglib-opf](https://github.com/power-grid-lib/pglib-opf) benchmark cases.
+Supports [MATPOWER](https://matpower.app/) `.m` files, including [pglib-opf](https://github.com/power-grid-lib/pglib-opf) benchmark cases.
 
-### Supported Sections
-
-| Section | Status | Notes |
-|---------|--------|-------|
-| Bus Data (13 columns) | Yes | All bus types, Vmin/Vmax for OPF |
-| Generator Data (10 columns) | Yes | Pmin/Pmax, Qmin/Qmax |
-| Branch Data (13 columns) | Yes | Including angmin/angmax for OPF |
-| Generator Cost Data | Yes | Polynomial (model=2) and piecewise-linear (model=1) |
-| baseMVA | Yes | System base MVA |
-
-### Generator Cost Functions
+| Section | Notes |
+|---------|-------|
+| Bus Data (13 columns) | All bus types, Vmin/Vmax for OPF |
+| Generator Data (10 columns) | Pmin/Pmax, Qmin/Qmax |
+| Branch Data (13 columns) | Including angmin/angmax for OPF |
+| Generator Cost Data | Polynomial (model=2) and piecewise-linear (model=1) |
 
 ```python
-from psforge_grid import System
-
 system = System.from_matpower("pglib_opf_case14_ieee.m")
-
-# Access generator cost data (for OPF)
 for cost in system.generator_costs:
     print(cost.to_description())
     # "Generator Cost (polynomial, degree 2): 0.0430 * P^2 + 20.00 * P + 0.00"
-
-    # Evaluate cost at a given power output
-    cost_value = cost.evaluate(p_mw=50.0)  # $/hr
 ```
 
-## CPAT Format Support
+</details>
 
-psforge-grid supports two [CPAT](https://www.jpower.co.jp/bs/cpat/) (Computer Program for Analysis of Power Transmission) input formats, enabling direct use of IEEJ standard model systems.
+<details>
+<summary>CPAT format details (.pop / .dyna)</summary>
 
-### .pop Format (Recommended)
+### CPAT
 
-The `.pop` format is the native project file format of CPAT-GUI. It is a ZIP archive containing XML data files.
+Supports two [CPAT](https://www.jpower.co.jp/bs/cpat/) formats for IEEJ standard model systems.
 
-```python
-from psforge_grid import System
-
-# Load from .pop file (CPAT-GUI project)
-system = System.from_pop("WEST10peak.pop")
-```
+**`.pop` format** (recommended): CPAT-GUI native project file (ZIP archive + XML).
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | System data (pnsd) | Yes | Nodes, branches, generators, loads |
 | Generator machine data | Yes | G1-G5 card fields (Xd, Xd', Xd'', etc.) |
 | Zero-sequence data | Yes | Branch and generator zero-sequence impedances |
-| GUI drawing data (pnsw) | No | Drawing layout is ignored |
 
-### .dyna Card Format
+**`.dyna` card format**: Legacy Fortran fixed-column (80-character) cards.
 
-The `.dyna` format is the legacy Fortran fixed-column (80-character) card format used by CPAT's text-based interface.
+| Card Type | Description |
+|-----------|-------------|
+| DATA | System name, base MVA, frequency |
+| T / X / N | Transmission lines / Transformers / Nodes |
+| G1-G5 | Generator machine parameters |
+
+</details>
+
+<details>
+<summary>OpenDSS format details</summary>
+
+### OpenDSS
+
+Supports [OpenDSS](https://opendss.epri.com/) `.dss` script files via [opendssdirect.py](https://pypi.org/project/opendssdirect.py/).
+
+**DSSWriter** converts per-unit → physical units:
+
+| System Element | OpenDSS Element |
+|---------------|-----------------|
+| Swing bus | `New Circuit` (Vsource) |
+| Branch (line) | `New Line` |
+| Branch (transformer) | `New Transformer` |
+| Generator | `New Generator` |
+| Load / Shunt | `New Load` / `New Capacitor` / `New Reactor` |
+
+**Fault study mode** (`write_fault_study()`): Y-circuit transformer model with Yg-Delta grounding for zero-sequence analysis.
+
+**DSSParser** compiles `.dss` files with OpenDSS and extracts data via API.
+
+</details>
+
+<details>
+<summary>psforge JSON format details (.psfg.json)</summary>
+
+### psforge JSON
+
+Human/LLM-friendly native format with explicit metadata, distinct from pglib-uc JSON.
+
+- **Extension**: `.psfg.json`
+- **Metadata**: `"format": "psforge-grid"`, `"version": "1.0"`
+- **Field names**: snake_case with unit suffixes (`_pu`, `_mw`, `_kv`)
+- **Compact output**: `None` fields omitted by default
 
 ```python
-from psforge_grid import System
+# Export / Import
+system.to_json("ieee14.psfg.json")
+system = System.from_json("ieee14.psfg.json")
 
-# Load from dyna card format
-system = System.from_dyna("model.dyna")
+# Include all fields (with null values)
+system.to_json("full.psfg.json", omit_none=False)
 ```
 
-| Card Type | Description | Status |
-|-----------|-------------|--------|
-| DATA | System name, base MVA, frequency | Yes |
-| T card | Transmission lines (positive & zero sequence) | Yes |
-| X card | Transformers (tap ratio, impedance) | Yes |
-| N card | Nodes (voltage, generation, load) | Yes |
-| G1-G5 | Generator machine parameters | Yes |
+#### Scenario loading (base case + modifications)
 
-### CPAT Test Data
+Define N-1 contingencies or parametric studies with minimal data:
 
-Parser validation uses IEEJ standard model systems:
+```python
+from psforge_grid.io import load_scenarios, write_scenario
 
-| Fixture | Description | Buses | Branches | Generators |
-|---------|-------------|-------|----------|------------|
-| `WEST10peak.pop` | IEEJ WEST 10-machine peak model | 27 | 35 | 10 |
-| `cpat_model11.dyna` | CPAT Manual p.26 model system | 10 | 14 | 4 |
+# Define scenarios
+write_scenario(
+    "contingencies.psfg.json",
+    base_case="ieee14.psfg.json",
+    scenarios=[
+        {
+            "name": "N-1_Line_1-5",
+            "modifications": [
+                {"target": "branches", "match": {"from_bus": 1, "to_bus": 5},
+                 "set": {"status": 0}}
+            ]
+        },
+    ],
+)
+
+# Load: returns {"base": System, "N-1_Line_1-5": System, ...}
+scenarios = load_scenarios("contingencies.psfg.json")
+```
+
+</details>
+
+## LLM Affinity Design
+
+> **"Pickaxe in the Gold Rush"** - psforge is designed for seamless LLM integration.
+
+| Feature | Description |
+|---------|-------------|
+| **Explicit Units** | Field names include units (`voltage_pu`, `power_mw`) |
+| **Semantic Status** | Enum-based status annotations (`VoltageStatus.LOW`) |
+| **Self-Documenting** | Rich docstrings explaining physical meaning |
+| **to_description()** | Human/LLM-readable output methods |
+
+```python
+bus = system.get_bus(14)
+print(bus.to_description())
+# Output: "Bus 14 (LOAD_BUS): 13.8 kV, PQ type"
+```
+
+### CLI for LLM Integration
+
+```bash
+psforge-grid info ieee14.raw              # Table format
+psforge-grid info ieee14.raw -f json      # JSON for API/LLM
+psforge-grid info ieee14.raw -f summary   # Compact for tokens
+psforge-grid show ieee14.raw buses -f json
+psforge-grid validate ieee14.raw --strict
+```
+
+**Output Formats:** `table` (default), `json`, `summary`, `csv`
+
+See [CLAUDE.md](CLAUDE.md) for detailed AI development guidelines.
 
 ## Installation
 
 ```bash
-# Install the package
 pip install psforge-grid
 
 # Or install from source
 pip install -e .
 ```
 
-## Development Setup
+## Development
 
-### Prerequisites
-
-- Python 3.9+
-- [uv](https://github.com/astral-sh/uv) (recommended) or pip
-
-### Install Development Dependencies
+See [docs/development.md](docs/development.md) for full setup instructions (pre-commit hooks, editor config, etc.).
 
 ```bash
-# Using uv (recommended)
-uv pip install -e ".[dev]"
-
-# Or using pip
-pip install -e ".[dev]"
+pip install -e ".[dev]"     # Install dev dependencies
+pytest tests/ -v            # Run tests
+ruff check src/ tests/      # Lint
+mypy src/                   # Type check
 ```
-
-### Setup Pre-commit Hooks
-
-Pre-commit hooks automatically run ruff and mypy checks before each commit.
-
-#### Option 1: Global Install with pipx (Recommended)
-
-Using [pipx](https://github.com/pypa/pipx) for global installation is recommended, especially when using **git worktree** for parallel development. This ensures `pre-commit` is available across all worktrees without additional setup.
-
-```bash
-# Install pipx if not already installed
-brew install pipx  # macOS
-# or: pip install --user pipx
-
-# Install pre-commit globally
-pipx install pre-commit
-
-# Install hooks (only needed once per repository)
-pre-commit install
-
-# Run hooks manually on all files
-pre-commit run --all-files
-```
-
-**Why pipx?**
-- Works across all git worktrees without per-worktree setup
-- Isolated environment prevents dependency conflicts
-- Single installation, works everywhere
-
-#### Option 2: Local Install in Virtual Environment
-
-```bash
-# Install pre-commit in your virtual environment
-pip install pre-commit
-
-# Install hooks
-pre-commit install
-
-# Run hooks manually on all files
-pre-commit run --all-files
-```
-
-> **Note:** CI runs ruff and mypy checks via GitHub Actions (`.github/workflows/test.yml`), so code quality is enforced on push/PR even if local hooks are skipped.
-
-### Manual Code Quality Checks
-
-```bash
-# Lint with ruff
-ruff check src/ tests/
-
-# Format with ruff
-ruff format src/ tests/
-
-# Type check with mypy
-mypy src/
-```
-
-### Run Tests
-
-```bash
-pytest tests/ -v
-```
-
-### Editor Setup (VSCode/Cursor)
-
-This project includes `.vscode/` configuration for seamless development:
-
-- **Format on Save**: Automatically formats code with ruff
-- **Organize Imports**: Automatically sorts imports
-- **Type Checking**: Mypy extension provides real-time type checking
-
-**Recommended Extensions:**
-- `charliermarsh.ruff` - Ruff linter and formatter
-- `ms-python.mypy-type-checker` - Mypy type checker
-- `ms-python.python` - Python language support
 
 ## psforge Ecosystem (Hub & Spoke Architecture)
-
-psforge is a modular power system analysis ecosystem built on a **Hub & Spoke** architecture. **psforge-grid** is the Hub — all Spoke packages depend on it for common data models and I/O.
 
 ```
                     ┌──────────────────────┐
@@ -359,14 +292,14 @@ psforge is a modular power system analysis ecosystem built on a **Hub & Spoke** 
 └─────────┘  └─────────┘ └──────────┘ └────────┘  └─────────┘
 ```
 
-| Package | PyPI Name | Description | Status |
-|---------|-----------|-------------|--------|
-| **psforge-grid** (this) | `psforge-grid` | Core data models, parsers (RAW, MATPOWER), and CLI | Active |
-| **psforge-flow** | `psforge-flow` | AC power flow (Newton-Raphson) and optimal power flow | Active |
-| **psforge-fault** | `psforge-fault` | Short-circuit fault analysis (symmetrical components) | Active |
-| **psforge-stability** | `psforge-stability` | Transient stability analysis (DAE solver) | Planned |
-| **psforge-schedule** | `psforge-schedule` | Unit commitment optimization (HiGHS/Gurobi) | Planned |
-| **psforge-turbo** | `psforge-turbo` | High-performance C++ engine (Phase 2) | Frozen |
+| Package | Description | Status |
+|---------|-------------|--------|
+| **psforge-grid** (this) | Core data models, parsers, and CLI | Active |
+| **psforge-flow** | AC power flow (Newton-Raphson) | Active |
+| **psforge-fault** | Short-circuit fault analysis | Active |
+| **psforge-stability** | Transient stability analysis | Planned |
+| **psforge-schedule** | Unit commitment optimization | Planned |
+| **psforge-turbo** | High-performance C++ engine (Phase 2) | Frozen |
 
 All packages are developed and maintained by [Manabe Lab LLC](https://github.com/manabelab).
 

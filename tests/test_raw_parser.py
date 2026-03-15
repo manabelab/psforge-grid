@@ -3,18 +3,10 @@
 Tests the parsing functionality for PSS/E RAW format files.
 """
 
-from pathlib import Path
-
 import pytest
 
 from psforge_grid.io.raw_parser import parse_raw
 from psforge_grid.models.system import System
-
-
-@pytest.fixture
-def fixtures_dir():
-    """Return path to test fixtures directory."""
-    return Path(__file__).parent / "fixtures"
 
 
 class TestRawParser:
@@ -108,6 +100,28 @@ class TestIEEE9Bus:
         # Check that transformers have zero B
         transformers = [b for b in system.branches if b.b_pu == 0]
         assert len(transformers) == 3
+
+    def test_parse_ieee9_is_xfmr_flag(self, fixtures_dir):
+        """Test that is_xfmr=True is set for transformers parsed from RAW.
+
+        IEEE 9-bus has 3 step-up transformers with tap_ratio=1.0 on system base.
+        Without is_xfmr, these would be misidentified as transmission lines.
+        The RAW parser sets is_xfmr=True for all branches from TRANSFORMER DATA.
+        """
+        system = parse_raw(fixtures_dir / "ieee9.raw")
+
+        xfmr_branches = [b for b in system.branches if b.is_xfmr is True]
+        assert len(xfmr_branches) == 3
+
+        # All is_xfmr=True branches should also return is_transformer=True
+        for b in xfmr_branches:
+            assert b.is_transformer is True
+
+        # Lines should have is_xfmr=None (not set by BRANCH DATA section)
+        line_branches = [b for b in system.branches if b.is_xfmr is None]
+        assert len(line_branches) == 6
+        for b in line_branches:
+            assert b.is_transformer is False
 
     def test_parse_ieee9_power_balance(self, fixtures_dir):
         """Test that generation exceeds load (accounting for losses)."""

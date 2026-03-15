@@ -7,8 +7,11 @@
 ### Responsibilities
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
-- PSS/E RAW file parser (v33/v34)
-- MATPOWER .m file parser (pglib-opf compatible)
+- PSS/E RAW file parser and writer (v33/v34)
+- MATPOWER .m file parser and writer (pglib-opf compatible)
+- CPAT .pop file parser and writer (ZIP/XML format)
+- CPAT .dyna file parser and writer (Fortran card format)
+- OpenDSS .dss file parser and writer (via opendssdirect.py)
 - Shared utilities for power system analysis
 - **Foundation for LLM-friendly output structures**
 
@@ -16,34 +19,36 @@
 
 ## Interface & Factory Architecture
 
-> **This repository implements the Interface-Factory pattern** for pluggable file format parsers.
+> **This repository implements the Interface-Factory pattern** for pluggable file format parsers and writers.
 
 ### Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Code                                │
-│         system = System.from_raw("ieee14.raw")              │
-│         system = System.from_matpower("case14.m")           │
+│  Read:  system = System.from_raw("ieee14.raw")              │
 │         system = System.from_file("data.raw")  # auto-detect│
+│  Write: system.to_raw("output.raw")                         │
+│         system.to_file("output.m")             # auto-detect│
 ├─────────────────────────────────────────────────────────────┤
-│                    Factory Methods: System (models/system.py)│
-│         - System.from_raw(): Create from PSS/E file         │
-│         - System.from_matpower(): Create from MATPOWER file  │
-│         - System.from_file(): Auto-detect format            │
+│              Facade: System (models/system.py)              │
+│  Read:  from_raw, from_matpower, from_pop, from_dyna, from_dss│
+│  Write: to_raw, to_matpower, to_pop, to_dyna, to_dss, to_file│
 ├─────────────────────────────────────────────────────────────┤
-│                    Factory: ParserFactory (io/factories.py) │
-│         - ParserFactory.create("raw") → RawParser           │
-│         - ParserFactory.create("matpower") → MatpowerParser  │
-│         - ParserFactory.from_path(...) → auto-detect        │
+│              Factories (io/factories.py)                    │
+│  ParserFactory.create("raw") → RawParser                    │
+│  WriterFactory.create("raw") → RawWriter                    │
+│  *.from_path(...) → auto-detect by extension                │
 ├─────────────────────────────────────────────────────────────┤
-│                    Interface: IParser (io/protocols.py)     │
-│         - Abstract base class (ABC)                         │
-│         - parse(filepath) → System                          │
+│              Interfaces (io/protocols.py)                   │
+│  IParser: parse(filepath) → System                          │
+│  IWriter: write(system, filepath) → None                    │
 ├─────────────────────────────────────────────────────────────┤
-│                    Implementations: io/                     │
-│         - RawParser: PSS/E RAW format (v33/v34)             │
-│         - MatpowerParser: MATPOWER format (.m files)        │
+│              Implementations: io/                           │
+│  Parsers: RawParser, MatpowerParser, PopParser, DynaParser,  │
+│           DSSParser                                          │
+│  Writers: RawWriter, MatpowerWriter, PopWriter, DynaWriter,  │
+│           DSSWriter                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +59,7 @@ psforge_grid/
 ├── __init__.py          # Public API exports
 ├── models/              # Dataclass definitions
 │   ├── __init__.py
-│   ├── system.py        # System (with factory methods)
+│   ├── system.py        # System (with facade: from_*/to_* methods)
 │   ├── bus.py
 │   ├── branch.py
 │   ├── generator.py
@@ -63,16 +68,24 @@ psforge_grid/
 │   └── shunt.py
 └── io/                  # File I/O (Interface-Factory pattern)
     ├── __init__.py      # Public exports
-    ├── protocols.py     # IParser interface
-    ├── factories.py     # ParserFactory
+    ├── protocols.py     # IParser, IWriter interfaces
+    ├── factories.py     # ParserFactory, WriterFactory
     ├── raw_parser.py    # RawParser implementation
-    └── matpower_parser.py # MatpowerParser implementation
+    ├── raw_writer.py    # RawWriter implementation
+    ├── matpower_parser.py # MatpowerParser implementation
+    ├── matpower_writer.py # MatpowerWriter implementation
+    ├── pop_parser.py    # PopParser implementation
+    ├── pop_writer.py    # PopWriter implementation
+    ├── dyna_parser.py   # DynaParser implementation
+    ├── dyna_writer.py   # DynaWriter implementation
+    ├── dss_parser.py    # DSSParser implementation (opendssdirect.py)
+    └── dss_writer.py    # DSSWriter implementation
 ```
 
 ### VSCode Navigation
 
-- **F12 on System.from_raw()**: Goes to factory method
-- **Ctrl+F12 on IParser.parse()**: Lists all implementations (RawParser, etc.)
+- **F12 on System.from_raw()** or **System.to_raw()**: Goes to facade method
+- **Ctrl+F12 on IParser.parse()** or **IWriter.write()**: Lists all implementations
 - Docstrings include "See Also" cross-references
 
 ---
@@ -143,15 +156,55 @@ class Bus:
 
 ---
 
+## Data Model Design: "Optional + None = Source Not Provided"
+
+> **Core Principle**: Use `Optional[T] = None` to represent data that the source format does not provide, rather than using sentinel values or raising errors.
+
+psforge-grid's data models serve as a **universal interchange format** across multiple file formats (PSS/E RAW, MATPOWER, CPAT, OpenDSS). Each format provides different subsets of information. The "Optional + None = Source Not Provided" principle ensures lossless cross-format conversion.
+
+### Rules
+
+1. **Format-specific fields use `T | None = None`**: Fields that only some formats provide (e.g., `winding_connection`, `kv`, `frequency_hz`) default to `None`
+2. **Core fields use concrete types with defaults**: Fields present in all formats (e.g., `r_pu`, `x_pu`, `bus_id`) use non-optional types
+3. **None means "not provided by the source"**, not "zero" or "unknown". Writers must handle `None` by using format-appropriate defaults
+4. **Parsers set only what the format provides**: Do not infer or calculate values that the source format does not explicitly contain
+5. **Writers fall back gracefully**: When a field is `None`, use the target format's default or omit the element
+
+### Example
+
+```python
+@dataclass
+class Branch:
+    # Core fields (all formats provide these)
+    from_bus: int
+    to_bus: int
+    r_pu: float = 0.0
+    x_pu: float = 0.01
+
+    # Format-specific fields (Optional + None = source not provided)
+    winding_connection: str | None = None   # "wye-wye", "delta-wye", etc.
+    nomv_from: float | None = None          # Winding rated voltage [kV]
+    sbase_mva: float | None = None          # Transformer rated capacity [MVA]
+```
+
+### When Adding New Fields
+
+- If the field is only available in some formats: use `T | None = None`
+- If the field is universally available: use a concrete type with a sensible default
+- Document which formats populate the field in the docstring
+
+---
+
 ## Instructions for AI Agents
 
 ### When Modifying Data Classes
 
 1. **Always include unit suffix** in field names (`_pu`, `_mw`, `_mvar`, `_kv`, `_deg`, `_rad`)
-2. **Add status enums** for values that can be evaluated (voltage, loading, etc.)
-3. **Write educational docstrings** explaining physical meaning
-4. **Implement `to_description()`** for all public data classes
-5. **Consider both education and business use cases**
+2. **Use `T | None = None` for format-specific fields** (follow "Optional + None = Source Not Provided" principle)
+3. **Add status enums** for values that can be evaluated (voltage, loading, etc.)
+4. **Write educational docstrings** explaining physical meaning
+5. **Implement `to_description()`** for all public data classes
+6. **Consider both education and business use cases**
 
 ### Type Hints
 

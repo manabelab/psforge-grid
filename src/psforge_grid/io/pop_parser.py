@@ -32,7 +32,7 @@ from psforge_grid.io.pop.archive import PopArchive
 from psforge_grid.io.pop.case_data import PopCaseData, parse_case_data
 from psforge_grid.io.pop.control_data import PopControlData, parse_control_data
 from psforge_grid.io.pop.topology import PopTopology, parse_topology
-from psforge_grid.io.pop.xml_utils import get_float, get_int
+from psforge_grid.io.pop.xml_utils import get_float, get_int, get_str
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -282,27 +282,39 @@ def _build_branches(
 
         r_pu = get_float(tline_data, "Z1r", 0.0)
         x_pu = get_float(tline_data, "Z1x", 0.0)
-        b_pu = get_float(tline_data, "Y1c", 0.0)
+        # CPAT convention: Y1C is stored as Y/2 (half the total charging
+        # susceptance).  psforge's Branch.b_pu follows PSS/E convention
+        # where b_pu is the TOTAL line charging.  Multiply by 2 to convert.
+        b_pu = get_float(tline_data, "Y1c", 0.0) * 2.0
 
         # Zero-sequence data
         r0 = get_float(tline_data, "Zor", 0.0)
         x0 = get_float(tline_data, "Zox", 0.0)
 
-        branch = Branch(
-            from_bus=from_bus,
-            to_bus=to_bus,
-            r_pu=r_pu,
-            x_pu=x_pu,
-            b_pu=b_pu,
-            name=cluster.name,
-            circuit_id=str(cluster.code_number),
-        )
-        if r0 != 0.0:
-            branch.r0_pu = r0
-        if x0 != 0.0:
-            branch.x0_pu = x0
+        # Number of parallel circuits (NL).  When NL > 1 the stored
+        # impedance/admittance values are per-circuit values.  We
+        # create NL identical branches so the Y-bus gets the correct
+        # combined admittance (Y_total = NL * Y_per_circuit).
+        nl = get_int(tline_data, "NL", 1)
+        if nl < 1:
+            nl = 1
 
-        branches.append(branch)
+        for cct in range(1, nl + 1):
+            branch = Branch(
+                from_bus=from_bus,
+                to_bus=to_bus,
+                r_pu=r_pu,
+                x_pu=x_pu,
+                b_pu=b_pu,
+                name=cluster.name,
+                circuit_id=f"{cluster.code_number}_{cct}" if nl > 1 else str(cluster.code_number),
+            )
+            if r0 != 0.0:
+                branch.r0_pu = r0
+            if x0 != 0.0:
+                branch.x0_pu = x0
+
+            branches.append(branch)
 
     # Transformers
     xfmr_dict = _build_pnsd_dict(archive.pnsd_root, "DictDataTransformer", "DataTransformer")
@@ -328,6 +340,34 @@ def _build_branches(
 
         shift_angle = get_float(xfmr_data, "Tapi", 0.0)
 
+        # Zero-sequence data
+        r0 = get_float(xfmr_data, "Zor", 0.0)
+        x0 = get_float(xfmr_data, "Zox", 0.0)
+
+        # Winding connection: Y1/Y2 fields encode grounding type
+        # E = Earthed (grounded Y), D = Delta, N = ungrounded
+        y1_raw = get_str(xfmr_data, "Y1", "")
+        y2_raw = get_str(xfmr_data, "Y2", "")
+        winding_conn: str | None = None
+        conn_map = {"E": "wye-grounded", "D": "delta", "N": "wye"}
+        y1_type = conn_map.get(y1_raw)
+        y2_type = conn_map.get(y2_raw)
+        if y1_type and y2_type:
+            winding_conn = f"{y1_type}/{y2_type}"
+
+        # Voltage regulation data
+        vn_raw = get_str(xfmr_data, "Vn", "")
+        vref = get_float(xfmr_data, "Vref", 0.0)
+        tap_max = get_float(xfmr_data, "TapMax", 0.0)
+        tap_min = get_float(xfmr_data, "TapMin", 0.0)
+
+        # Map Vn to regulation control mode
+        reg_mode: str | None = None
+        if vn_raw == "S":
+            reg_mode = "secondary"
+        elif vn_raw in ("P", "VF"):
+            reg_mode = "primary"
+
         branch = Branch(
             from_bus=from_bus,
             to_bus=to_bus,
@@ -335,9 +375,25 @@ def _build_branches(
             x_pu=x_pu,
             tap_ratio=tap if tap != 0.0 else 1.0,
             shift_angle=shift_angle,
+            is_xfmr=True,
+            winding_connection=winding_conn,
             name=cluster.name,
             circuit_id=str(cluster.code_number),
         )
+        if r0 != 0.0:
+            branch.r0_pu = r0
+        if x0 != 0.0:
+            branch.x0_pu = x0
+
+        # Set voltage regulation fields only if active
+        if vref > 0.0 and reg_mode is not None:
+            branch.reg_control_mode = reg_mode
+            branch.reg_target_voltage_pu = vref
+        if tap_max != 0.0:
+            branch.tap_max = tap_max
+        if tap_min != 0.0:
+            branch.tap_min = tap_min
+
         branches.append(branch)
 
     return branches
@@ -407,8 +463,22 @@ def _build_generators(
         xdp = get_float(gen_data, "Xdd") or None
         xdpp = get_float(gen_data, "Xddd") or None
         xqpp = get_float(gen_data, "Xqdd") or None
-        x0 = get_float(gen_data, "X0_Saturation") or None
-        x2 = get_float(gen_data, "X2_Saturation") or None
+        x0 = get_float(gen_data, "X0") or None
+        x2 = get_float(gen_data, "X2") or None
+        # Fallback: CPAT stores saturated values in X0_Saturation/X2_Saturation
+        # when X0/X2 fields are empty (common in .pop files).
+        #
+        # IMPORTANT: When X0 is empty, CPAT's data editor often copies Xd into
+        # X0_Saturation as a default placeholder. Detect this case (X0_Sat == Xd_Sat)
+        # and treat X0 as undefined to avoid using the synchronous reactance Xd
+        # (typically 1.0-2.0 pu) as zero-sequence reactance (typically 0.05-0.25 pu).
+        xd_sat = get_float(gen_data, "Xd_Saturation") or None
+        if x0 is None:
+            x0_sat = get_float(gen_data, "X0_Saturation") or None
+            if x0_sat is not None and (xd_sat is None or abs(x0_sat - xd_sat) > 1e-6):
+                x0 = x0_sat
+        if x2 is None:
+            x2 = get_float(gen_data, "X2_Saturation") or None
         ta = get_float(gen_data, "Ta") or None
         ra = get_float(gen_data, "Ra") or None
 

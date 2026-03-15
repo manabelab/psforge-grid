@@ -43,6 +43,40 @@ class Branch:
             Used for unbalanced fault analysis (1LG, 2LG).
         b0_pu: Zero-sequence total line charging susceptance [p.u.] (default: None)
             Used for unbalanced fault analysis (1LG, 2LG).
+        winding_connection: Transformer winding connection type (default: None).
+            Values: "wye-wye", "delta-wye", "wye-delta", "delta-delta".
+            None means the source format did not provide this information.
+            Writers may infer from shift_angle if None.
+        nomv_from: From-side winding nominal voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the from_bus base_kv if None.
+        nomv_to: To-side winding nominal voltage [kV] (default: None).
+            None means the source format did not provide this information.
+            Writers may infer from the to_bus base_kv if None.
+        sbase_mva: Transformer rated capacity [MVA] (default: None).
+            None means the source format did not provide this information.
+            Writers may use system base_mva if None.
+        mag_g: Magnetizing conductance [p.u. on system base] (default: None).
+            None means the source format did not provide this information.
+        mag_b: Magnetizing susceptance [p.u. on system base] (default: None).
+            None means the source format did not provide this information.
+        is_xfmr: Explicit transformer flag from source format (default: None).
+            True if the source format explicitly identified this branch as a
+            transformer (e.g., parsed from PSS/E TRANSFORMER DATA section).
+            None means the source format did not provide this information.
+            Used by is_transformer property as a primary indicator.
+        reg_control_mode: Voltage regulation control mode (default: None).
+            "secondary" for secondary-side voltage control,
+            "primary" for primary-side voltage control.
+            None means the source format did not provide this information
+            or the transformer does not regulate voltage.
+        reg_target_voltage_pu: Target voltage for voltage regulation [p.u.]
+            (default: None). None means the source format did not provide
+            this information or regulation is not active.
+        tap_max: Maximum tap ratio limit (default: None).
+            None means the source format did not provide this information.
+        tap_min: Minimum tap ratio limit (default: None).
+            None means the source format did not provide this information.
         name: Branch name (optional)
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
@@ -79,6 +113,17 @@ class Branch:
     r0_pu: float | None = None
     x0_pu: float | None = None
     b0_pu: float | None = None
+    winding_connection: str | None = None
+    nomv_from: float | None = None
+    nomv_to: float | None = None
+    sbase_mva: float | None = None
+    mag_g: float | None = None
+    mag_b: float | None = None
+    is_xfmr: bool | None = None
+    reg_control_mode: str | None = None
+    reg_target_voltage_pu: float | None = None
+    tap_max: float | None = None
+    tap_min: float | None = None
     name: str | None = None
     description: str | None = None
 
@@ -97,7 +142,15 @@ class Branch:
 
     @property
     def is_transformer(self) -> bool:
-        """Check if this branch is a transformer (tap_ratio != 1.0 or shift_angle != 0.0)."""
+        """Check if this branch is a transformer.
+
+        A branch is identified as a transformer if any of:
+        - is_xfmr is True (explicitly flagged by source format parser)
+        - tap_ratio != 1.0 (off-nominal turns ratio)
+        - shift_angle != 0.0 (phase-shifting transformer)
+        """
+        if self.is_xfmr is True:
+            return True
         return self.tap_ratio != 1.0 or self.shift_angle != 0.0
 
     @property

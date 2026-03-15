@@ -2,11 +2,13 @@
 
 This module defines the System class as the central container for all power system components.
 
-Factory Methods:
-    The System class provides factory methods for creating instances from files:
-    - from_raw(): Create from PSS/E RAW file
-    - from_matpower(): Create from MATPOWER .m file
+Factory Methods (import):
+    - from_raw(), from_matpower(), from_pop(), from_dyna(): Create from specific formats
     - from_file(): Create from any supported format (auto-detect)
+
+Export Methods (write):
+    - to_raw(), to_matpower(), to_pop(), to_dyna(): Write to specific formats
+    - to_file(): Write to any supported format (auto-detect)
 """
 
 from __future__ import annotations
@@ -38,6 +40,9 @@ class System:
         shunts: List of Shunt objects representing capacitors/reactors
         generator_costs: List of GeneratorCost objects for OPF/UC formulations
         base_mva: System base MVA for per-unit conversion (default: 100.0)
+        frequency_hz: System frequency [Hz] (default: None).
+            50 Hz for Japan/Europe, 60 Hz for North America.
+            None means the source format did not provide this information.
         name: System name (optional, default: empty string)
         description: Free-text description providing context about the system.
             For LLM-friendly output.
@@ -64,6 +69,7 @@ class System:
     shunts: list[Shunt] = field(default_factory=list)
     generator_costs: list[GeneratorCost] = field(default_factory=list)
     base_mva: float = 100.0
+    frequency_hz: float | None = None
     name: str = ""
     description: str | None = None
 
@@ -166,6 +172,35 @@ class System:
         return parse_pop(filepath)
 
     @classmethod
+    def from_dss(cls, filepath: str | Path) -> System:
+        """Create a System from an OpenDSS .dss file.
+
+        Factory method for creating System instances from OpenDSS script
+        format files (.dss). Uses opendssdirect.py to compile and extract data.
+
+        Args:
+            filepath: Path to the .dss file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file cannot be compiled by OpenDSS
+
+        Example:
+            >>> system = System.from_dss("network.dss")
+            >>> print(f"Loaded {system.num_buses()} buses")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_dss(): Standalone function alternative
+        """
+        from psforge_grid.io.dss_parser import parse_dss
+
+        return parse_dss(filepath)
+
+    @classmethod
     def from_dyna(cls, filepath: str | Path) -> System:
         """Create a System from a CPAT dyna card format file.
 
@@ -195,6 +230,175 @@ class System:
         from psforge_grid.io.dyna_parser import parse_dyna
 
         return parse_dyna(filepath)
+
+    @classmethod
+    def from_json(cls, filepath: str | Path) -> System:
+        """Create a System from a psforge-grid JSON file.
+
+        Factory method for loading System from psforge-grid native JSON
+        format (.psfg.json). Validates the format metadata to prevent
+        loading pglib-uc or other JSON files.
+
+        Args:
+            filepath: Path to the .psfg.json file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file is not a valid psforge-grid JSON file
+
+        Example:
+            >>> system = System.from_json("ieee14.psfg.json")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_json(): Standalone function alternative
+        """
+        from psforge_grid.io.json_parser import parse_json
+
+        return parse_json(filepath)
+
+    # =========================================================================
+    # Export methods (write to file)
+    # =========================================================================
+
+    def to_raw(self, filepath: str | Path) -> None:
+        """Export this System to a PSS/E RAW file.
+
+        Args:
+            filepath: Output file path (.raw)
+
+        Example:
+            >>> system.to_raw("output.raw")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_raw(): Standalone function alternative
+        """
+        from psforge_grid.io.raw_writer import write_raw
+
+        write_raw(self, filepath)
+
+    def to_matpower(self, filepath: str | Path) -> None:
+        """Export this System to a MATPOWER .m file.
+
+        Args:
+            filepath: Output file path (.m)
+
+        Example:
+            >>> system.to_matpower("output.m")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_matpower(): Standalone function alternative
+        """
+        from psforge_grid.io.matpower_writer import write_matpower
+
+        write_matpower(self, filepath)
+
+    def to_pop(self, filepath: str | Path) -> None:
+        """Export this System to a CPAT .pop file.
+
+        Args:
+            filepath: Output file path (.pop)
+
+        Example:
+            >>> system.to_pop("output.pop")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_pop(): Standalone function alternative
+        """
+        from psforge_grid.io.pop_writer import write_pop
+
+        write_pop(self, filepath)
+
+    def to_dss(self, filepath: str | Path) -> None:
+        """Export this System to an OpenDSS .dss file.
+
+        Args:
+            filepath: Output file path (.dss)
+
+        Example:
+            >>> system.to_dss("output.dss")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_dss(): Standalone function alternative
+        """
+        from psforge_grid.io.dss_writer import write_dss
+
+        write_dss(self, filepath)
+
+    def to_dyna(self, filepath: str | Path) -> None:
+        """Export this System to a CPAT .dyna file.
+
+        Args:
+            filepath: Output file path (.dyna)
+
+        Example:
+            >>> system.to_dyna("output.dyna")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_dyna(): Standalone function alternative
+        """
+        from psforge_grid.io.dyna_writer import write_dyna
+
+        write_dyna(self, filepath)
+
+    def to_json(
+        self,
+        filepath: str | Path,
+        *,
+        omit_none: bool = True,
+    ) -> None:
+        """Export this System to a psforge-grid JSON file.
+
+        Args:
+            filepath: Output file path (recommended: .psfg.json)
+            omit_none: If True, omit fields with None values (default: True)
+
+        Example:
+            >>> system.to_json("output.psfg.json")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_json(): Standalone function alternative
+        """
+        from psforge_grid.io.json_writer import write_json
+
+        write_json(self, filepath, omit_none=omit_none)
+
+    def to_file(self, filepath: str | Path) -> None:
+        """Export this System to a file, auto-detecting format from extension.
+
+        Args:
+            filepath: Output file path (extension determines format)
+
+        Raises:
+            ValueError: If the file extension is not recognized
+
+        Example:
+            >>> system.to_file("output.raw")   # PSS/E format
+            >>> system.to_file("output.m")     # MATPOWER format
+            >>> system.to_file("output.pop")   # CPAT Pop format
+            >>> system.to_file("output.dyna")  # CPAT Dyna format
+
+        See Also:
+            - to_raw(), to_matpower(), to_pop(), to_dyna(): Explicit format
+            - WriterFactory: Direct writer access
+        """
+        from psforge_grid.io.factories import WriterFactory
+
+        writer = WriterFactory.from_path(filepath)
+        writer.write(self, filepath)
+
+    # =========================================================================
+    # Factory methods (class methods - read from file)
+    # =========================================================================
 
     @classmethod
     def from_file(cls, filepath: str | Path) -> System:
@@ -411,6 +615,138 @@ class System:
                 errors.append(f"Shunt '{shunt.shunt_id}' at bus {shunt.bus_id}: bus not in system")
 
         return errors
+
+    def validate_detailed(self, strict: bool = False) -> list[dict[str, str]]:
+        """Run detailed validation checks on the system.
+
+        Performs comprehensive validation including structural integrity,
+        voltage magnitude ranges, PV bus generator presence, and branch
+        impedance sign checks. In strict mode, additional checks such as
+        isolated bus detection are enabled, and some warnings are elevated
+        to errors.
+
+        This method extends validate() with power-system-specific heuristic
+        checks useful for data quality assurance and pre-analysis screening.
+
+        Args:
+            strict: If True, enable strict validation mode. This elevates
+                certain warnings to errors and enables additional checks
+                (e.g., isolated bus detection).
+
+        Returns:
+            List of issue dictionaries, each containing:
+                - "level": "error" or "warning"
+                - "message": Human-readable description of the issue
+
+            An empty list means no issues were detected.
+
+        Example:
+            >>> issues = system.validate_detailed()
+            >>> errors = [i for i in issues if i["level"] == "error"]
+            >>> warnings = [i for i in issues if i["level"] == "warning"]
+            >>> if not errors:
+            ...     print("System is ready for analysis")
+        """
+        issues: list[dict[str, str]] = []
+
+        # Check for slack bus
+        slack_buses = self.get_slack_buses()
+        if not slack_buses:
+            issues.append({"level": "error", "message": "No slack (swing) bus found in system"})
+        elif len(slack_buses) > 1:
+            issues.append(
+                {
+                    "level": "warning",
+                    "message": f"Multiple slack buses found: {[b.bus_id for b in slack_buses]}",
+                }
+            )
+
+        # Check voltage magnitudes
+        for bus in self.buses:
+            if bus.v_magnitude < 0.8:
+                issues.append(
+                    {
+                        "level": "error" if strict else "warning",
+                        "message": f"Bus {bus.bus_id}: Very low voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude < 0.9:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Bus {bus.bus_id}: Low voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude > 1.1:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Bus {bus.bus_id}: High voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude > 1.2:
+                issues.append(
+                    {
+                        "level": "error" if strict else "warning",
+                        "message": f"Bus {bus.bus_id}: Very high voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+
+        # Check PV buses have generators
+        pv_buses = self.get_pv_buses()
+        for bus in pv_buses:
+            gens = self.get_bus_generators(bus.bus_id)
+            if not gens:
+                issues.append(
+                    {
+                        "level": "error",
+                        "message": f"PV bus {bus.bus_id} has no generator",
+                    }
+                )
+
+        # Check for negative impedance (typically an error)
+        for branch in self.branches:
+            if branch.x_pu < 0:
+                issues.append(
+                    {
+                        "level": "error",
+                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative reactance X={branch.x_pu:.4f}",
+                    }
+                )
+            if branch.r_pu < 0:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative resistance R={branch.r_pu:.4f}",
+                    }
+                )
+
+        # Strict mode additional checks
+        if strict:
+            # Check all buses are referenced
+            bus_ids = set(self.get_bus_ids())
+            referenced_buses: set[int] = set()
+
+            for branch in self.branches:
+                referenced_buses.add(branch.from_bus)
+                referenced_buses.add(branch.to_bus)
+            for gen in self.generators:
+                referenced_buses.add(gen.bus_id)
+            for load in self.loads:
+                referenced_buses.add(load.bus_id)
+
+            isolated = bus_ids - referenced_buses
+            for bus_id in isolated:
+                found_bus = self.get_bus(bus_id)
+                if found_bus and not found_bus.is_isolated:
+                    issues.append(
+                        {
+                            "level": "warning",
+                            "message": f"Bus {bus_id}: Not referenced by any branch, generator, or load",
+                        }
+                    )
+
+        return issues
 
     # =========================================================================
     # Count methods
