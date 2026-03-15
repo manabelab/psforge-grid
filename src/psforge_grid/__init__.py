@@ -21,6 +21,9 @@ from psforge_grid.models import (
     LimitsConfig,
     Load,
     LoadingStatus,
+    Modification,
+    ScenarioDefinition,
+    ScenarioSet,
     Severity,
     Shunt,
     System,
@@ -28,7 +31,7 @@ from psforge_grid.models import (
     VoltageStatus,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     # Version
@@ -40,6 +43,9 @@ __all__ = [
     "Generator",
     "GeneratorCost",
     "Load",
+    "Modification",
+    "ScenarioDefinition",
+    "ScenarioSet",
     "Shunt",
     # Enums
     "BusType",

@@ -13,12 +13,11 @@ from psforge_grid.io import (
     JsonWriter,
     ParserFactory,
     WriterFactory,
-    load_scenarios,
     parse_json,
     write_json,
-    write_scenario,
 )
 from psforge_grid.io.json_writer import FORMAT_NAME, FORMAT_VERSION
+from psforge_grid.models.scenario import Modification, ScenarioSet
 
 # =========================================================================
 # Fixtures
@@ -278,17 +277,32 @@ class TestFactoryIntegration:
 
 
 class TestScenarioLoader:
-    """Tests for scenario loading with base case + modifications."""
+    """Tests for scenario loading with ScenarioSet API."""
+
+    def _write_scenario_file(
+        self,
+        filepath: Path,
+        base_case: str,
+        scenarios: list[dict],
+    ) -> None:
+        """Helper to write a scenario JSON file."""
+        data = {
+            "metadata": {"format": "psforge-grid-scenario", "version": "1.0"},
+            "base_case": base_case,
+            "scenarios": scenarios,
+        }
+        filepath.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
     def test_load_scenarios(self, simple_system: System, tmp_path: Path) -> None:
         """Load scenarios from a scenario file."""
-        # Write base case
         base_path = tmp_path / "base.psfg.json"
         write_json(simple_system, base_path)
 
-        # Write scenario file
         scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
+        self._write_scenario_file(
             scenario_path,
             base_case="base.psfg.json",
             scenarios=[
@@ -317,7 +331,8 @@ class TestScenarioLoader:
             ],
         )
 
-        scenarios = load_scenarios(scenario_path)
+        scenario_set = ScenarioSet.from_json(scenario_path)
+        scenarios = scenario_set.resolve()
 
         # Base case is included
         assert "base" in scenarios
@@ -342,7 +357,7 @@ class TestScenarioLoader:
         write_json(simple_system, base_path)
 
         scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
+        self._write_scenario_file(
             scenario_path,
             base_case="base.psfg.json",
             scenarios=[
@@ -359,37 +374,16 @@ class TestScenarioLoader:
             ],
         )
 
-        scenarios = load_scenarios(scenario_path)
+        scenarios = ScenarioSet.from_json(scenario_path).resolve()
 
         # Modifying s1 should not affect base
         assert scenarios["base"].branches[0].status == 1
         assert scenarios["s1"].branches[0].status == 0
 
-    def test_scenario_invalid_target(self, simple_system: System, tmp_path: Path) -> None:
-        """Invalid target raises ValueError."""
-        base_path = tmp_path / "base.psfg.json"
-        write_json(simple_system, base_path)
-
-        scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
-            scenario_path,
-            base_case="base.psfg.json",
-            scenarios=[
-                {
-                    "name": "bad",
-                    "modifications": [
-                        {
-                            "target": "transformers",
-                            "match": {},
-                            "set": {"status": 0},
-                        }
-                    ],
-                },
-            ],
-        )
-
+    def test_scenario_invalid_target(self) -> None:
+        """Invalid target raises ValueError at Modification construction."""
         with pytest.raises(ValueError, match="Invalid modification target"):
-            load_scenarios(scenario_path)
+            Modification(target="transformers", match={}, set_values={"status": 0})
 
     def test_scenario_no_match(self, simple_system: System, tmp_path: Path) -> None:
         """Non-matching criteria raises ValueError."""
@@ -397,7 +391,7 @@ class TestScenarioLoader:
         write_json(simple_system, base_path)
 
         scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
+        self._write_scenario_file(
             scenario_path,
             base_case="base.psfg.json",
             scenarios=[
@@ -415,7 +409,7 @@ class TestScenarioLoader:
         )
 
         with pytest.raises(ValueError, match="No buses matched"):
-            load_scenarios(scenario_path)
+            ScenarioSet.from_json(scenario_path).resolve()
 
     def test_scenario_invalid_field(self, simple_system: System, tmp_path: Path) -> None:
         """Invalid field name raises ValueError."""
@@ -423,7 +417,7 @@ class TestScenarioLoader:
         write_json(simple_system, base_path)
 
         scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
+        self._write_scenario_file(
             scenario_path,
             base_case="base.psfg.json",
             scenarios=[
@@ -441,24 +435,24 @@ class TestScenarioLoader:
         )
 
         with pytest.raises(ValueError, match="Invalid field"):
-            load_scenarios(scenario_path)
+            ScenarioSet.from_json(scenario_path).resolve()
 
     def test_scenario_file_not_found(self) -> None:
         """Missing scenario file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
-            load_scenarios("nonexistent.psfg.json")
+            ScenarioSet.from_json("nonexistent.psfg.json")
 
     def test_scenario_base_not_found(self, tmp_path: Path) -> None:
         """Missing base case raises FileNotFoundError."""
         scenario_path = tmp_path / "scenarios.psfg.json"
-        write_scenario(
+        self._write_scenario_file(
             scenario_path,
             base_case="missing_base.psfg.json",
             scenarios=[],
         )
 
         with pytest.raises(FileNotFoundError, match="Base case file not found"):
-            load_scenarios(scenario_path)
+            ScenarioSet.from_json(scenario_path)
 
     def test_reject_non_scenario_format(self, tmp_path: Path) -> None:
         """Reject JSON with wrong format metadata."""
@@ -468,7 +462,7 @@ class TestScenarioLoader:
             encoding="utf-8",
         )
         with pytest.raises(ValueError, match="Not a psforge-grid scenario file"):
-            load_scenarios(bad_file)
+            ScenarioSet.from_json(bad_file)
 
 
 # =========================================================================
@@ -583,7 +577,8 @@ class TestFixtureScenario:
 
     def test_contingency_fixture_loads(self) -> None:
         """N-1 contingency scenario file loads correctly."""
-        scenarios = load_scenarios(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenario_set = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = scenario_set.resolve()
         assert "base" in scenarios
         assert "N-1_Line_1-5" in scenarios
         assert "N-1_Line_2-3" in scenarios
@@ -591,13 +586,13 @@ class TestFixtureScenario:
 
     def test_contingency_base_unchanged(self) -> None:
         """Base case in scenario has all branches in-service."""
-        scenarios = load_scenarios(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json").resolve()
         base = scenarios["base"]
         assert all(b.status == 1 for b in base.branches)
 
     def test_contingency_line_1_5_outage(self) -> None:
         """N-1 Line 1-5 scenario has branch 1-5 out of service."""
-        scenarios = load_scenarios(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json").resolve()
         n1 = scenarios["N-1_Line_1-5"]
         line_1_5 = [b for b in n1.branches if b.from_bus == 1 and b.to_bus == 5]
         assert len(line_1_5) == 1
@@ -609,7 +604,7 @@ class TestFixtureScenario:
 
     def test_contingency_heavy_load(self) -> None:
         """Heavy load scenario doubles load at bus 14."""
-        scenarios = load_scenarios(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json").resolve()
         heavy = scenarios["heavy_load_bus14"]
         load14 = [ld for ld in heavy.loads if ld.bus_id == 14]
         assert len(load14) == 1
@@ -618,7 +613,7 @@ class TestFixtureScenario:
 
     def test_scenarios_are_independent(self) -> None:
         """Modifications in one scenario do not affect others."""
-        scenarios = load_scenarios(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json").resolve()
         # Base has all lines in service
         base_line_1_5 = [b for b in scenarios["base"].branches if b.from_bus == 1 and b.to_bus == 5]
         assert base_line_1_5[0].status == 1
