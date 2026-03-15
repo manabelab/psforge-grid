@@ -507,9 +507,9 @@ class TestDiffCommand:
 
     def test_diff_with_scenario(self, tmp_path: Path) -> None:
         """Diff base vs scenario-modified system."""
-        from psforge_grid.io import load_scenarios
+        from psforge_grid.models.scenario import ScenarioSet
 
-        scenarios = load_scenarios(FIXTURES_DIR / "ieee14_contingencies.psfg.json")
+        scenarios = ScenarioSet.from_json(FIXTURES_DIR / "ieee14_contingencies.psfg.json").resolve()
         n1_path = tmp_path / "n1.psfg.json"
         scenarios["N-1_Line_1-5"].to_json(n1_path)
 
@@ -526,3 +526,57 @@ class TestDiffCommand:
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["summary"]["total_changes"] > 0
+
+
+# =========================================================================
+# Scenario Command Tests
+# =========================================================================
+
+IEEE14_CONTINGENCIES = FIXTURES_DIR / "ieee14_contingencies.psfg.json"
+
+
+class TestScenarioCommand:
+    """Tests for the 'scenario list' command."""
+
+    def test_scenario_list_table(self) -> None:
+        """Test scenario list with default table format."""
+        result = runner.invoke(app, ["scenario", "list", str(IEEE14_CONTINGENCIES)])
+        assert result.exit_code == 0
+        output = strip_ansi(result.stdout)
+        assert "ieee14_contingencies.psfg.json" in output
+        assert "N-1_Line_1-5" in output
+        assert "N-1_Line_2-3" in output
+        assert "heavy_load_bus14" in output
+        assert "3 scenarios defined" in output
+
+    def test_scenario_list_json(self) -> None:
+        """Test scenario list with JSON output."""
+        result = runner.invoke(app, ["scenario", "list", str(IEEE14_CONTINGENCIES), "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["num_scenarios"] == 3
+        assert data["base_case"] == "ieee14.psfg.json"
+        assert data["base_summary"]["buses"] == 14
+        names = [s["name"] for s in data["scenarios"]]
+        assert "N-1_Line_1-5" in names
+        assert "heavy_load_bus14" in names
+
+    def test_scenario_list_summary(self) -> None:
+        """Test scenario list with summary output."""
+        result = runner.invoke(
+            app, ["scenario", "list", str(IEEE14_CONTINGENCIES), "-f", "summary"]
+        )
+        assert result.exit_code == 0
+        output = strip_ansi(result.stdout)
+        assert "14 buses" in output
+        assert "N-1_Line_1-5" in output
+
+    def test_scenario_list_nonexistent_file(self) -> None:
+        """Test scenario list with non-existent file."""
+        result = runner.invoke(app, ["scenario", "list", "nonexistent.psfg.json"])
+        assert result.exit_code == 1
+
+    def test_scenario_list_invalid_format(self) -> None:
+        """Test scenario list with a non-scenario file."""
+        result = runner.invoke(app, ["scenario", "list", str(IEEE14_JSON)])
+        assert result.exit_code == 1
