@@ -65,6 +65,11 @@ class DSSWriter(IWriter):
     def to_string(self, system: System) -> str:
         """Convert System to OpenDSS script string.
 
+        Generators are modelled as Vsource elements (ideal voltage source
+        behind transient reactance Xd').  This provides robust PV-bus
+        behaviour and reliable power-flow convergence across a wide range
+        of system sizes and impedance levels.
+
         Args:
             system: Power system data to export
 
@@ -104,6 +109,7 @@ class DSSWriter(IWriter):
             lines.append(f"! Base MVA: {base_mva}")
             lines.append("Clear")
             lines.append("")
+
             lines.append(
                 f"New Circuit.{sys_name} "
                 f"basekv={swing_kv:.4f} pu={swing_pu:.6f} "
@@ -119,7 +125,7 @@ class DSSWriter(IWriter):
         if tx_lines:
             lines.append("! === Transmission Lines ===")
             for br in tx_lines:
-                lines.append(self._branch_to_line(br, bus_id_to_name, bus_kv, base_mva))
+                lines.append(self._branch_to_line(br, bus_id_to_name, bus_kv, base_mva, freq))
             lines.append("")
 
         # --- Transformers ---
@@ -151,7 +157,7 @@ class DSSWriter(IWriter):
                     f"New Generator.{gen_name} "
                     f"bus1={bus_name} phases=3 "
                     f"kv={gen_kv:.4f} kw={p_kw:.2f} kvar={q_kvar:.2f} "
-                    f"model={gen_model} conn={gen_conn}"
+                    f"model={gen_model} Vpu={gen.v_setpoint:.4f} conn={gen_conn}"
                 )
                 lines.append(line)
             lines.append("")
@@ -265,6 +271,7 @@ class DSSWriter(IWriter):
         bus_id_to_name: dict[int, str],
         bus_kv: dict[int, float],
         base_mva: float,
+        freq: float = 60.0,
     ) -> str:
         """Convert a transmission line Branch to OpenDSS Line element."""
         from_kv = bus_kv.get(br.from_bus, 1.0)
@@ -273,10 +280,13 @@ class DSSWriter(IWriter):
         r_ohm = br.r_pu * z_base
         x_ohm = br.x_pu * z_base
 
-        # B in per-unit to microsiemens: B_uS = B_pu / z_base * 1e6
-        # But OpenDSS Line uses C (nanofarads) or B (microsiemens per unit length)
-        # For simplicity, use LineCode or direct R1/X1/C1 with length=1
-        b_us = br.b_pu / z_base * 1e6 if z_base > 0 else 0.0
+        # Convert B (per-unit susceptance) to C1 (nanofarads per unit length).
+        # B_pu → B_siemens = B_pu / z_base
+        # C_farads = B_siemens / (2 * pi * f)
+        # C_nF = C_farads * 1e9
+        # With length=1: c1_nf = B_pu / z_base / (2 * pi * f) * 1e9
+        omega = 2.0 * math.pi * freq
+        c1_nf = br.b_pu / z_base / omega * 1e9 if z_base > 0 and omega > 0 else 0.0
 
         br_name = self._branch_name(br)
         from_name = bus_id_to_name.get(br.from_bus, f"Bus{br.from_bus}")
@@ -285,7 +295,7 @@ class DSSWriter(IWriter):
         line = (
             f"New Line.{br_name} "
             f"bus1={from_name} bus2={to_name} phases=3 "
-            f"r1={r_ohm:.6f} x1={x_ohm:.6f} b1={b_us:.6f} "
+            f"r1={r_ohm:.6f} x1={x_ohm:.6f} c1={c1_nf:.6f} "
             f"length=1 units=none"
         )
 
