@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-03-15
 
 ### Added
 
@@ -48,9 +48,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/development.md` — development setup guide (moved from README)
 - 28 DSS writer/parser tests (factory, output, compilation, round-trip with bus/gen count verification)
 - 25 writer tests including round-trip verification for all 4 formats
+- CLI: Multi-format support — all commands (`info`, `show`, `validate`) accept any supported format via auto-detection (`from_file()`)
+- CLI: `convert` command — format conversion between any supported formats (e.g., `.raw` → `.psfg.json`)
+- CLI: `describe` command — natural language system description with detail levels (`brief`/`normal`/`full`)
+- CLI: `diff` command — element-level comparison of two power system files (bus/branch/load changes)
+- CLI: `show --where` filter — field expression filtering (e.g., `v_magnitude<0.95`)
+- CLI: `show` element_id filtering — display specific element by ID (e.g., `show buses 1`)
+- `System.validate_detailed()` — structured validation method (moved from CLI internal)
+- `tests/conftest.py` — shared test fixtures (`fixtures_dir`, `ieee14_system`, `ieee9_system`)
+- 32 new CLI tests (multi-format: 7, convert: 8, describe: 6, where: 6, diff: 5)
+
+### Changed
+
+- CLI: Renamed `raw_file` argument to `input_file` to reflect multi-format support
+- `IFormatter`: Added `format_loads()` to the interface and all 4 implementations
+- Refactored `_compute_diff()` into `_diff_buses()`, `_diff_branches()`, `_diff_loads()` helpers
 
 ### Fixed
 
+- `VoltageStatus` duplicate definition removed from `formatters.py` (now imported from `models.enums`)
+- Hardcoded π values replaced with `math.pi`/`math.degrees()` in `bus.py` and `generator.py`
+- Version mismatch in `__init__.py` corrected (`0.3.0` → `0.4.0`)
+- `show` element_id filter used shallow copy instead of `deepcopy` (could mutate original data)
 - PopParser: Handle parallel circuit count (NL) correctly for multi-circuit branches
 - PopParser: Read correct generator X0/X2 fields and transformer Z0 from .pop XML
 - PopParser: Detect CPAT placeholder X0_Saturation (== Xd_Saturation) and treat as undefined to avoid using Xd as X0

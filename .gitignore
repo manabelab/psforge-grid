@@ -180,3 +180,6 @@ pyrightconfig.json
 
 # Notebooks (managed at workspace level)
 notebooks/
+
+# Wiki (managed in psforge-grid.wiki.git)
+wiki/
