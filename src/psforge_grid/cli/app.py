@@ -1,18 +1,27 @@
 """Main CLI application for psforge-grid.
 
-This module defines the Typer application with all commands for inspecting
-and validating power system data files.
+This module defines the Typer application with all commands for inspecting,
+validating, and converting power system data files.
 
 Commands:
     info: Display system summary information
     show: Display detailed element information
     validate: Validate system data consistency
+    convert: Convert between file formats
+
+Supported input formats (auto-detected by extension):
+    .raw: PSS/E RAW (v33/v34)
+    .m: MATPOWER
+    .pop: CPAT Pop (ZIP/XML)
+    .dyna: CPAT Dyna (Fortran cards)
+    .dss: OpenDSS
+    .psfg.json: psforge JSON
 
 Example:
     $ psforge-grid info ieee14.raw
-    $ psforge-grid info ieee14.raw --format json
-    $ psforge-grid show ieee14.raw buses
-    $ psforge-grid validate ieee14.raw --strict
+    $ psforge-grid info case14.m --format json
+    $ psforge-grid show WEST10peak.pop buses
+    $ psforge-grid convert ieee14.raw output.psfg.json
 """
 
 from __future__ import annotations
@@ -79,30 +88,30 @@ def main_callback(
         ),
     ] = None,
 ) -> None:
-    """Power system data inspection and validation CLI.
+    """Power system data inspection, validation, and conversion CLI.
 
-    psforge-grid provides commands for inspecting PSS/E RAW files and other
-    power system data formats. Designed with LLM affinity in mind, supporting
-    multiple output formats including JSON and compact summaries.
+    Supports all psforge-grid formats: PSS/E RAW (.raw), MATPOWER (.m),
+    CPAT (.pop/.dyna), OpenDSS (.dss), and psforge JSON (.psfg.json).
+    Input format is auto-detected from file extension.
 
     Examples:
 
         $ psforge-grid info ieee14.raw
 
-        $ psforge-grid info ieee14.raw --format json
+        $ psforge-grid info case14.m --format json
 
-        $ psforge-grid show ieee14.raw buses
+        $ psforge-grid show WEST10peak.pop buses
 
-        $ psforge-grid validate ieee14.raw
+        $ psforge-grid convert ieee14.raw output.psfg.json
     """
 
 
 @app.command()
 def info(
-    raw_file: Annotated[
+    input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to the PSS/E RAW file.",
+            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -135,8 +144,9 @@ def info(
 ) -> None:
     """Display summary information about a power system.
 
-    Loads a PSS/E RAW file and displays summary statistics including
-    bus counts, branch counts, power balance, and bus type distribution.
+    Loads a power system data file (format auto-detected from extension)
+    and displays summary statistics including bus counts, branch counts,
+    power balance, and bus type distribution.
 
     Output formats:
       - table: Human-readable table (default)
@@ -148,11 +158,9 @@ def info(
 
         $ psforge-grid info ieee14.raw
 
-        $ psforge-grid info ieee14.raw -f json
+        $ psforge-grid info case14.m -f json
 
-        $ psforge-grid info ieee14.raw -f summary
-
-        $ psforge-grid info ieee14.raw -o output.json -f json
+        $ psforge-grid info WEST10peak.pop -f summary
     """
     try:
         # Validate format
@@ -165,11 +173,11 @@ def info(
             )
             raise typer.Exit(1) from None
 
-        # Load system
+        # Load system (auto-detect format from extension)
         if verbose >= 1:
-            console.print(f"[dim]Loading: {raw_file}[/dim]")
+            console.print(f"[dim]Loading: {input_file}[/dim]")
 
-        system = System.from_raw(raw_file)
+        system = System.from_file(input_file)
 
         if verbose >= 2:
             console.print(
@@ -190,7 +198,7 @@ def info(
             console.print(result)
 
     except FileNotFoundError:
-        error_console.print(f"[red]Error:[/red] File not found: {raw_file}")
+        error_console.print(f"[red]Error:[/red] File not found: {input_file}")
         raise typer.Exit(1) from None
     except ValueError as e:
         error_console.print(f"[red]Error:[/red] Failed to parse file: {e}")
@@ -206,10 +214,10 @@ def info(
 
 @app.command()
 def show(
-    raw_file: Annotated[
+    input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to the PSS/E RAW file.",
+            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -255,17 +263,15 @@ def show(
     """Display detailed information about specific elements.
 
     Shows detailed data for buses, branches, generators, or loads.
-    Can filter by specific element ID or show all elements.
+    Input format is auto-detected from file extension.
 
     Examples:
 
         $ psforge-grid show ieee14.raw buses
 
-        $ psforge-grid show ieee14.raw buses 1
+        $ psforge-grid show case14.m branches -f json
 
-        $ psforge-grid show ieee14.raw branches -f json
-
-        $ psforge-grid show ieee14.raw generators -f csv
+        $ psforge-grid show WEST10peak.pop generators -f csv
     """
     try:
         # Validate format
@@ -278,11 +284,11 @@ def show(
             )
             raise typer.Exit(1) from None
 
-        # Load system
+        # Load system (auto-detect format from extension)
         if verbose >= 1:
-            console.print(f"[dim]Loading: {raw_file}[/dim]")
+            console.print(f"[dim]Loading: {input_file}[/dim]")
 
-        system = System.from_raw(raw_file)
+        system = System.from_file(input_file)
         formatter = get_formatter(output_format)
 
         # Format based on element type
@@ -314,7 +320,7 @@ def show(
             console.print(result)
 
     except FileNotFoundError:
-        error_console.print(f"[red]Error:[/red] File not found: {raw_file}")
+        error_console.print(f"[red]Error:[/red] File not found: {input_file}")
         raise typer.Exit(1) from None
     except Exception as e:
         error_console.print(f"[red]Error:[/red] {e}")
@@ -327,10 +333,10 @@ def show(
 
 @app.command()
 def validate(
-    raw_file: Annotated[
+    input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to the PSS/E RAW file.",
+            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -368,19 +374,21 @@ def validate(
     - Invalid voltage values
     - Missing generator at PV buses
 
+    Input format is auto-detected from file extension.
+
     Examples:
 
         $ psforge-grid validate ieee14.raw
 
-        $ psforge-grid validate ieee14.raw --strict
+        $ psforge-grid validate case14.m --strict
 
-        $ psforge-grid validate ieee14.raw -f json
+        $ psforge-grid validate ieee14.psfg.json -f json
     """
     try:
         if verbose >= 1:
-            console.print(f"[dim]Loading: {raw_file}[/dim]")
+            console.print(f"[dim]Loading: {input_file}[/dim]")
 
-        system = System.from_raw(raw_file)
+        system = System.from_file(input_file)
 
         # Run validation
         issues = _validate_system(system, strict=strict)
@@ -436,6 +444,82 @@ def validate(
 
     except typer.Exit:
         raise
+    except Exception as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        if verbose >= 3:
+            import traceback
+
+            error_console.print(traceback.format_exc())
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def convert(
+    input_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to input power system data file.",
+            exists=True,
+            readable=True,
+        ),
+    ],
+    output_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to output file. Format is determined by extension.",
+        ),
+    ],
+    verbose: Annotated[
+        int,
+        typer.Option(
+            "--verbose",
+            "-v",
+            count=True,
+            help="Increase verbosity.",
+        ),
+    ] = 0,
+) -> None:
+    """Convert a power system data file between formats.
+
+    Input and output formats are auto-detected from file extensions.
+
+    Supported formats: .raw, .m, .pop, .dyna, .dss, .psfg.json
+
+    Examples:
+
+        $ psforge-grid convert ieee14.raw ieee14.psfg.json
+
+        $ psforge-grid convert ieee14.raw ieee14.m
+
+        $ psforge-grid convert WEST10peak.pop west10.psfg.json
+    """
+    try:
+        if verbose >= 1:
+            console.print(f"[dim]Loading: {input_file}[/dim]")
+
+        system = System.from_file(input_file)
+
+        if verbose >= 1:
+            console.print(
+                f"[dim]Parsed: {system.num_buses()} buses, {system.num_branches()} branches[/dim]"
+            )
+
+        system.to_file(output_file)
+
+        if verbose >= 1:
+            console.print(f"[dim]Written: {output_file}[/dim]")
+        else:
+            console.print(
+                f"Converted {input_file.name} → {output_file.name} "
+                f"({system.num_buses()} buses, {system.num_branches()} branches)"
+            )
+
+    except FileNotFoundError:
+        error_console.print(f"[red]Error:[/red] File not found: {input_file}")
+        raise typer.Exit(1) from None
+    except ValueError as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
     except Exception as e:
         error_console.print(f"[red]Error:[/red] {e}")
         if verbose >= 3:
