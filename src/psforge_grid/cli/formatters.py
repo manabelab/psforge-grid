@@ -15,39 +15,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from psforge_grid.models.enums import VoltageStatus
+
 if TYPE_CHECKING:
     from psforge_grid.models import System
-
-
-class VoltageStatus(Enum):
-    """Voltage status classification for LLM-friendly output."""
-
-    CRITICAL_LOW = "CRITICAL_LOW"  # < 0.90 pu
-    LOW = "LOW"  # 0.90 - 0.95 pu
-    NORMAL = "NORMAL"  # 0.95 - 1.05 pu
-    HIGH = "HIGH"  # 1.05 - 1.10 pu
-    CRITICAL_HIGH = "CRITICAL_HIGH"  # > 1.10 pu
-
-    @classmethod
-    def from_voltage(cls, v_pu: float) -> VoltageStatus:
-        """Determine voltage status from per-unit voltage magnitude.
-
-        Args:
-            v_pu: Voltage magnitude in per-unit
-
-        Returns:
-            VoltageStatus enum value
-        """
-        if v_pu < 0.90:
-            return cls.CRITICAL_LOW
-        elif v_pu < 0.95:
-            return cls.LOW
-        elif v_pu <= 1.05:
-            return cls.NORMAL
-        elif v_pu <= 1.10:
-            return cls.HIGH
-        else:
-            return cls.CRITICAL_HIGH
 
 
 class OutputFormat(Enum):
@@ -137,6 +108,17 @@ class IFormatter(ABC):
             Formatted string output
         """
 
+    @abstractmethod
+    def format_loads(self, system: System) -> str:
+        """Format load information.
+
+        Args:
+            system: System object containing loads
+
+        Returns:
+            Formatted string output
+        """
+
 
 class TableFormatter(IFormatter):
     """Human-readable table formatter using Rich library."""
@@ -218,7 +200,7 @@ class TableFormatter(IFormatter):
 
         for bus in system.buses:
             type_name = {1: "PQ", 2: "PV", 3: "Slack", 4: "Isolated"}.get(bus.bus_type, "Unknown")
-            status = VoltageStatus.from_voltage(bus.v_magnitude)
+            status = VoltageStatus.from_value(bus.v_magnitude)
             angle_deg = math.degrees(bus.v_angle)
 
             table.add_row(
@@ -307,6 +289,34 @@ class TableFormatter(IFormatter):
 
         return str(capture.get())
 
+    def format_loads(self, system: System) -> str:
+        """Format load list as a table."""
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console(force_terminal=False, width=100)
+
+        table = Table(title="Load Data")
+        table.add_column("Bus", style="cyan", justify="right")
+        table.add_column("ID", style="cyan")
+        table.add_column("P [pu]", style="green", justify="right")
+        table.add_column("Q [pu]", style="green", justify="right")
+        table.add_column("Status", style="magenta")
+
+        for load in system.loads:
+            status = "In-Service" if load.is_in_service else "Out-of-Service"
+            table.add_row(
+                str(load.bus_id),
+                load.load_id or "-",
+                f"{load.p_load:.4f}",
+                f"{load.q_load:.4f}",
+                status,
+            )
+
+        with console.capture() as capture:
+            console.print(table)
+        return str(capture.get())
+
 
 class JsonFormatter(IFormatter):
     """JSON formatter for machine-readable output and LLM processing."""
@@ -349,7 +359,7 @@ class JsonFormatter(IFormatter):
 
         buses = []
         for bus in system.buses:
-            status = VoltageStatus.from_voltage(bus.v_magnitude)
+            status = VoltageStatus.from_value(bus.v_magnitude)
             buses.append(
                 {
                     "bus_id": bus.bus_id,
@@ -398,6 +408,21 @@ class JsonFormatter(IFormatter):
             )
         return json.dumps({"generators": generators}, indent=2)
 
+    def format_loads(self, system: System) -> str:
+        """Format load list as JSON."""
+        loads = []
+        for load in system.loads:
+            loads.append(
+                {
+                    "bus_id": load.bus_id,
+                    "load_id": load.load_id,
+                    "p_pu": round(load.p_load, 4),
+                    "q_pu": round(load.q_load, 4),
+                    "in_service": load.is_in_service,
+                }
+            )
+        return json.dumps({"loads": loads}, indent=2)
+
 
 class SummaryFormatter(IFormatter):
     """Compact summary formatter optimized for LLM token efficiency.
@@ -427,7 +452,7 @@ class SummaryFormatter(IFormatter):
         lines = [f"Buses ({len(system.buses)}):"]
         for bus in system.buses:
             type_name = {1: "PQ", 2: "PV", 3: "Slack", 4: "Isolated"}[bus.bus_type]
-            status = VoltageStatus.from_voltage(bus.v_magnitude)
+            status = VoltageStatus.from_value(bus.v_magnitude)
             angle_deg = math.degrees(bus.v_angle)
             name_part = f" {bus.name}" if bus.name else ""
             lines.append(
@@ -453,6 +478,16 @@ class SummaryFormatter(IFormatter):
         for gen in system.generators:
             status = "ON" if gen.is_in_service else "OFF"
             lines.append(f"  Bus {gen.bus_id}: P={gen.p_gen:.3f}, Q={gen.q_gen:.3f} pu [{status}]")
+        return "\n".join(lines)
+
+    def format_loads(self, system: System) -> str:
+        """Format loads as compact list."""
+        lines = [f"Loads ({len(system.loads)}):"]
+        for load in system.loads:
+            status = "ON" if load.is_in_service else "OFF"
+            lines.append(
+                f"  Bus {load.bus_id}: P={load.p_load:.3f}, Q={load.q_load:.3f} pu [{status}]"
+            )
         return "\n".join(lines)
 
 
@@ -486,7 +521,7 @@ class CsvFormatter(IFormatter):
 
         lines = ["bus_id,name,type,v_pu,angle_deg,base_kv,status"]
         for bus in system.buses:
-            status = VoltageStatus.from_voltage(bus.v_magnitude)
+            status = VoltageStatus.from_value(bus.v_magnitude)
             angle_deg = math.degrees(bus.v_angle)
             name = bus.name or ""
             lines.append(
@@ -519,6 +554,17 @@ class CsvFormatter(IFormatter):
                 f"{gen.bus_id},{gen_id},"
                 f"{gen.p_gen:.4f},{gen.q_gen:.4f},{p_max_str},{p_min_str},"
                 f"{in_service}"
+            )
+        return "\n".join(lines)
+
+    def format_loads(self, system: System) -> str:
+        """Format loads as CSV."""
+        lines = ["bus_id,load_id,p_pu,q_pu,in_service"]
+        for load in system.loads:
+            in_service = 1 if load.is_in_service else 0
+            load_id = load.load_id or ""
+            lines.append(
+                f"{load.bus_id},{load_id},{load.p_load:.4f},{load.q_load:.4f},{in_service}"
             )
         return "\n".join(lines)
 
@@ -568,7 +614,7 @@ def create_system_summary(system: System) -> SystemSummary:
     voltages = [bus.v_magnitude for bus in system.buses]
     voltage_stats: dict[str, int] = {}
     for v in voltages:
-        status = VoltageStatus.from_voltage(v).value
+        status = VoltageStatus.from_value(v).value
         voltage_stats[status] = voltage_stats.get(status, 0) + 1
 
     return SystemSummary(

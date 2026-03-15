@@ -317,8 +317,7 @@ def show(
         elif element == ElementType.generators:
             result = formatter.format_generators(system)
         elif element == ElementType.loads:
-            # Loads formatting (similar to generators)
-            result = _format_loads(system, output_format)
+            result = formatter.format_loads(system)
         else:  # all
             parts = [
                 formatter.format_buses(system),
@@ -326,6 +325,8 @@ def show(
                 formatter.format_branches(system),
                 "",
                 formatter.format_generators(system),
+                "",
+                formatter.format_loads(system),
             ]
             result = "\n".join(parts)
 
@@ -927,67 +928,6 @@ def _apply_where_filter(
         filtered.loads = [ld for ld in system.loads if _matches_where(ld, field, op_str, value_str)]
 
     return filtered
-
-
-def _format_loads(system: System, output_format: OutputFormat) -> str:
-    """Format load information."""
-    import json
-
-    if output_format == OutputFormat.JSON:
-        loads = []
-        for load in system.loads:
-            loads.append(
-                {
-                    "bus_id": load.bus_id,
-                    "load_id": load.load_id,
-                    "p_pu": round(load.p_load, 4),
-                    "q_pu": round(load.q_load, 4),
-                    "in_service": load.is_in_service,
-                }
-            )
-        return json.dumps({"loads": loads}, indent=2)
-    elif output_format == OutputFormat.CSV:
-        lines = ["bus_id,load_id,p_pu,q_pu,in_service"]
-        for load in system.loads:
-            in_service = 1 if load.is_in_service else 0
-            load_id = load.load_id or ""
-            lines.append(
-                f"{load.bus_id},{load_id},{load.p_load:.4f},{load.q_load:.4f},{in_service}"
-            )
-        return "\n".join(lines)
-    elif output_format == OutputFormat.SUMMARY:
-        lines = [f"Loads ({len(system.loads)}):"]
-        for load in system.loads:
-            status = "ON" if load.is_in_service else "OFF"
-            lines.append(
-                f"  Bus {load.bus_id}: P={load.p_load:.3f}, Q={load.q_load:.3f} pu [{status}]"
-            )
-        return "\n".join(lines)
-    else:  # TABLE
-        from rich.console import Console
-        from rich.table import Table
-
-        console = Console(force_terminal=False, width=100)
-        table = Table(title="Load Data")
-        table.add_column("Bus", style="cyan", justify="right")
-        table.add_column("ID", style="cyan")
-        table.add_column("P [pu]", style="green", justify="right")
-        table.add_column("Q [pu]", style="green", justify="right")
-        table.add_column("Status", style="magenta")
-
-        for load in system.loads:
-            status = "In-Service" if load.is_in_service else "Out-of-Service"
-            table.add_row(
-                str(load.bus_id),
-                load.load_id or "-",
-                f"{load.p_load:.4f}",
-                f"{load.q_load:.4f}",
-                status,
-            )
-
-        with console.capture() as capture:
-            console.print(table)
-        return str(capture.get())
 
 
 def _validate_system(system: System, strict: bool = False) -> list[dict]:

@@ -5,6 +5,7 @@ This module defines the Generator class representing power generation units.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -183,7 +184,7 @@ class Generator:
         if self.ra_pu is not None:
             return self.ra_pu
         if self.xdpp_pu is not None and self.ta_s is not None and self.ta_s > 0:
-            omega = 2.0 * 3.141592653589793 * frequency_hz
+            omega = 2.0 * math.pi * frequency_hz
             return self.xdpp_pu / (omega * self.ta_s)
         return None
 
