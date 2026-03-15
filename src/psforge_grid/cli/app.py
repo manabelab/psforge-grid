@@ -26,6 +26,8 @@ Example:
 
 from __future__ import annotations
 
+import operator
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -234,6 +236,17 @@ def show(
             help="Specific element ID to display. If not specified, shows all.",
         ),
     ] = None,
+    where: Annotated[
+        str | None,
+        typer.Option(
+            "--where",
+            "-w",
+            help=(
+                "Filter expression. Examples: 'v_magnitude<0.95', "
+                "'bus_type==3', 'x_pu>0.1', 'status!=1'."
+            ),
+        ),
+    ] = None,
     format: Annotated[
         str,
         typer.Option(
@@ -289,6 +302,11 @@ def show(
             console.print(f"[dim]Loading: {input_file}[/dim]")
 
         system = System.from_file(input_file)
+
+        # Apply --where filter if specified
+        if where:
+            system = _apply_where_filter(system, element, where)
+
         formatter = get_formatter(output_format)
 
         # Format based on element type
@@ -527,6 +545,388 @@ def convert(
 
             error_console.print(traceback.format_exc())
         raise typer.Exit(1) from None
+
+
+@app.command()
+def describe(
+    input_file: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to power system data file.",
+            exists=True,
+            readable=True,
+        ),
+    ],
+    detail: Annotated[
+        str,
+        typer.Option(
+            "--detail",
+            "-d",
+            help="Detail level: brief, normal, or full.",
+        ),
+    ] = "normal",
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: text or markdown.",
+        ),
+    ] = "markdown",
+) -> None:
+    """Generate a natural language description of a power system.
+
+    Produces LLM-ready context that can be directly embedded in prompts.
+    Three detail levels control the amount of information included.
+
+    Detail levels:
+      - brief: System name, size, and power balance (minimal tokens)
+      - normal: Add bus type breakdown and voltage range (default)
+      - full: Add per-component details
+
+    Examples:
+
+        $ psforge-grid describe ieee14.raw
+
+        $ psforge-grid describe case14.m --detail brief
+
+        $ psforge-grid describe ieee14.psfg.json --detail full -f text
+    """
+    try:
+        system = System.from_file(input_file)
+
+        if detail == "brief":
+            result = system.to_description()
+        elif detail == "full":
+            result = system.to_llm_context(
+                include_components=True,
+                format=format,
+            )
+            # Append voltage range and notable elements
+            voltages = [b.v_magnitude for b in system.buses]
+            result += "\n\n### Voltage Range\n"
+            result += f"- Min: {min(voltages):.4f} pu (Bus {system.buses[voltages.index(min(voltages))].bus_id})\n"
+            result += f"- Max: {max(voltages):.4f} pu (Bus {system.buses[voltages.index(max(voltages))].bus_id})\n"
+
+            # Transformers
+            xfmrs = [b for b in system.branches if b.is_transformer]
+            lines = [b for b in system.branches if not b.is_transformer]
+            result += "\n### Branch Breakdown\n"
+            result += f"- Transmission lines: {len(lines)}\n"
+            result += f"- Transformers: {len(xfmrs)}\n"
+        else:  # normal
+            result = system.to_llm_context(
+                include_components=True,
+                format=format,
+            )
+
+        console.print(result)
+
+    except Exception as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def diff(
+    file_a: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to first (base) power system data file.",
+            exists=True,
+            readable=True,
+        ),
+    ],
+    file_b: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to second (modified) power system data file.",
+            exists=True,
+            readable=True,
+        ),
+    ],
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: text or json.",
+        ),
+    ] = "text",
+) -> None:
+    """Compare two power system data files and show differences.
+
+    Useful for N-1 analysis, scenario comparison, and change tracking.
+
+    Examples:
+
+        $ psforge-grid diff base.psfg.json modified.psfg.json
+
+        $ psforge-grid diff ieee14.raw ieee14_modified.raw -f json
+    """
+    try:
+        sys_a = System.from_file(file_a)
+        sys_b = System.from_file(file_b)
+
+        differences = _compute_diff(sys_a, sys_b, file_a.name, file_b.name)
+
+        if format.lower() == "json":
+            import json
+
+            console.print(json.dumps(differences, indent=2))
+        else:
+            _print_diff_text(differences)
+
+    except Exception as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+def _compute_diff(
+    sys_a: System,
+    sys_b: System,
+    name_a: str,
+    name_b: str,
+) -> dict:
+    """Compute differences between two systems."""
+    diff: dict = {
+        "files": {"base": name_a, "modified": name_b},
+        "summary": {},
+        "changes": [],
+    }
+
+    # Component count differences
+    counts = {
+        "buses": (sys_a.num_buses(), sys_b.num_buses()),
+        "branches": (sys_a.num_branches(), sys_b.num_branches()),
+        "generators": (sys_a.num_generators(), sys_b.num_generators()),
+        "loads": (sys_a.num_loads(), sys_b.num_loads()),
+        "shunts": (sys_a.num_shunts(), sys_b.num_shunts()),
+    }
+
+    for comp, (count_a, count_b) in counts.items():
+        if count_a != count_b:
+            diff["summary"][comp] = {"base": count_a, "modified": count_b}
+
+    p_gen_a, q_gen_a = sys_a.total_generation()
+    p_gen_b, q_gen_b = sys_b.total_generation()
+    p_load_a, q_load_a = sys_a.total_load()
+    p_load_b, q_load_b = sys_b.total_load()
+
+    if abs(p_gen_a - p_gen_b) > 1e-6 or abs(q_gen_a - q_gen_b) > 1e-6:
+        diff["summary"]["generation"] = {
+            "base_p_pu": round(p_gen_a, 4),
+            "modified_p_pu": round(p_gen_b, 4),
+            "base_q_pu": round(q_gen_a, 4),
+            "modified_q_pu": round(q_gen_b, 4),
+        }
+
+    if abs(p_load_a - p_load_b) > 1e-6 or abs(q_load_a - q_load_b) > 1e-6:
+        diff["summary"]["load"] = {
+            "base_p_pu": round(p_load_a, 4),
+            "modified_p_pu": round(p_load_b, 4),
+            "base_q_pu": round(q_load_a, 4),
+            "modified_q_pu": round(q_load_b, 4),
+        }
+
+    # Bus-level differences
+    buses_a = {b.bus_id: b for b in sys_a.buses}
+    buses_b = {b.bus_id: b for b in sys_b.buses}
+
+    for bus_id in sorted(set(buses_a) | set(buses_b)):
+        if bus_id not in buses_a:
+            diff["changes"].append({"type": "bus", "id": bus_id, "action": "added"})
+        elif bus_id not in buses_b:
+            diff["changes"].append({"type": "bus", "id": bus_id, "action": "removed"})
+        else:
+            ba, bb = buses_a[bus_id], buses_b[bus_id]
+            changes: dict = {}
+            if ba.bus_type != bb.bus_type:
+                changes["bus_type"] = {"base": ba.bus_type, "modified": bb.bus_type}
+            if abs(ba.v_magnitude - bb.v_magnitude) > 1e-6:
+                changes["v_magnitude"] = {
+                    "base": round(ba.v_magnitude, 6),
+                    "modified": round(bb.v_magnitude, 6),
+                }
+            if changes:
+                diff["changes"].append(
+                    {"type": "bus", "id": bus_id, "action": "changed", "fields": changes}
+                )
+
+    # Branch-level differences (status changes are most common in N-1)
+    branches_a = {(b.from_bus, b.to_bus, b.circuit_id): b for b in sys_a.branches}
+    branches_b = {(b.from_bus, b.to_bus, b.circuit_id): b for b in sys_b.branches}
+
+    for br_key in sorted(set(branches_a) | set(branches_b)):
+        label = f"{br_key[0]}-{br_key[1]}({br_key[2]})"
+        if br_key not in branches_a:
+            diff["changes"].append({"type": "branch", "id": label, "action": "added"})
+        elif br_key not in branches_b:
+            diff["changes"].append({"type": "branch", "id": label, "action": "removed"})
+        else:
+            br_a, br_b = branches_a[br_key], branches_b[br_key]
+            changes = {}
+            if br_a.status != br_b.status:
+                changes["status"] = {"base": br_a.status, "modified": br_b.status}
+            if abs(br_a.r_pu - br_b.r_pu) > 1e-6:
+                changes["r_pu"] = {"base": round(br_a.r_pu, 6), "modified": round(br_b.r_pu, 6)}
+            if abs(br_a.x_pu - br_b.x_pu) > 1e-6:
+                changes["x_pu"] = {"base": round(br_a.x_pu, 6), "modified": round(br_b.x_pu, 6)}
+            if abs(br_a.tap_ratio - br_b.tap_ratio) > 1e-6:
+                changes["tap_ratio"] = {
+                    "base": round(br_a.tap_ratio, 6),
+                    "modified": round(br_b.tap_ratio, 6),
+                }
+            if changes:
+                diff["changes"].append(
+                    {"type": "branch", "id": label, "action": "changed", "fields": changes}
+                )
+
+    # Load-level differences
+    loads_a = {(ld.bus_id, ld.load_id): ld for ld in sys_a.loads}
+    loads_b = {(ld.bus_id, ld.load_id): ld for ld in sys_b.loads}
+
+    for ld_key in sorted(set(loads_a) | set(loads_b)):
+        label = f"Bus{ld_key[0]}({ld_key[1]})"
+        if ld_key not in loads_a:
+            diff["changes"].append({"type": "load", "id": label, "action": "added"})
+        elif ld_key not in loads_b:
+            diff["changes"].append({"type": "load", "id": label, "action": "removed"})
+        else:
+            ld_a, ld_b = loads_a[ld_key], loads_b[ld_key]
+            changes = {}
+            if abs(ld_a.p_load - ld_b.p_load) > 1e-6:
+                changes["p_load"] = {
+                    "base": round(ld_a.p_load, 4),
+                    "modified": round(ld_b.p_load, 4),
+                }
+            if abs(ld_a.q_load - ld_b.q_load) > 1e-6:
+                changes["q_load"] = {
+                    "base": round(ld_a.q_load, 4),
+                    "modified": round(ld_b.q_load, 4),
+                }
+            if changes:
+                diff["changes"].append(
+                    {"type": "load", "id": label, "action": "changed", "fields": changes}
+                )
+
+    diff["summary"]["total_changes"] = len(diff["changes"])
+    return diff
+
+
+def _print_diff_text(differences: dict) -> None:
+    """Print diff results in human-readable text format."""
+    files = differences["files"]
+    console.print(f"Comparing: {files['base']} vs {files['modified']}")
+    console.print()
+
+    summary = differences["summary"]
+    total = summary.get("total_changes", 0)
+
+    if total == 0:
+        console.print("[green]No differences found.[/green]")
+        return
+
+    console.print(f"[bold]{total} change(s) detected:[/bold]")
+    console.print()
+
+    for change in differences["changes"]:
+        action = change["action"]
+        elem_type = change["type"]
+        elem_id = change["id"]
+
+        if action == "added":
+            console.print(f"  [green]+ {elem_type} {elem_id}[/green]")
+        elif action == "removed":
+            console.print(f"  [red]- {elem_type} {elem_id}[/red]")
+        else:
+            fields = change.get("fields", {})
+            field_strs = []
+            for field_name, vals in fields.items():
+                field_strs.append(f"{field_name}: {vals['base']} → {vals['modified']}")
+            console.print(f"  [yellow]~ {elem_type} {elem_id}[/yellow]: {', '.join(field_strs)}")
+
+
+_OPERATORS = {
+    "<=": operator.le,
+    ">=": operator.ge,
+    "!=": operator.ne,
+    "==": operator.eq,
+    "<": operator.lt,
+    ">": operator.gt,
+}
+
+_WHERE_PATTERN = re.compile(r"^(\w+)\s*(<=|>=|!=|==|<|>)\s*(.+)$")
+
+
+def _parse_where(expr: str) -> tuple[str, str, str]:
+    """Parse a where expression like 'v_magnitude<0.95'.
+
+    Returns:
+        Tuple of (field_name, operator_str, value_str)
+
+    Raises:
+        ValueError: If expression cannot be parsed
+    """
+    match = _WHERE_PATTERN.match(expr.strip())
+    if not match:
+        raise ValueError(
+            f"Invalid filter expression: '{expr}'. "
+            f"Expected format: 'field_name<operator>value' "
+            f"(e.g., 'v_magnitude<0.95', 'bus_type==3', 'status!=1')"
+        )
+    return match.group(1), match.group(2), match.group(3)
+
+
+def _matches_where(element: object, field: str, op_str: str, value_str: str) -> bool:
+    """Check if an element matches a where condition."""
+    if not hasattr(element, field):
+        return False
+
+    attr = getattr(element, field)
+    if attr is None:
+        return False
+
+    # Try numeric comparison first
+    try:
+        num_value: float | int = float(value_str)
+        if isinstance(attr, int) and "." not in value_str:
+            num_value = int(value_str)
+        return bool(_OPERATORS[op_str](attr, num_value))
+    except (ValueError, TypeError):
+        # Fall back to string comparison
+        return bool(_OPERATORS[op_str](str(attr), value_str))
+
+
+def _apply_where_filter(
+    system: System,
+    element: ElementType,
+    where: str,
+) -> System:
+    """Apply a where filter to a system, returning a filtered copy.
+
+    Only filters the specified element type. Other components are kept as-is.
+    """
+    import copy
+
+    field, op_str, value_str = _parse_where(where)
+
+    filtered = copy.copy(system)
+
+    if element == ElementType.buses or element == ElementType.all:
+        filtered.buses = [b for b in system.buses if _matches_where(b, field, op_str, value_str)]
+    if element == ElementType.branches or element == ElementType.all:
+        filtered.branches = [
+            b for b in system.branches if _matches_where(b, field, op_str, value_str)
+        ]
+    if element == ElementType.generators or element == ElementType.all:
+        filtered.generators = [
+            g for g in system.generators if _matches_where(g, field, op_str, value_str)
+        ]
+    if element == ElementType.loads or element == ElementType.all:
+        filtered.loads = [ld for ld in system.loads if _matches_where(ld, field, op_str, value_str)]
+
+    return filtered
 
 
 def _format_loads(system: System, output_format: OutputFormat) -> str:
