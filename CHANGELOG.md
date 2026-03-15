@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-format model fields: `Branch.winding_connection`, `nomv_from`, `nomv_to`, `sbase_mva`, `mag_g`, `mag_b`; `Generator.kv`, `connection`, `model_type`, `rneut`, `xneut`; `Load.kv`, `connection`, `model_type`; `Shunt.kv`, `connection`, `num_steps`; `System.frequency_hz`
 - `Branch.reg_control_mode`, `reg_target_voltage_pu`, `tap_max`, `tap_min` — voltage regulation fields from CPAT .pop
 - `opendssdirect.py` as core dependency for OpenDSS interoperability
+- `JsonWriter` — exports System to psforge-grid JSON format (`.psfg.json`)
+  - Human/LLM-friendly format with metadata (`"format": "psforge-grid"`, `"version": "1.0"`)
+  - `None` fields omitted by default for compact output (`omit_none=True`)
+  - Snake_case field names with unit suffixes (`_pu`, `_mw`, `_kv`)
+- `JsonParser` — imports `.psfg.json` files with format validation (rejects pglib-uc and other JSON)
+- `System.from_json()` and `System.to_json()` facade methods
+- `load_scenarios()` — load base case + differential modifications for N-1 / parametric studies
+- `write_scenario()` — write scenario definition files (`"format": "psforge-grid-scenario"`)
+- Compound extension support in `ParserFactory.from_path()` and `WriterFactory.from_path()` for `.psfg.json`
+- JSON fixture files: `ieee14.psfg.json`, `ieee9.psfg.json`, `WEST10peak.psfg.json`, `ieee14_contingencies.psfg.json`
+- 41 JSON I/O tests (writer, parser, factory, fixture validation, scenario loading)
+- `docs/development.md` — development setup guide (moved from README)
 - 28 DSS writer/parser tests (factory, output, compilation, round-trip with bus/gen count verification)
 - 25 writer tests including round-trip verification for all 4 formats
 

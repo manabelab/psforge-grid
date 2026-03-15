@@ -231,6 +231,35 @@ class System:
 
         return parse_dyna(filepath)
 
+    @classmethod
+    def from_json(cls, filepath: str | Path) -> System:
+        """Create a System from a psforge-grid JSON file.
+
+        Factory method for loading System from psforge-grid native JSON
+        format (.psfg.json). Validates the format metadata to prevent
+        loading pglib-uc or other JSON files.
+
+        Args:
+            filepath: Path to the .psfg.json file
+
+        Returns:
+            System object containing all parsed power system data
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist
+            ValueError: If the file is not a valid psforge-grid JSON file
+
+        Example:
+            >>> system = System.from_json("ieee14.psfg.json")
+
+        See Also:
+            - from_file(): Auto-detect format from extension
+            - parse_json(): Standalone function alternative
+        """
+        from psforge_grid.io.json_parser import parse_json
+
+        return parse_json(filepath)
+
     # =========================================================================
     # Export methods (write to file)
     # =========================================================================
@@ -319,6 +348,29 @@ class System:
         from psforge_grid.io.dyna_writer import write_dyna
 
         write_dyna(self, filepath)
+
+    def to_json(
+        self,
+        filepath: str | Path,
+        *,
+        omit_none: bool = True,
+    ) -> None:
+        """Export this System to a psforge-grid JSON file.
+
+        Args:
+            filepath: Output file path (recommended: .psfg.json)
+            omit_none: If True, omit fields with None values (default: True)
+
+        Example:
+            >>> system.to_json("output.psfg.json")
+
+        See Also:
+            - to_file(): Auto-detect format from extension
+            - write_json(): Standalone function alternative
+        """
+        from psforge_grid.io.json_writer import write_json
+
+        write_json(self, filepath, omit_none=omit_none)
 
     def to_file(self, filepath: str | Path) -> None:
         """Export this System to a file, auto-detecting format from extension.

@@ -34,6 +34,8 @@ from psforge_grid.io.dss_parser import DSSParser, parse_dss
 from psforge_grid.io.dss_writer import DSSWriter, write_dss
 from psforge_grid.io.dyna_writer import DynaWriter, write_dyna
 from psforge_grid.io.factories import ParserFactory, WriterFactory
+from psforge_grid.io.json_parser import JsonParser, parse_json
+from psforge_grid.io.json_writer import JsonWriter, write_json
 from psforge_grid.io.matpower_parser import MatpowerParser, parse_matpower
 from psforge_grid.io.matpower_writer import MatpowerWriter, write_matpower
 from psforge_grid.io.pop_parser import PopParser, parse_pop
@@ -41,6 +43,7 @@ from psforge_grid.io.pop_writer import PopWriter, write_pop
 from psforge_grid.io.protocols import IParser, IWriter
 from psforge_grid.io.raw_parser import RawParser, parse_raw
 from psforge_grid.io.raw_writer import RawWriter, write_raw
+from psforge_grid.io.scenario_loader import load_scenarios, write_scenario
 
 __all__ = [
     # Parse functions
@@ -49,12 +52,17 @@ __all__ = [
     "parse_pop",
     "parse_dyna",
     "parse_dss",
+    "parse_json",
     # Write functions
     "write_raw",
     "write_matpower",
     "write_pop",
     "write_dyna",
     "write_dss",
+    "write_json",
+    # Scenario functions
+    "load_scenarios",
+    "write_scenario",
     # Interfaces
     "IParser",
     "IWriter",
@@ -66,10 +74,12 @@ __all__ = [
     "MatpowerParser",
     "PopParser",
     "DSSParser",
+    "JsonParser",
     # Writer implementations
     "RawWriter",
     "MatpowerWriter",
     "PopWriter",
     "DynaWriter",
     "DSSWriter",
+    "JsonWriter",
 ]

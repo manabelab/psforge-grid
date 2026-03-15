@@ -1,0 +1,305 @@
+{
+  "metadata": {
+    "format": "psforge-grid",
+    "version": "1.0",
+    "created": "2026-03-15T03:23:45.332892+00:00"
+  },
+  "system": {
+    "name": "ieee9.raw",
+    "base_mva": 100.0
+  },
+  "buses": [
+    {
+      "bus_id": 1,
+      "bus_type": 3,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 16.5,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS1        "
+    },
+    {
+      "bus_id": 2,
+      "bus_type": 2,
+      "v_magnitude": 1.0,
+      "v_angle": 0.16871050681477986,
+      "base_kv": 18.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS2        "
+    },
+    {
+      "bus_id": 3,
+      "bus_type": 2,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0832591866371375,
+      "base_kv": 13.8,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS3        "
+    },
+    {
+      "bus_id": 4,
+      "bus_type": 1,
+      "v_magnitude": 0.98702,
+      "v_angle": -0.04199262180298357,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS4        "
+    },
+    {
+      "bus_id": 5,
+      "bus_type": 1,
+      "v_magnitude": 0.95765,
+      "v_angle": -0.07589913318147741,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS5        "
+    },
+    {
+      "bus_id": 6,
+      "bus_type": 1,
+      "v_magnitude": 0.97549,
+      "v_angle": -0.07009940407710026,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS6        "
+    },
+    {
+      "bus_id": 7,
+      "bus_type": 1,
+      "v_magnitude": 0.99619,
+      "v_angle": 0.06627713301523268,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS7        "
+    },
+    {
+      "bus_id": 8,
+      "bus_type": 1,
+      "v_magnitude": 0.98566,
+      "v_angle": 0.010835003996380797,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS8        "
+    },
+    {
+      "bus_id": 9,
+      "bus_type": 1,
+      "v_magnitude": 1.00338,
+      "v_angle": 0.03359933343014284,
+      "base_kv": 230.0,
+      "area": 1,
+      "zone": 1,
+      "v_max": 1.1,
+      "v_min": 0.9,
+      "name": "BUS9        "
+    }
+  ],
+  "branches": [
+    {
+      "from_bus": 4,
+      "to_bus": 5,
+      "r_pu": 0.01,
+      "x_pu": 0.085,
+      "b_pu": 0.176,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 250.0,
+      "rate_b": 250.0,
+      "rate_c": 250.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 4,
+      "to_bus": 6,
+      "r_pu": 0.017,
+      "x_pu": 0.092,
+      "b_pu": 0.158,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 250.0,
+      "rate_b": 250.0,
+      "rate_c": 250.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 5,
+      "to_bus": 7,
+      "r_pu": 0.032,
+      "x_pu": 0.161,
+      "b_pu": 0.306,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 250.0,
+      "rate_b": 250.0,
+      "rate_c": 250.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 6,
+      "to_bus": 9,
+      "r_pu": 0.039,
+      "x_pu": 0.17,
+      "b_pu": 0.358,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 150.0,
+      "rate_b": 150.0,
+      "rate_c": 150.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 7,
+      "to_bus": 8,
+      "r_pu": 0.0085,
+      "x_pu": 0.072,
+      "b_pu": 0.149,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 250.0,
+      "rate_b": 250.0,
+      "rate_c": 250.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 8,
+      "to_bus": 9,
+      "r_pu": 0.0119,
+      "x_pu": 0.1008,
+      "b_pu": 0.209,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "rate_a": 150.0,
+      "rate_b": 150.0,
+      "rate_c": 150.0,
+      "status": 1,
+      "circuit_id": "1 "
+    },
+    {
+      "from_bus": 1,
+      "to_bus": 4,
+      "r_pu": 0.0,
+      "x_pu": 0.0576,
+      "b_pu": 0.0,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "status": 1,
+      "circuit_id": "1 ",
+      "sbase_mva": 100.0,
+      "is_xfmr": true
+    },
+    {
+      "from_bus": 2,
+      "to_bus": 7,
+      "r_pu": 0.0,
+      "x_pu": 0.0625,
+      "b_pu": 0.0,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "status": 1,
+      "circuit_id": "1 ",
+      "sbase_mva": 100.0,
+      "is_xfmr": true
+    },
+    {
+      "from_bus": 3,
+      "to_bus": 9,
+      "r_pu": 0.0,
+      "x_pu": 0.0586,
+      "b_pu": 0.0,
+      "tap_ratio": 1.0,
+      "shift_angle": 0.0,
+      "status": 1,
+      "circuit_id": "1 ",
+      "sbase_mva": 100.0,
+      "is_xfmr": true
+    }
+  ],
+  "generators": [
+    {
+      "bus_id": 1,
+      "p_gen": 0.7193600000000001,
+      "q_gen": 0.24047999999999997,
+      "v_setpoint": 1.0,
+      "q_max": 3.0,
+      "q_min": -3.0,
+      "mbase": 260.0,
+      "status": 1,
+      "gen_id": "1 "
+    },
+    {
+      "bus_id": 2,
+      "p_gen": 1.63,
+      "q_gen": 0.14444,
+      "v_setpoint": 1.0,
+      "q_max": 3.0,
+      "q_min": -3.0,
+      "mbase": 310.0,
+      "status": 1,
+      "gen_id": "1 "
+    },
+    {
+      "bus_id": 3,
+      "p_gen": 0.85,
+      "q_gen": -0.0366,
+      "v_setpoint": 1.0,
+      "q_max": 3.0,
+      "q_min": -3.0,
+      "mbase": 280.0,
+      "status": 1,
+      "gen_id": "1 "
+    }
+  ],
+  "loads": [
+    {
+      "bus_id": 5,
+      "p_load": 1.25,
+      "q_load": 0.5,
+      "status": 1,
+      "load_id": "1 "
+    },
+    {
+      "bus_id": 6,
+      "p_load": 0.9,
+      "q_load": 0.3,
+      "status": 1,
+      "load_id": "1 "
+    },
+    {
+      "bus_id": 8,
+      "p_load": 1.0,
+      "q_load": 0.35,
+      "status": 1,
+      "load_id": "1 "
+    }
+  ],
+  "shunts": []
+}

@@ -54,6 +54,7 @@ class ParserFactory:
         "pop": "psforge_grid.io.pop_parser.PopParser",
         "dyna": "psforge_grid.io.dyna_parser.DynaParser",
         "dss": "psforge_grid.io.dss_parser.DSSParser",
+        "json": "psforge_grid.io.json_parser.JsonParser",
     }
 
     # Extension to format mapping
@@ -65,6 +66,7 @@ class ParserFactory:
         "dyna": "dyna",
         "dss": "dss",
         "DSS": "dss",
+        "psfg.json": "json",
     }
 
     @staticmethod
@@ -109,6 +111,10 @@ class ParserFactory:
             from psforge_grid.io.dss_parser import DSSParser
 
             return DSSParser()
+        elif format_type == "json":
+            from psforge_grid.io.json_parser import JsonParser
+
+            return JsonParser()
         else:
             available = ParserFactory.available_formats()
             raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
@@ -149,7 +155,8 @@ class ParserFactory:
         """Create a parser based on file path.
 
         Extracts the extension from the file path and creates
-        the appropriate parser.
+        the appropriate parser. Supports compound extensions
+        like ``.psfg.json``.
 
         Args:
             filepath: Path to the data file
@@ -162,8 +169,13 @@ class ParserFactory:
 
         Example:
             >>> parser = ParserFactory.from_path("path/to/ieee14.raw")
+            >>> parser = ParserFactory.from_path("data.psfg.json")
         """
         path = Path(filepath)
+        # Check compound extension first (e.g., .psfg.json)
+        compound_ext = "".join(path.suffixes).lstrip(".")
+        if compound_ext in ParserFactory._EXTENSION_MAP:
+            return ParserFactory.from_extension(compound_ext)
         extension = path.suffix
         if not extension:
             raise ValueError(f"Cannot determine format: file has no extension: {path}")
@@ -180,7 +192,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        return ["raw", "matpower", "pop", "dyna", "dss"]
+        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
@@ -191,7 +203,7 @@ class ParserFactory:
 
         Example:
             >>> extensions = ParserFactory.supported_extensions()
-            >>> print(extensions)  # ['raw', 'RAW']
+            >>> print(extensions)  # ['raw', 'RAW', 'psfg.json']
         """
         return list(ParserFactory._EXTENSION_MAP.keys())
 
@@ -226,6 +238,7 @@ class WriterFactory:
         "dyna": "dyna",
         "dss": "dss",
         "DSS": "dss",
+        "psfg.json": "json",
     }
 
     @staticmethod
@@ -269,6 +282,10 @@ class WriterFactory:
             from psforge_grid.io.dss_writer import DSSWriter
 
             return DSSWriter()
+        elif format_type == "json":
+            from psforge_grid.io.json_writer import JsonWriter
+
+            return JsonWriter()
         else:
             available = WriterFactory.available_formats()
             raise ValueError(f"Unknown format: '{format_type}'. Available formats: {available}")
@@ -302,6 +319,8 @@ class WriterFactory:
     def from_path(filepath: str | Path) -> IWriter:
         """Create a writer based on file path.
 
+        Supports compound extensions like ``.psfg.json``.
+
         Args:
             filepath: Path to the output file
 
@@ -313,8 +332,13 @@ class WriterFactory:
 
         Example:
             >>> writer = WriterFactory.from_path("output.raw")
+            >>> writer = WriterFactory.from_path("output.psfg.json")
         """
         path = Path(filepath)
+        # Check compound extension first (e.g., .psfg.json)
+        compound_ext = "".join(path.suffixes).lstrip(".")
+        if compound_ext in WriterFactory._EXTENSION_MAP:
+            return WriterFactory.from_extension(compound_ext)
         extension = path.suffix
         if not extension:
             raise ValueError(f"Cannot determine format: file has no extension: {path}")
@@ -327,7 +351,7 @@ class WriterFactory:
         Returns:
             List of format names that can be passed to create()
         """
-        return ["raw", "matpower", "pop", "dyna", "dss"]
+        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
