@@ -410,7 +410,7 @@ def validate(
         system = System.from_file(input_file)
 
         # Run validation
-        issues = _validate_system(system, strict=strict)
+        issues = system.validate_detailed(strict=strict)
 
         # Format output
         if format.lower() == "json":
@@ -683,13 +683,152 @@ def diff(
         raise typer.Exit(1) from None
 
 
+def _diff_buses(
+    buses_a: list,
+    buses_b: list,
+) -> list[dict]:
+    """Compute per-bus differences between two systems.
+
+    Args:
+        buses_a: Buses from the base system.
+        buses_b: Buses from the modified system.
+
+    Returns:
+        List of change dicts with keys: type, id, action, and optionally fields.
+    """
+    changes: list[dict] = []
+    map_a = {b.bus_id: b for b in buses_a}
+    map_b = {b.bus_id: b for b in buses_b}
+
+    for bus_id in sorted(set(map_a) | set(map_b)):
+        if bus_id not in map_a:
+            changes.append({"type": "bus", "id": bus_id, "action": "added"})
+        elif bus_id not in map_b:
+            changes.append({"type": "bus", "id": bus_id, "action": "removed"})
+        else:
+            ba, bb = map_a[bus_id], map_b[bus_id]
+            field_changes: dict = {}
+            if ba.bus_type != bb.bus_type:
+                field_changes["bus_type"] = {"base": ba.bus_type, "modified": bb.bus_type}
+            if abs(ba.v_magnitude - bb.v_magnitude) > 1e-6:
+                field_changes["v_magnitude"] = {
+                    "base": round(ba.v_magnitude, 6),
+                    "modified": round(bb.v_magnitude, 6),
+                }
+            if field_changes:
+                changes.append(
+                    {"type": "bus", "id": bus_id, "action": "changed", "fields": field_changes}
+                )
+
+    return changes
+
+
+def _diff_branches(
+    branches_a: list,
+    branches_b: list,
+) -> list[dict]:
+    """Compute per-branch differences between two systems.
+
+    Args:
+        branches_a: Branches from the base system.
+        branches_b: Branches from the modified system.
+
+    Returns:
+        List of change dicts with keys: type, id, action, and optionally fields.
+    """
+    changes: list[dict] = []
+    map_a = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_a}
+    map_b = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_b}
+
+    for br_key in sorted(set(map_a) | set(map_b)):
+        label = f"{br_key[0]}-{br_key[1]}({br_key[2]})"
+        if br_key not in map_a:
+            changes.append({"type": "branch", "id": label, "action": "added"})
+        elif br_key not in map_b:
+            changes.append({"type": "branch", "id": label, "action": "removed"})
+        else:
+            br_a, br_b = map_a[br_key], map_b[br_key]
+            field_changes: dict = {}
+            if br_a.status != br_b.status:
+                field_changes["status"] = {"base": br_a.status, "modified": br_b.status}
+            if abs(br_a.r_pu - br_b.r_pu) > 1e-6:
+                field_changes["r_pu"] = {
+                    "base": round(br_a.r_pu, 6),
+                    "modified": round(br_b.r_pu, 6),
+                }
+            if abs(br_a.x_pu - br_b.x_pu) > 1e-6:
+                field_changes["x_pu"] = {
+                    "base": round(br_a.x_pu, 6),
+                    "modified": round(br_b.x_pu, 6),
+                }
+            if abs(br_a.tap_ratio - br_b.tap_ratio) > 1e-6:
+                field_changes["tap_ratio"] = {
+                    "base": round(br_a.tap_ratio, 6),
+                    "modified": round(br_b.tap_ratio, 6),
+                }
+            if field_changes:
+                changes.append(
+                    {"type": "branch", "id": label, "action": "changed", "fields": field_changes}
+                )
+
+    return changes
+
+
+def _diff_loads(
+    loads_a: list,
+    loads_b: list,
+) -> list[dict]:
+    """Compute per-load differences between two systems.
+
+    Args:
+        loads_a: Loads from the base system.
+        loads_b: Loads from the modified system.
+
+    Returns:
+        List of change dicts with keys: type, id, action, and optionally fields.
+    """
+    changes: list[dict] = []
+    map_a = {(ld.bus_id, ld.load_id): ld for ld in loads_a}
+    map_b = {(ld.bus_id, ld.load_id): ld for ld in loads_b}
+
+    for ld_key in sorted(set(map_a) | set(map_b)):
+        label = f"Bus{ld_key[0]}({ld_key[1]})"
+        if ld_key not in map_a:
+            changes.append({"type": "load", "id": label, "action": "added"})
+        elif ld_key not in map_b:
+            changes.append({"type": "load", "id": label, "action": "removed"})
+        else:
+            ld_a, ld_b = map_a[ld_key], map_b[ld_key]
+            field_changes: dict = {}
+            if abs(ld_a.p_load - ld_b.p_load) > 1e-6:
+                field_changes["p_load"] = {
+                    "base": round(ld_a.p_load, 4),
+                    "modified": round(ld_b.p_load, 4),
+                }
+            if abs(ld_a.q_load - ld_b.q_load) > 1e-6:
+                field_changes["q_load"] = {
+                    "base": round(ld_a.q_load, 4),
+                    "modified": round(ld_b.q_load, 4),
+                }
+            if field_changes:
+                changes.append(
+                    {"type": "load", "id": label, "action": "changed", "fields": field_changes}
+                )
+
+    return changes
+
+
 def _compute_diff(
     sys_a: System,
     sys_b: System,
     name_a: str,
     name_b: str,
 ) -> dict:
-    """Compute differences between two systems."""
+    """Compute differences between two systems.
+
+    Orchestrates element-level diff helpers and aggregates results into
+    a single diff dict with summary counts and per-element changes.
+    """
     diff: dict = {
         "files": {"base": name_a, "modified": name_b},
         "summary": {},
@@ -730,86 +869,10 @@ def _compute_diff(
             "modified_q_pu": round(q_load_b, 4),
         }
 
-    # Bus-level differences
-    buses_a = {b.bus_id: b for b in sys_a.buses}
-    buses_b = {b.bus_id: b for b in sys_b.buses}
-
-    for bus_id in sorted(set(buses_a) | set(buses_b)):
-        if bus_id not in buses_a:
-            diff["changes"].append({"type": "bus", "id": bus_id, "action": "added"})
-        elif bus_id not in buses_b:
-            diff["changes"].append({"type": "bus", "id": bus_id, "action": "removed"})
-        else:
-            ba, bb = buses_a[bus_id], buses_b[bus_id]
-            changes: dict = {}
-            if ba.bus_type != bb.bus_type:
-                changes["bus_type"] = {"base": ba.bus_type, "modified": bb.bus_type}
-            if abs(ba.v_magnitude - bb.v_magnitude) > 1e-6:
-                changes["v_magnitude"] = {
-                    "base": round(ba.v_magnitude, 6),
-                    "modified": round(bb.v_magnitude, 6),
-                }
-            if changes:
-                diff["changes"].append(
-                    {"type": "bus", "id": bus_id, "action": "changed", "fields": changes}
-                )
-
-    # Branch-level differences (status changes are most common in N-1)
-    branches_a = {(b.from_bus, b.to_bus, b.circuit_id): b for b in sys_a.branches}
-    branches_b = {(b.from_bus, b.to_bus, b.circuit_id): b for b in sys_b.branches}
-
-    for br_key in sorted(set(branches_a) | set(branches_b)):
-        label = f"{br_key[0]}-{br_key[1]}({br_key[2]})"
-        if br_key not in branches_a:
-            diff["changes"].append({"type": "branch", "id": label, "action": "added"})
-        elif br_key not in branches_b:
-            diff["changes"].append({"type": "branch", "id": label, "action": "removed"})
-        else:
-            br_a, br_b = branches_a[br_key], branches_b[br_key]
-            changes = {}
-            if br_a.status != br_b.status:
-                changes["status"] = {"base": br_a.status, "modified": br_b.status}
-            if abs(br_a.r_pu - br_b.r_pu) > 1e-6:
-                changes["r_pu"] = {"base": round(br_a.r_pu, 6), "modified": round(br_b.r_pu, 6)}
-            if abs(br_a.x_pu - br_b.x_pu) > 1e-6:
-                changes["x_pu"] = {"base": round(br_a.x_pu, 6), "modified": round(br_b.x_pu, 6)}
-            if abs(br_a.tap_ratio - br_b.tap_ratio) > 1e-6:
-                changes["tap_ratio"] = {
-                    "base": round(br_a.tap_ratio, 6),
-                    "modified": round(br_b.tap_ratio, 6),
-                }
-            if changes:
-                diff["changes"].append(
-                    {"type": "branch", "id": label, "action": "changed", "fields": changes}
-                )
-
-    # Load-level differences
-    loads_a = {(ld.bus_id, ld.load_id): ld for ld in sys_a.loads}
-    loads_b = {(ld.bus_id, ld.load_id): ld for ld in sys_b.loads}
-
-    for ld_key in sorted(set(loads_a) | set(loads_b)):
-        label = f"Bus{ld_key[0]}({ld_key[1]})"
-        if ld_key not in loads_a:
-            diff["changes"].append({"type": "load", "id": label, "action": "added"})
-        elif ld_key not in loads_b:
-            diff["changes"].append({"type": "load", "id": label, "action": "removed"})
-        else:
-            ld_a, ld_b = loads_a[ld_key], loads_b[ld_key]
-            changes = {}
-            if abs(ld_a.p_load - ld_b.p_load) > 1e-6:
-                changes["p_load"] = {
-                    "base": round(ld_a.p_load, 4),
-                    "modified": round(ld_b.p_load, 4),
-                }
-            if abs(ld_a.q_load - ld_b.q_load) > 1e-6:
-                changes["q_load"] = {
-                    "base": round(ld_a.q_load, 4),
-                    "modified": round(ld_b.q_load, 4),
-                }
-            if changes:
-                diff["changes"].append(
-                    {"type": "load", "id": label, "action": "changed", "fields": changes}
-                )
+    # Delegate element-level diffs to helpers
+    diff["changes"].extend(_diff_buses(sys_a.buses, sys_b.buses))
+    diff["changes"].extend(_diff_branches(sys_a.branches, sys_b.branches))
+    diff["changes"].extend(_diff_loads(sys_a.loads, sys_b.loads))
 
     diff["summary"]["total_changes"] = len(diff["changes"])
     return diff
@@ -928,118 +991,6 @@ def _apply_where_filter(
         filtered.loads = [ld for ld in system.loads if _matches_where(ld, field, op_str, value_str)]
 
     return filtered
-
-
-def _validate_system(system: System, strict: bool = False) -> list[dict]:
-    """Run validation checks on the system.
-
-    Args:
-        system: System to validate
-        strict: Enable strict validation mode
-
-    Returns:
-        List of issue dictionaries with 'level' and 'message' keys
-    """
-    issues = []
-
-    # Check for slack bus
-    slack_buses = system.get_slack_buses()
-    if not slack_buses:
-        issues.append({"level": "error", "message": "No slack (swing) bus found in system"})
-    elif len(slack_buses) > 1:
-        issues.append(
-            {
-                "level": "warning",
-                "message": f"Multiple slack buses found: {[b.bus_id for b in slack_buses]}",
-            }
-        )
-
-    # Check voltage magnitudes
-    for bus in system.buses:
-        if bus.v_magnitude < 0.8:
-            issues.append(
-                {
-                    "level": "error" if strict else "warning",
-                    "message": f"Bus {bus.bus_id}: Very low voltage {bus.v_magnitude:.3f} pu",
-                }
-            )
-        elif bus.v_magnitude < 0.9:
-            issues.append(
-                {
-                    "level": "warning",
-                    "message": f"Bus {bus.bus_id}: Low voltage {bus.v_magnitude:.3f} pu",
-                }
-            )
-        elif bus.v_magnitude > 1.1:
-            issues.append(
-                {
-                    "level": "warning",
-                    "message": f"Bus {bus.bus_id}: High voltage {bus.v_magnitude:.3f} pu",
-                }
-            )
-        elif bus.v_magnitude > 1.2:
-            issues.append(
-                {
-                    "level": "error" if strict else "warning",
-                    "message": f"Bus {bus.bus_id}: Very high voltage {bus.v_magnitude:.3f} pu",
-                }
-            )
-
-    # Check PV buses have generators
-    pv_buses = system.get_pv_buses()
-    for bus in pv_buses:
-        gens = system.get_bus_generators(bus.bus_id)
-        if not gens:
-            issues.append(
-                {
-                    "level": "error",
-                    "message": f"PV bus {bus.bus_id} has no generator",
-                }
-            )
-
-    # Check for negative impedance (typically an error)
-    for branch in system.branches:
-        if branch.x_pu < 0:
-            issues.append(
-                {
-                    "level": "error",
-                    "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative reactance X={branch.x_pu:.4f}",
-                }
-            )
-        if branch.r_pu < 0:
-            issues.append(
-                {
-                    "level": "warning",
-                    "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative resistance R={branch.r_pu:.4f}",
-                }
-            )
-
-    # Strict mode additional checks
-    if strict:
-        # Check all buses are referenced
-        bus_ids = set(system.get_bus_ids())
-        referenced_buses = set()
-
-        for branch in system.branches:
-            referenced_buses.add(branch.from_bus)
-            referenced_buses.add(branch.to_bus)
-        for gen in system.generators:
-            referenced_buses.add(gen.bus_id)
-        for load in system.loads:
-            referenced_buses.add(load.bus_id)
-
-        isolated = bus_ids - referenced_buses
-        for bus_id in isolated:
-            found_bus = system.get_bus(bus_id)
-            if found_bus and not found_bus.is_isolated:
-                issues.append(
-                    {
-                        "level": "warning",
-                        "message": f"Bus {bus_id}: Not referenced by any branch, generator, or load",
-                    }
-                )
-
-    return issues
 
 
 if __name__ == "__main__":

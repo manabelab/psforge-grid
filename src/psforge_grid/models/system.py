@@ -616,6 +616,138 @@ class System:
 
         return errors
 
+    def validate_detailed(self, strict: bool = False) -> list[dict[str, str]]:
+        """Run detailed validation checks on the system.
+
+        Performs comprehensive validation including structural integrity,
+        voltage magnitude ranges, PV bus generator presence, and branch
+        impedance sign checks. In strict mode, additional checks such as
+        isolated bus detection are enabled, and some warnings are elevated
+        to errors.
+
+        This method extends validate() with power-system-specific heuristic
+        checks useful for data quality assurance and pre-analysis screening.
+
+        Args:
+            strict: If True, enable strict validation mode. This elevates
+                certain warnings to errors and enables additional checks
+                (e.g., isolated bus detection).
+
+        Returns:
+            List of issue dictionaries, each containing:
+                - "level": "error" or "warning"
+                - "message": Human-readable description of the issue
+
+            An empty list means no issues were detected.
+
+        Example:
+            >>> issues = system.validate_detailed()
+            >>> errors = [i for i in issues if i["level"] == "error"]
+            >>> warnings = [i for i in issues if i["level"] == "warning"]
+            >>> if not errors:
+            ...     print("System is ready for analysis")
+        """
+        issues: list[dict[str, str]] = []
+
+        # Check for slack bus
+        slack_buses = self.get_slack_buses()
+        if not slack_buses:
+            issues.append({"level": "error", "message": "No slack (swing) bus found in system"})
+        elif len(slack_buses) > 1:
+            issues.append(
+                {
+                    "level": "warning",
+                    "message": f"Multiple slack buses found: {[b.bus_id for b in slack_buses]}",
+                }
+            )
+
+        # Check voltage magnitudes
+        for bus in self.buses:
+            if bus.v_magnitude < 0.8:
+                issues.append(
+                    {
+                        "level": "error" if strict else "warning",
+                        "message": f"Bus {bus.bus_id}: Very low voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude < 0.9:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Bus {bus.bus_id}: Low voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude > 1.1:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Bus {bus.bus_id}: High voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+            elif bus.v_magnitude > 1.2:
+                issues.append(
+                    {
+                        "level": "error" if strict else "warning",
+                        "message": f"Bus {bus.bus_id}: Very high voltage {bus.v_magnitude:.3f} pu",
+                    }
+                )
+
+        # Check PV buses have generators
+        pv_buses = self.get_pv_buses()
+        for bus in pv_buses:
+            gens = self.get_bus_generators(bus.bus_id)
+            if not gens:
+                issues.append(
+                    {
+                        "level": "error",
+                        "message": f"PV bus {bus.bus_id} has no generator",
+                    }
+                )
+
+        # Check for negative impedance (typically an error)
+        for branch in self.branches:
+            if branch.x_pu < 0:
+                issues.append(
+                    {
+                        "level": "error",
+                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative reactance X={branch.x_pu:.4f}",
+                    }
+                )
+            if branch.r_pu < 0:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative resistance R={branch.r_pu:.4f}",
+                    }
+                )
+
+        # Strict mode additional checks
+        if strict:
+            # Check all buses are referenced
+            bus_ids = set(self.get_bus_ids())
+            referenced_buses: set[int] = set()
+
+            for branch in self.branches:
+                referenced_buses.add(branch.from_bus)
+                referenced_buses.add(branch.to_bus)
+            for gen in self.generators:
+                referenced_buses.add(gen.bus_id)
+            for load in self.loads:
+                referenced_buses.add(load.bus_id)
+
+            isolated = bus_ids - referenced_buses
+            for bus_id in isolated:
+                found_bus = self.get_bus(bus_id)
+                if found_bus and not found_bus.is_isolated:
+                    issues.append(
+                        {
+                            "level": "warning",
+                            "message": f"Bus {bus_id}: Not referenced by any branch, generator, or load",
+                        }
+                    )
+
+        return issues
+
     # =========================================================================
     # Count methods
     # =========================================================================

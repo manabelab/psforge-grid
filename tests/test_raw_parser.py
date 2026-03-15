@@ -3,18 +3,10 @@
 Tests the parsing functionality for PSS/E RAW format files.
 """
 
-from pathlib import Path
-
 import pytest
 
 from psforge_grid.io.raw_parser import parse_raw
 from psforge_grid.models.system import System
-
-
-@pytest.fixture
-def fixtures_dir():
-    """Return path to test fixtures directory."""
-    return Path(__file__).parent / "fixtures"
 
 
 class TestRawParser:

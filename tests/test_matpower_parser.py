@@ -5,7 +5,6 @@ including pglib-opf benchmark cases.
 """
 
 import math
-from pathlib import Path
 
 import pytest
 
@@ -13,12 +12,6 @@ from psforge_grid.io.factories import ParserFactory
 from psforge_grid.io.matpower_parser import MatpowerParser, parse_matpower
 from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.system import System
-
-
-@pytest.fixture
-def fixtures_dir():
-    """Return path to test fixtures directory."""
-    return Path(__file__).parent / "fixtures"
 
 
 class TestMatpowerParser:
