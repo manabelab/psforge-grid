@@ -3,7 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/psforge-grid.svg)](https://badge.fury.io/py/psforge-grid)
 [![Python versions](https://img.shields.io/pypi/pyversions/psforge-grid.svg)](https://pypi.org/project/psforge-grid/)
 [![Tests](https://github.com/manabelab/psforge-grid/actions/workflows/test.yml/badge.svg)](https://github.com/manabelab/psforge-grid/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Dual](https://img.shields.io/badge/License-Dual%20(MIT%20%2B%20Commercial)-blue.svg)](LICENSE)
 
 > **Hub data model for the psforge power system analysis ecosystem**
 
@@ -305,20 +305,18 @@ All packages are developed and maintained by [Manabe Lab LLC](https://github.com
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+To maintain the ability to offer commercial licenses and ensure the long-term sustainability of this project, we do not accept external code contributions (Pull Requests) at this time.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`pytest tests/`)
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
-See [CLAUDE.md](CLAUDE.md) for AI development guidelines.
+We still highly value your feedback — please feel free to open [Issues](https://github.com/manabelab/psforge-grid/issues) for bug reports and feature suggestions.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+This software is provided under a **dual-licensing model**:
+
+- **Individual & Educational Use**: MIT License (students, researchers, non-commercial educational purposes)
+- **Commercial & Business Use**: Requires a Commercial License
+
+See [LICENSE](LICENSE) for details.
 
 ---
 
