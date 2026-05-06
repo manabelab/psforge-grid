@@ -13,11 +13,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from psforge_grid.io.json_writer import FORMAT_NAME
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
+from psforge_grid.models.diagram import (
+    BranchRoute,
+    BusPosition,
+    DiagramData,
+    DiagramLabel,
+    ImportMeta,
+)
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.load import Load
@@ -65,6 +73,10 @@ def _parse_json_impl(filepath: str | Path) -> System:
     shunts = [Shunt(**s) for s in data.get("shunts", [])]
     generator_costs = [GeneratorCost(**gc) for gc in data.get("generator_costs", [])]
 
+    # Parse diagram data (no re-normalization)
+    diagram_schematic = _parse_diagram_dict(data.get("diagram_schematic"))
+    diagram_geographic = _parse_diagram_dict(data.get("diagram_geographic"))
+
     return System(
         buses=buses,
         branches=branches,
@@ -76,6 +88,80 @@ def _parse_json_impl(filepath: str | Path) -> System:
         frequency_hz=sys_data.get("frequency_hz"),
         name=sys_data.get("name", ""),
         description=sys_data.get("description"),
+        diagram_schematic=diagram_schematic,
+        diagram_geographic=diagram_geographic,
+    )
+
+
+def _parse_diagram_dict(d: dict[str, Any] | None) -> DiagramData | None:
+    """Parse a diagram dictionary from JSON into DiagramData.
+
+    No re-normalization is performed — coordinates are already in psforge
+    schematic or geographic system.
+    """
+    if d is None:
+        return None
+
+    # Bus positions
+    bus_positions: dict[int, BusPosition] = {}
+    for bus_id_str, pos_data in d.get("bus_positions", {}).items():
+        points = None
+        if "points" in pos_data:
+            points = [tuple(p) for p in pos_data["points"]]
+        bus_positions[int(bus_id_str)] = BusPosition(
+            x=pos_data["x"],
+            y=pos_data["y"],
+            points=points,
+        )
+
+    # Branch routes
+    branch_routes: dict[tuple[int, int, str], BranchRoute] = {}
+    for key_str, route_data in d.get("branch_routes", {}).items():
+        parts = key_str.rsplit("_", 1)
+        from_to = parts[0].rsplit("_", 1)
+        from_bus, to_bus, ckt = int(from_to[0]), int(from_to[1]), parts[1]
+        waypoints = [tuple(p) for p in route_data.get("waypoints", [])]
+        branch_routes[(from_bus, to_bus, ckt)] = BranchRoute(waypoints=waypoints)
+
+    # Labels
+    labels: list[DiagramLabel] = []
+    for lbl_data in d.get("labels", []):
+        element_id = lbl_data["element_id"]
+        if isinstance(element_id, list):
+            element_id = tuple(element_id)
+        labels.append(
+            DiagramLabel(
+                element_type=lbl_data["element_type"],
+                element_id=element_id,
+                text_type=lbl_data["text_type"],
+                offset_x=lbl_data.get("offset_x", 0),
+                offset_y=lbl_data.get("offset_y", 0),
+                angle=lbl_data.get("angle", 0.0),
+                visible=lbl_data.get("visible", True),
+            )
+        )
+
+    # ImportMeta
+    import_meta = None
+    meta_data = d.get("import_meta")
+    if meta_data is not None:
+        import_meta = ImportMeta(
+            source_format=meta_data["source_format"],
+            scale=meta_data["scale"],
+            offset_x=meta_data["offset_x"],
+            offset_y=meta_data["offset_y"],
+            y_flipped=meta_data["y_flipped"],
+            source_bbox=tuple(meta_data["source_bbox"]),
+        )
+
+    return DiagramData(
+        coordinate_system=d.get("coordinate_system", "schematic"),
+        crs=d.get("crs"),
+        normalization_ref=d.get("normalization_ref", 1920),
+        bus_positions=bus_positions,
+        branch_routes=branch_routes,
+        labels=labels,
+        import_meta=import_meta,
     )
 
 

@@ -12,6 +12,13 @@ New in LLM Affinity Update:
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
+from psforge_grid.models.diagram import (
+    BranchRoute,
+    BusPosition,
+    DiagramData,
+    DiagramLabel,
+    ImportMeta,
+)
 from psforge_grid.models.enums import (
     BusType,
     ConvergenceStatus,
@@ -30,10 +37,15 @@ from psforge_grid.models.system import System
 
 __all__ = [
     # Data classes
+    "BranchRoute",
     "Bus",
+    "BusPosition",
     "Branch",
+    "DiagramData",
+    "DiagramLabel",
     "Generator",
     "GeneratorCost",
+    "ImportMeta",
     "Load",
     "Modification",
     "ScenarioDefinition",
