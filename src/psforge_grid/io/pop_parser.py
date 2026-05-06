@@ -36,6 +36,12 @@ from psforge_grid.io.pop.xml_utils import get_float, get_int, get_str
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
+from psforge_grid.models.diagram import (
+    BranchRoute,
+    BusPosition,
+    DiagramData,
+    normalize_coordinates,
+)
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.load import Load
 from psforge_grid.models.system import System
@@ -131,6 +137,7 @@ def _parse_pop_impl(filepath: str | Path) -> System:
     branches = _build_branches(topology, archive, control, case)
     generators = _build_generators(topology, archive, control, case)
     loads = _build_loads(case)
+    diagram = _build_diagram(topology)
 
     system = System(
         buses=buses,
@@ -139,6 +146,7 @@ def _parse_pop_impl(filepath: str | Path) -> System:
         loads=loads,
         base_mva=control.base_mva,
         name=control.header,
+        diagram_schematic=diagram,
     )
 
     logger.info(
@@ -594,3 +602,88 @@ def _build_pnsd_dict(
             result[int(key_el.text)] = val
 
     return result
+
+
+def _build_diagram(
+    topology: PopTopology,
+    normalization_ref: int = 1920,
+) -> DiagramData | None:
+    """Build DiagramData from topology diagram points.
+
+    Collects all raw coordinates from ClusterInfo.diagram_points,
+    normalizes them (Y-flip + short-edge scaling), and builds
+    BusPosition and BranchRoute objects.
+
+    Args:
+        topology: Parsed topology with diagram_points populated.
+        normalization_ref: Short-edge reference size (default: 1920).
+
+    Returns:
+        DiagramData with schematic coordinates, or None if no diagram
+        points are available.
+    """
+    # Collect all raw points for normalization
+    all_raw_points: list[tuple[float, float]] = []
+    for node in topology.nodes.values():
+        all_raw_points.extend(node.diagram_points)
+    for line in topology.transmission_lines.values():
+        all_raw_points.extend(line.diagram_points)
+    for xfmr in topology.transformers.values():
+        all_raw_points.extend(xfmr.diagram_points)
+
+    if not all_raw_points:
+        return None
+
+    # Normalize all points at once
+    normalized, meta = normalize_coordinates(
+        all_raw_points,
+        normalization_ref=normalization_ref,
+        y_flip=True,  # CPAT uses Y-down screen coordinates
+    )
+    meta.source_format = "pop"
+
+    # Build index: raw point → normalized point
+    point_map: dict[tuple[float, float], tuple[int, int]] = {}
+    for raw, norm in zip(all_raw_points, normalized, strict=True):
+        point_map[raw] = norm
+
+    def _normalize(pts: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        return [point_map[(float(p[0]), float(p[1]))] for p in pts]
+
+    # Build bus positions
+    bus_positions: dict[int, BusPosition] = {}
+    for node in topology.nodes.values():
+        if not node.diagram_points or node.code_number <= 0:
+            continue
+        norm_pts = _normalize(node.diagram_points)
+        # Use midpoint as the bus position
+        mid_x = sum(p[0] for p in norm_pts) // len(norm_pts)
+        mid_y = sum(p[1] for p in norm_pts) // len(norm_pts)
+        bus_positions[node.code_number] = BusPosition(
+            x=mid_x,
+            y=mid_y,
+            points=norm_pts if len(norm_pts) > 1 else None,
+        )
+
+    # Build branch routes
+    branch_routes: dict[tuple[int, int, str], BranchRoute] = {}
+    for branches_dict in (topology.transmission_lines, topology.transformers):
+        for cluster in branches_dict.values():
+            if not cluster.diagram_points:
+                continue
+            try:
+                from_bus, to_bus = topology.get_branch_from_to(cluster)
+            except (ValueError, KeyError):
+                continue
+            norm_pts = _normalize(cluster.diagram_points)
+            ckt = str(cluster.code_number)
+            key = (from_bus, to_bus, ckt)
+            branch_routes[key] = BranchRoute(waypoints=norm_pts)
+
+    return DiagramData(
+        coordinate_system="schematic",
+        normalization_ref=normalization_ref,
+        bus_positions=bus_positions,
+        branch_routes=branch_routes,
+        import_meta=meta,
+    )

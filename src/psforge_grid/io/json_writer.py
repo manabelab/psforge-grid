@@ -51,6 +51,70 @@ def _dataclass_to_dict(obj: Any, *, omit_none: bool = True) -> dict[str, Any]:
     return result
 
 
+def _diagram_to_dict(diagram: Any) -> dict[str, Any]:
+    """Convert a DiagramData to a JSON-serializable dictionary."""
+    from psforge_grid.models.diagram import DiagramData
+
+    if not isinstance(diagram, DiagramData):
+        return {}
+
+    result: dict[str, Any] = {
+        "coordinate_system": diagram.coordinate_system,
+        "normalization_ref": diagram.normalization_ref,
+    }
+    if diagram.crs is not None:
+        result["crs"] = diagram.crs
+
+    # Bus positions: {bus_id: {x, y, points?}}
+    if diagram.bus_positions:
+        bp_dict: dict[str, Any] = {}
+        for bus_id, pos in diagram.bus_positions.items():
+            entry: dict[str, Any] = {"x": pos.x, "y": pos.y}
+            if pos.points is not None:
+                entry["points"] = [list(p) for p in pos.points]
+            bp_dict[str(bus_id)] = entry
+        result["bus_positions"] = bp_dict
+
+    # Branch routes: {"from_to_ckt": {waypoints: [[x,y], ...]}}
+    if diagram.branch_routes:
+        br_dict: dict[str, Any] = {}
+        for (from_bus, to_bus, ckt), route in diagram.branch_routes.items():
+            key = f"{from_bus}_{to_bus}_{ckt}"
+            br_dict[key] = {"waypoints": [list(p) for p in route.waypoints]}
+        result["branch_routes"] = br_dict
+
+    # Labels (stored as list of dicts)
+    if diagram.labels:
+        result["labels"] = [
+            {
+                "element_type": lbl.element_type,
+                "element_id": lbl.element_id
+                if isinstance(lbl.element_id, int)
+                else list(lbl.element_id),
+                "text_type": lbl.text_type,
+                "offset_x": lbl.offset_x,
+                "offset_y": lbl.offset_y,
+                "angle": lbl.angle,
+                "visible": lbl.visible,
+            }
+            for lbl in diagram.labels
+        ]
+
+    # ImportMeta (stored for round-trip fidelity)
+    if diagram.import_meta is not None:
+        m = diagram.import_meta
+        result["import_meta"] = {
+            "source_format": m.source_format,
+            "scale": m.scale,
+            "offset_x": m.offset_x,
+            "offset_y": m.offset_y,
+            "y_flipped": m.y_flipped,
+            "source_bbox": list(m.source_bbox),
+        }
+
+    return result
+
+
 def _system_to_dict(
     system: System,
     *,
@@ -99,6 +163,12 @@ def _system_to_dict(
         data["generator_costs"] = [
             _dataclass_to_dict(gc, omit_none=omit_none) for gc in system.generator_costs
         ]
+
+    # Diagram data (only if present)
+    if system.diagram_schematic is not None:
+        data["diagram_schematic"] = _diagram_to_dict(system.diagram_schematic)
+    if system.diagram_geographic is not None:
+        data["diagram_geographic"] = _diagram_to_dict(system.diagram_geographic)
 
     return data
 

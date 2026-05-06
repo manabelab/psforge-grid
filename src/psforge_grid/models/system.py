@@ -18,6 +18,7 @@ from pathlib import Path
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
+from psforge_grid.models.diagram import DiagramData
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.load import Load
@@ -46,6 +47,13 @@ class System:
         name: System name (optional, default: empty string)
         description: Free-text description providing context about the system.
             For LLM-friendly output.
+        diagram_schematic: Schematic single-line diagram layout data.
+            Coordinates use the psforge schematic system (right/up positive,
+            integer pixels, short edge normalized to 1920 by default).
+            None if the source format does not provide layout data.
+        diagram_geographic: Geographic coordinate data for GIS visualization.
+            Coordinates use latitude/longitude in degrees (CRS required).
+            None if the source format does not provide geographic data.
 
     Note:
         - All per-unit values in components are based on base_mva
@@ -72,6 +80,8 @@ class System:
     frequency_hz: float | None = None
     name: str = ""
     description: str | None = None
+    diagram_schematic: DiagramData | None = None
+    diagram_geographic: DiagramData | None = None
 
     # =========================================================================
     # Factory methods

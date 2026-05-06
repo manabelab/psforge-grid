@@ -39,6 +39,8 @@ class ClusterInfo:
             For generators/loads: [parent_node].
         link_branch_indices: Connected branch ClusterIndex values (for nodes).
         link_generator_indices: Related generator ClusterIndex values.
+        diagram_points: Raw (x, y) coordinates from MainSymbol/Point.
+            In CPAT screen coordinates (Y-down). Normalization is done later.
     """
 
     cluster_index: int = 0
@@ -48,6 +50,7 @@ class ClusterInfo:
     link_node_indices: list[int] = field(default_factory=list)
     link_branch_indices: list[int] = field(default_factory=list)
     link_generator_indices: list[int] = field(default_factory=list)
+    diagram_points: list[tuple[int, int]] = field(default_factory=list)
 
 
 @dataclass
@@ -179,5 +182,16 @@ def _parse_cluster(cluster: Element) -> ClusterInfo:
         for ul in link_gens.findall("unsignedLong"):
             if ul.text:
                 info.link_generator_indices.append(int(ul.text))
+
+    # MainSymbol/Point/Point: diagram coordinates (CPAT screen coords, Y-down)
+    main_symbol = cluster.find("MainSymbol")
+    if main_symbol is not None:
+        point_container = main_symbol.find("Point")
+        if point_container is not None:
+            for pt in point_container.findall("Point"):
+                x_text = pt.findtext("X")
+                y_text = pt.findtext("Y")
+                if x_text is not None and y_text is not None:
+                    info.diagram_points.append((int(x_text), int(y_text)))
 
     return info
