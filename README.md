@@ -59,6 +59,7 @@ psforge-grid show case14.m buses -f json
 psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
+- **Diagram data** (`DiagramData`, `BusPosition`, `BranchRoute`) for single-line diagram layouts and GIS coordinates
 - **Parsers & Writers** for 7 formats (see [Supported Formats](#supported-formats))
 - **Factory pattern**: `ParserFactory` / `WriterFactory` for format-agnostic I/O
 - **Scenario loading**: Base case + differential modifications for N-1 / parametric studies
@@ -140,6 +141,7 @@ Supports two [CPAT](https://www.jpower.co.jp/bs/cpat/) formats for IEEJ standard
 | System data (pnsd) | Yes | Nodes, branches, generators, loads |
 | Generator machine data | Yes | G1-G5 card fields (Xd, Xd', Xd'', etc.) |
 | Zero-sequence data | Yes | Branch and generator zero-sequence impedances |
+| Diagram layout (pnsw) | Yes | Bus positions, branch routes (normalized to 1920px short edge) |
 
 **`.dyna` card format**: Legacy Fortran fixed-column (80-character) cards.
 
