@@ -75,22 +75,54 @@ class Shunt:
 
     @property
     def is_in_service(self) -> bool:
-        """Check if this shunt is in service."""
+        """Check if this shunt is in service.
+
+        Example:
+            >>> from psforge_grid.models import Shunt
+            >>> Shunt(bus_id=3, b_pu=0.19).is_in_service
+            True
+            >>> Shunt(bus_id=3, b_pu=0.19, status=0).is_in_service
+            False
+        """
         return self.status == 1
 
     @property
     def is_capacitor(self) -> bool:
-        """Check if this shunt is a capacitor (B > 0)."""
+        """Check if this shunt is a capacitor (B > 0).
+
+        Example:
+            >>> from psforge_grid.models import Shunt
+            >>> Shunt(bus_id=3, b_pu=0.19).is_capacitor
+            True
+            >>> Shunt(bus_id=3, b_pu=-0.2).is_capacitor
+            False
+        """
         return self.b_pu > 0
 
     @property
     def is_reactor(self) -> bool:
-        """Check if this shunt is a reactor (B < 0)."""
+        """Check if this shunt is a reactor (B < 0).
+
+        Example:
+            >>> from psforge_grid.models import Shunt
+            >>> Shunt(bus_id=3, b_pu=-0.2).is_reactor
+            True
+            >>> Shunt(bus_id=3, b_pu=0.19).is_reactor
+            False
+        """
         return self.b_pu < 0
 
     @property
     def shunt_type_name(self) -> str:
-        """Get human-readable shunt type name."""
+        """Get human-readable shunt type name.
+
+        Example:
+            >>> from psforge_grid.models import Shunt
+            >>> Shunt(bus_id=3, b_pu=0.19).shunt_type_name
+            'Capacitor'
+            >>> Shunt(bus_id=3, b_pu=-0.2).shunt_type_name
+            'Reactor'
+        """
         if self.b_pu > 0:
             return "Capacitor"
         elif self.b_pu < 0:

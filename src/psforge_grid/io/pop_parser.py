@@ -15,7 +15,7 @@ Data integration requires cross-referencing three XML files:
 Example:
     >>> from psforge_grid.io.pop_parser import parse_pop
     >>> system = parse_pop("WEST10peak.pop")
-    >>> print(f"Loaded {system.num_buses()} buses")
+    >>> print(f"Loaded {system.num_buses} buses")
 
 See Also:
     - PopParser: Class implementing IParser for .pop format
@@ -103,7 +103,7 @@ def parse_pop(filepath: str | Path) -> System:
 
     Example:
         >>> system = parse_pop("WEST10peak.pop")
-        >>> print(f"{system.num_buses()} buses, {system.num_branches()} branches")
+        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
     """
     return _parse_pop_impl(filepath)
 
@@ -151,10 +151,10 @@ def _parse_pop_impl(filepath: str | Path) -> System:
 
     logger.info(
         "Parsed .pop file: %d buses, %d branches, %d generators, %d loads (base_mva=%.1f)",
-        system.num_buses(),
-        system.num_branches(),
-        system.num_generators(),
-        system.num_loads(),
+        system.num_buses,
+        system.num_branches,
+        system.num_generators,
+        system.num_loads,
         system.base_mva,
     )
 

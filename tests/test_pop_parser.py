@@ -213,7 +213,7 @@ class TestPopParserIntegration:
 
     def test_system_bus_count(self, west10_system: System) -> None:
         """WEST10 should have 27 buses."""
-        assert west10_system.num_buses() == 27
+        assert west10_system.num_buses == 27
 
     def test_system_branch_count(self, west10_system: System) -> None:
         """WEST10 should have 42 branches (32 lines + 10 transformers).
@@ -221,15 +221,15 @@ class TestPopParserIntegration:
         The 32 lines come from 18 single-circuit lines (NL=1) plus
         7 double-circuit lines (NL=2) expanded to 14 branch objects.
         """
-        assert west10_system.num_branches() == 42
+        assert west10_system.num_branches == 42
 
     def test_system_generator_count(self, west10_system: System) -> None:
         """WEST10 should have 10 generators."""
-        assert west10_system.num_generators() == 10
+        assert west10_system.num_generators == 10
 
     def test_system_load_count(self, west10_system: System) -> None:
         """WEST10 should have 17 loads."""
-        assert west10_system.num_loads() == 17
+        assert west10_system.num_loads == 17
 
     def test_base_mva(self, west10_system: System) -> None:
         """System base MVA should be 1000."""
@@ -364,12 +364,12 @@ class TestPopParserFactory:
     def test_system_from_pop(self) -> None:
         """System.from_pop() should load the system."""
         system = System.from_pop(WEST10_POP)
-        assert system.num_buses() == 27
+        assert system.num_buses == 27
 
     def test_system_from_file_auto_detect(self) -> None:
         """System.from_file() should auto-detect .pop format."""
         system = System.from_file(WEST10_POP)
-        assert system.num_buses() == 27
+        assert system.num_buses == 27
         assert system.base_mva == 1000.0
 
     def test_pop_parser_format_name(self) -> None:

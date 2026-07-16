@@ -619,11 +619,11 @@ def create_system_summary(system: System) -> SystemSummary:
 
     return SystemSummary(
         base_mva=system.base_mva,
-        num_buses=system.num_buses(),
-        num_branches=system.num_branches(),
-        num_generators=system.num_generators(),
-        num_loads=system.num_loads(),
-        num_shunts=system.num_shunts(),
+        num_buses=system.num_buses,
+        num_branches=system.num_branches,
+        num_generators=system.num_generators,
+        num_loads=system.num_loads,
+        num_shunts=system.num_shunts,
         num_slack=len(system.get_slack_buses()),
         num_pv=len(system.get_pv_buses()),
         num_pq=len(system.get_pq_buses()),

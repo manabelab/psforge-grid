@@ -8,7 +8,8 @@ This package provides:
 Example:
     >>> from psforge_grid import System
     >>> system = System.from_raw("ieee14.raw")
-    >>> print(system.to_summary())
+    >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
+    >>> print(system.to_description())
 """
 
 from psforge_grid.models import (
@@ -36,7 +37,7 @@ from psforge_grid.models import (
     VoltageStatus,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 __all__ = [
     # Version

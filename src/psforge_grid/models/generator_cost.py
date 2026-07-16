@@ -68,17 +68,42 @@ class GeneratorCost:
 
     @property
     def is_polynomial(self) -> bool:
-        """Check if this is a polynomial cost model."""
+        """Check if this is a polynomial cost model.
+
+        Example:
+            >>> from psforge_grid.models import GeneratorCost
+            >>> GeneratorCost(gen_index=0, model=2, coefficients=[0.04, 20.0, 100.0]).is_polynomial
+            True
+            >>> GeneratorCost(gen_index=0, model=1, coefficients=[0.0, 0.0, 100.0]).is_polynomial
+            False
+        """
         return self.model == 2
 
     @property
     def is_piecewise_linear(self) -> bool:
-        """Check if this is a piecewise linear cost model."""
+        """Check if this is a piecewise linear cost model.
+
+        Example:
+            >>> from psforge_grid.models import GeneratorCost
+            >>> cost = GeneratorCost(gen_index=0, model=1, coefficients=[0.0, 0.0, 100.0, 2000.0])
+            >>> cost.is_piecewise_linear
+            True
+            >>> GeneratorCost(gen_index=0, model=2).is_piecewise_linear
+            False
+        """
         return self.model == 1
 
     @property
     def n_coefficients(self) -> int:
-        """Return the number of coefficients/parameters."""
+        """Return the number of coefficients/parameters.
+
+        Example:
+            >>> from psforge_grid.models import GeneratorCost
+            >>> GeneratorCost(gen_index=0, model=2, coefficients=[0.04, 20.0, 100.0]).n_coefficients
+            3
+            >>> GeneratorCost(gen_index=0, model=2).n_coefficients
+            0
+        """
         return len(self.coefficients)
 
     def evaluate(self, p_mw: float) -> float:

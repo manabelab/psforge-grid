@@ -32,18 +32,14 @@ def assert_systems_approx_equal(
 
     Compares component counts, then field values with tolerance.
     """
-    assert s1.num_buses() == s2.num_buses(), (
-        f"Bus count mismatch: {s1.num_buses()} vs {s2.num_buses()}"
+    assert s1.num_buses == s2.num_buses, f"Bus count mismatch: {s1.num_buses} vs {s2.num_buses}"
+    assert s1.num_branches == s2.num_branches, (
+        f"Branch count mismatch: {s1.num_branches} vs {s2.num_branches}"
     )
-    assert s1.num_branches() == s2.num_branches(), (
-        f"Branch count mismatch: {s1.num_branches()} vs {s2.num_branches()}"
+    assert s1.num_generators == s2.num_generators, (
+        f"Generator count mismatch: {s1.num_generators} vs {s2.num_generators}"
     )
-    assert s1.num_generators() == s2.num_generators(), (
-        f"Generator count mismatch: {s1.num_generators()} vs {s2.num_generators()}"
-    )
-    assert s1.num_loads() == s2.num_loads(), (
-        f"Load count mismatch: {s1.num_loads()} vs {s2.num_loads()}"
-    )
+    assert s1.num_loads == s2.num_loads, f"Load count mismatch: {s1.num_loads} vs {s2.num_loads}"
     assert abs(s1.base_mva - s2.base_mva) < atol, (
         f"base_mva mismatch: {s1.base_mva} vs {s2.base_mva}"
     )
@@ -328,12 +324,12 @@ def assert_systems_core_equal(
     - Base kV can be skipped (Dyna doesn't store it)
     """
     # Component counts (loads excluded — formats handle differently)
-    assert s1.num_buses() == s2.num_buses(), f"Bus count: {s1.num_buses()} vs {s2.num_buses()}"
-    assert s1.num_branches() == s2.num_branches(), (
-        f"Branch count: {s1.num_branches()} vs {s2.num_branches()}"
+    assert s1.num_buses == s2.num_buses, f"Bus count: {s1.num_buses} vs {s2.num_buses}"
+    assert s1.num_branches == s2.num_branches, (
+        f"Branch count: {s1.num_branches} vs {s2.num_branches}"
     )
-    assert s1.num_generators() == s2.num_generators(), (
-        f"Generator count: {s1.num_generators()} vs {s2.num_generators()}"
+    assert s1.num_generators == s2.num_generators, (
+        f"Generator count: {s1.num_generators} vs {s2.num_generators}"
     )
     assert abs(s1.base_mva - s2.base_mva) < atol
 
@@ -522,9 +518,9 @@ class TestCrossFormat:
         s5 = System.from_raw(p4)
 
         # Compare first and last: core data should survive the full chain
-        assert s5.num_buses() == s1.num_buses()
-        assert s5.num_branches() == s1.num_branches()
-        assert s5.num_generators() == s1.num_generators()
+        assert s5.num_buses == s1.num_buses
+        assert s5.num_branches == s1.num_branches
+        assert s5.num_generators == s1.num_generators
 
         # Bus voltage magnitudes should be preserved
         buses1 = {b.bus_id: b for b in s1.buses}
