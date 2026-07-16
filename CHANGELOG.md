@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - Unreleased
+## [0.8.0] - 2026-07-16
 
 ### Changed
 
@@ -40,10 +40,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `__version__` reported `0.6.0` while `pyproject.toml` declared `0.7.0`; both
-  now report `0.7.0`.
+- `__version__` reported `0.6.0` while `pyproject.toml` declared `0.7.0`, so the
+  released 0.7.0 package identified itself as 0.6.0 at runtime. Both now report
+  `0.8.0`.
 - The package docstring example called `system.to_summary()`, which does not
   exist. It now calls `to_description()` (#10).
+
+## [0.7.0] - 2026-05-06
+
+Released 2026-05-06 but never recorded here; reconstructed from the history.
+
+### Added
+
+- `DiagramData` model for GUI layout support, with schematic and geographic
+  coordinate data on `System` (`diagram_schematic`, `diagram_geographic`).
+
+### Known issues
+
+- The package reports `__version__ == "0.6.0"` at runtime; `pyproject.toml`
+  declares `0.7.0`. Fixed in 0.8.0.
 
 ## [0.6.0] - 2026-03-15
 
