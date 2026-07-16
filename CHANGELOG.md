@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-07-16
+
+### Fixed
+
+- `__version__` is read from installed package metadata instead of being
+  hardcoded, so `pyproject.toml` is the single source of truth and the two
+  cannot drift apart. The literal is why 0.7.0 shipped reporting `"0.6.0"`:
+  the bump touched `pyproject.toml` and nothing cross-checked the other copy.
+  0.9.0's value was correct only because it was corrected by hand.
+
+  Verified against a built wheel rather than an editable install, since
+  `importlib.metadata` reads install-time metadata: `psforge_grid-0.9.1` reports
+  `0.9.1`.
+
 ## [0.9.0] - 2026-07-16
 
 ### Added
