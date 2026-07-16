@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-07-16
+
+### Added
+
+- `System.check_data_completeness()` reports inputs that downstream analyses
+  need but the source file lacks (#9). RAW and MATPOWER data routinely arrives
+  without branch ratings or machine reactances, and nothing rejected it: a
+  thermal screening simply had no limit to compare against, and a fault study
+  silently treated a reactance-less generator as absent, **understating** fault
+  current rather than failing. IEEE 300 has `rate_a` missing on 411/411
+  branches and reactances missing on 69/69 generators, and said nothing.
+
+  The warnings are also surfaced by `validate_detailed()` and by
+  `to_llm_context()`, which grows a `### Missing Data` section.
+
+- `System.assign_default_ratings()` and `System.assign_default_reactances()`
+  apply documented defaults for the two gaps above (#9). Both are **opt-in**:
+  the package's stated position is that unspecified limits yield
+  `NOT_CLASSIFIED` rather than an arbitrary default, so inventing data stays a
+  decision the caller makes. Neither overwrites real data unless asked.
+
+- `System.assumptions` records those invented-data decisions, and
+  `to_llm_context()` / `to_description()` declare them. An LLM interpreting the
+  results is told which numbers rest on assumptions instead of reporting them
+  as measured. Not persisted by the writers: writing the system to a file bakes
+  the invented values in and drops the note with them.
+
+### Fixed
+
+- `psforge validate -f json` reported `FAILED` for a system whose only issues
+  were warnings, while `-f summary` reported `PASSED` for the very same system.
+  The JSON branch keyed off all issues rather than errors alone.
+- `psforge validate -f json` emitted unparseable JSON when a message was long
+  enough for rich to line-wrap it, inserting newlines mid-string.
+
 ## [0.8.0] - 2026-07-16
 
 ### Changed
