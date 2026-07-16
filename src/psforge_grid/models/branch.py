@@ -148,6 +148,13 @@ class Branch:
         - is_xfmr is True (explicitly flagged by source format parser)
         - tap_ratio != 1.0 (off-nominal turns ratio)
         - shift_angle != 0.0 (phase-shifting transformer)
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).is_transformer
+            False
+            >>> Branch(1, 2, r_pu=0.0, x_pu=0.1, tap_ratio=1.05).is_transformer
+            True
         """
         if self.is_xfmr is True:
             return True
@@ -155,12 +162,28 @@ class Branch:
 
     @property
     def is_in_service(self) -> bool:
-        """Check if this branch is in service."""
+        """Check if this branch is in service.
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).is_in_service
+            True
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, status=0).is_in_service
+            False
+        """
         return self.status == 1
 
     @property
     def branch_type_name(self) -> str:
-        """Get human-readable branch type name."""
+        """Get human-readable branch type name.
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).branch_type_name
+            'Transmission Line'
+            >>> Branch(1, 2, r_pu=0.0, x_pu=0.1, shift_angle=3.0).branch_type_name
+            'Phase-Shifting Transformer'
+        """
         if self.is_transformer:
             if self.shift_angle != 0.0:
                 return "Phase-Shifting Transformer"
@@ -169,7 +192,13 @@ class Branch:
 
     @property
     def impedance_pu(self) -> complex:
-        """Get positive-sequence series impedance as complex number [p.u.]."""
+        """Get positive-sequence series impedance as complex number [p.u.].
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).impedance_pu
+            (0.01+0.1j)
+        """
         return complex(self.r_pu, self.x_pu)
 
     @property
@@ -178,6 +207,13 @@ class Branch:
 
         Returns:
             Complex impedance if zero-sequence data is available, None otherwise.
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, r0_pu=0.03, x0_pu=0.3).zero_sequence_impedance_pu
+            (0.03+0.3j)
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).zero_sequence_impedance_pu is None
+            True
         """
         if self.r0_pu is not None and self.x0_pu is not None:
             return complex(self.r0_pu, self.x0_pu)
@@ -185,7 +221,15 @@ class Branch:
 
     @property
     def has_zero_sequence_data(self) -> bool:
-        """Check if zero-sequence impedance data is available."""
+        """Check if zero-sequence impedance data is available.
+
+        Example:
+            >>> from psforge_grid.models import Branch
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).has_zero_sequence_data
+            False
+            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, r0_pu=0.03, x0_pu=0.3).has_zero_sequence_data
+            True
+        """
         return self.r0_pu is not None and self.x0_pu is not None
 
     def to_description(self) -> str:

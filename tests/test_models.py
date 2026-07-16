@@ -338,21 +338,21 @@ class TestSystem:
             base_mva=100.0,
         )
 
-        assert system.num_buses() == 2
-        assert system.num_branches() == 1
-        assert system.num_generators() == 1
-        assert system.num_loads() == 1
-        assert system.num_shunts() == 1
+        assert system.num_buses == 2
+        assert system.num_branches == 1
+        assert system.num_generators == 1
+        assert system.num_loads == 1
+        assert system.num_shunts == 1
         assert system.base_mva == 100.0
 
     def test_system_default_values(self):
         """Test that System uses correct default values."""
         system = System()
-        assert system.num_buses() == 0
-        assert system.num_branches() == 0
-        assert system.num_generators() == 0
-        assert system.num_loads() == 0
-        assert system.num_shunts() == 0
+        assert system.num_buses == 0
+        assert system.num_branches == 0
+        assert system.num_generators == 0
+        assert system.num_loads == 0
+        assert system.num_shunts == 0
         assert system.base_mva == 100.0
         assert system.name == ""
 
