@@ -12,6 +12,8 @@ Example:
     >>> print(system.to_description())
 """
 
+from importlib import metadata as _metadata
+
 from psforge_grid.models import (
     Branch,
     BranchRoute,
@@ -37,7 +39,15 @@ from psforge_grid.models import (
     VoltageStatus,
 )
 
-__version__ = "0.9.0"
+try:
+    # Read the version from installed package metadata so pyproject.toml stays
+    # the single source of truth. Hardcoding it here let 0.7.0 ship reporting
+    # "0.6.0": the bump touched pyproject.toml and nothing else, and nothing
+    # cross-checks the two. psforge-flow shipped the same defect for the same
+    # reason and fixed it the same way.
+    __version__ = _metadata.version("psforge-grid")
+except _metadata.PackageNotFoundError:  # pragma: no cover - source tree, not installed
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     # Version
