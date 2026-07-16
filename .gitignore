@@ -183,3 +183,13 @@ notebooks/
 
 # Wiki (managed in psforge-grid.wiki.git)
 wiki/
+
+# uv lock file — not committed.
+# Nothing reads it: CI installs with pip, and this project takes no external
+# contributions (see README), so there is no `uv sync` environment for anyone
+# to reproduce. Tracking it only churns the diff inside unrelated feature
+# commits. Note a lock file would not constrain consumers even if committed --
+# pip and PyPI read the dependency metadata in pyproject.toml, never uv.lock.
+# Dev-dependency drift is pinned in [dev] instead, where a constraint can carry
+# its reason.
+uv.lock
