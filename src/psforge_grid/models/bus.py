@@ -73,27 +73,67 @@ class Bus:
 
     @property
     def is_pq(self) -> bool:
-        """Check if this is a PQ (load) bus."""
+        """Check if this is a PQ (load) bus.
+
+        Example:
+            >>> from psforge_grid.models import Bus
+            >>> Bus(bus_id=2, bus_type=1).is_pq
+            True
+            >>> Bus(bus_id=1, bus_type=3).is_pq
+            False
+        """
         return self.bus_type == 1
 
     @property
     def is_pv(self) -> bool:
-        """Check if this is a PV (generator) bus."""
+        """Check if this is a PV (generator) bus.
+
+        Example:
+            >>> from psforge_grid.models import Bus
+            >>> Bus(bus_id=1, bus_type=2).is_pv
+            True
+            >>> Bus(bus_id=2, bus_type=1).is_pv
+            False
+        """
         return self.bus_type == 2
 
     @property
     def is_slack(self) -> bool:
-        """Check if this is a slack (swing) bus."""
+        """Check if this is a slack (swing) bus.
+
+        Example:
+            >>> from psforge_grid.models import Bus
+            >>> Bus(bus_id=1, bus_type=3).is_slack
+            True
+            >>> Bus(bus_id=2, bus_type=1).is_slack
+            False
+        """
         return self.bus_type == 3
 
     @property
     def is_isolated(self) -> bool:
-        """Check if this is an isolated bus."""
+        """Check if this is an isolated bus.
+
+        Example:
+            >>> from psforge_grid.models import Bus
+            >>> Bus(bus_id=9, bus_type=4).is_isolated
+            True
+            >>> Bus(bus_id=2, bus_type=1).is_isolated
+            False
+        """
         return self.bus_type == 4
 
     @property
     def bus_type_name(self) -> str:
-        """Get human-readable bus type name."""
+        """Get human-readable bus type name.
+
+        Example:
+            >>> from psforge_grid.models import Bus
+            >>> Bus(bus_id=1, bus_type=3).bus_type_name
+            'Slack'
+            >>> Bus(bus_id=2, bus_type=1).bus_type_name
+            'PQ (Load)'
+        """
         type_names = {1: "PQ (Load)", 2: "PV (Generator)", 3: "Slack", 4: "Isolated"}
         return type_names.get(self.bus_type, f"Unknown ({self.bus_type})")
 
@@ -106,7 +146,7 @@ class Bus:
         Example:
             >>> bus = Bus(bus_id=1, bus_type=3, base_kv=500.0, name="Main")
             >>> print(bus.to_description())
-            Bus 1 (Main): Slack bus at 500.0 kV
+            Bus 1 (Main): Slack at 500.0 kV
               Voltage: 1.0000 pu @ 0.00°
               Limits: 0.90 - 1.10 pu
         """

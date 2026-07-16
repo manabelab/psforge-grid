@@ -73,7 +73,15 @@ class Load:
 
     @property
     def is_in_service(self) -> bool:
-        """Check if this load is in service."""
+        """Check if this load is in service.
+
+        Example:
+            >>> from psforge_grid.models import Load
+            >>> Load(bus_id=2, p_load=0.8).is_in_service
+            True
+            >>> Load(bus_id=2, p_load=0.8, status=0).is_in_service
+            False
+        """
         return self.status == 1
 
     @property
@@ -82,6 +90,11 @@ class Load:
 
         Returns:
             |S| = sqrt(P^2 + Q^2)
+
+        Example:
+            >>> from psforge_grid.models import Load
+            >>> Load(bus_id=2, p_load=0.8, q_load=0.6).apparent_power
+            1.0
         """
         return math.sqrt(self.p_load**2 + self.q_load**2)
 
@@ -91,6 +104,13 @@ class Load:
 
         Returns:
             Power factor = P / |S|. Returns 1.0 if S = 0.
+
+        Example:
+            >>> from psforge_grid.models import Load
+            >>> Load(bus_id=2, p_load=0.8, q_load=0.6).power_factor
+            0.8
+            >>> Load(bus_id=2, p_load=0.0, q_load=0.0).power_factor  # S = 0
+            1.0
         """
         s = self.apparent_power
         if s == 0.0:

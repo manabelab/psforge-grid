@@ -115,7 +115,15 @@ class Generator:
 
     @property
     def is_in_service(self) -> bool:
-        """Check if this generator is in service."""
+        """Check if this generator is in service.
+
+        Example:
+            >>> from psforge_grid.models import Generator
+            >>> Generator(bus_id=1, p_gen=1.0).is_in_service
+            True
+            >>> Generator(bus_id=1, p_gen=1.0, status=0).is_in_service
+            False
+        """
         return self.status == 1
 
     def check_q_limits(self, q_value: float) -> tuple[bool, float]:
@@ -128,6 +136,14 @@ class Generator:
             Tuple of (within_limits, limited_value)
             - within_limits: True if q_value is within [q_min, q_max]
             - limited_value: q_value clamped to limits if necessary
+
+        Example:
+            >>> from psforge_grid.models import Generator
+            >>> gen = Generator(bus_id=1, p_gen=1.0, q_max=0.5, q_min=-0.3)
+            >>> gen.check_q_limits(0.4)  # within limits
+            (True, 0.4)
+            >>> gen.check_q_limits(0.8)  # clamped to q_max
+            (False, 0.5)
         """
         limited = q_value
         within = True
@@ -156,6 +172,14 @@ class Generator:
 
         Returns:
             Generator reactance in p.u. on mbase, or None if data unavailable.
+
+        Example:
+            >>> from psforge_grid.models import Generator
+            >>> gen = Generator(bus_id=1, p_gen=1.0, xdpp_pu=0.2, xqpp_pu=0.3)
+            >>> gen.get_fault_reactance()  # (Xd'' + Xq'') / 2
+            0.25
+            >>> gen.get_fault_reactance("xdpp")
+            0.2
         """
         if xtype == "xdqpp":
             if self.xdpp_pu is not None and self.xqpp_pu is not None:
@@ -180,6 +204,13 @@ class Generator:
 
         Returns:
             Armature resistance in p.u. on mbase, or None if data unavailable.
+
+        Example:
+            >>> from psforge_grid.models import Generator
+            >>> Generator(bus_id=1, p_gen=1.0, ra_pu=0.003).get_armature_resistance()
+            0.003
+            >>> Generator(bus_id=2, p_gen=0.5).get_armature_resistance() is None
+            True
         """
         if self.ra_pu is not None:
             return self.ra_pu
