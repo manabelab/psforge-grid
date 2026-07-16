@@ -187,7 +187,7 @@ def info(
 
         if verbose >= 2:
             console.print(
-                f"[dim]Parsed: {system.num_buses()} buses, {system.num_branches()} branches[/dim]"
+                f"[dim]Parsed: {system.num_buses} buses, {system.num_branches} branches[/dim]"
             )
 
         # Create summary and format output
@@ -528,7 +528,7 @@ def convert(
 
         if verbose >= 1:
             console.print(
-                f"[dim]Parsed: {system.num_buses()} buses, {system.num_branches()} branches[/dim]"
+                f"[dim]Parsed: {system.num_buses} buses, {system.num_branches} branches[/dim]"
             )
 
         system.to_file(output_file)
@@ -538,7 +538,7 @@ def convert(
         else:
             console.print(
                 f"Converted {input_file.name} → {output_file.name} "
-                f"({system.num_buses()} buses, {system.num_branches()} branches)"
+                f"({system.num_buses} buses, {system.num_branches} branches)"
             )
 
     except FileNotFoundError:
@@ -845,11 +845,11 @@ def _compute_diff(
 
     # Component count differences
     counts = {
-        "buses": (sys_a.num_buses(), sys_b.num_buses()),
-        "branches": (sys_a.num_branches(), sys_b.num_branches()),
-        "generators": (sys_a.num_generators(), sys_b.num_generators()),
-        "loads": (sys_a.num_loads(), sys_b.num_loads()),
-        "shunts": (sys_a.num_shunts(), sys_b.num_shunts()),
+        "buses": (sys_a.num_buses, sys_b.num_buses),
+        "branches": (sys_a.num_branches, sys_b.num_branches),
+        "generators": (sys_a.num_generators, sys_b.num_generators),
+        "loads": (sys_a.num_loads, sys_b.num_loads),
+        "shunts": (sys_a.num_shunts, sys_b.num_shunts),
     }
 
     for comp, (count_a, count_b) in counts.items():

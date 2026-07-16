@@ -25,7 +25,7 @@ from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
 
 
-@dataclass
+@dataclass(repr=False)
 class System:
     """Power system container class.
 
@@ -83,6 +83,33 @@ class System:
     diagram_schematic: DiagramData | None = None
     diagram_geographic: DiagramData | None = None
 
+    def __repr__(self) -> str:
+        """Return a one-line summary instead of dumping every component.
+
+        The dataclass-generated repr recursively expands every bus, branch,
+        generator, load and shunt, which reaches several megabytes on a system
+        the size of IEEE 300. That is unusable in a REPL and expensive for an
+        LLM reading the output, so this returns counts only. Use
+        ``to_description()`` or ``to_llm_context()`` for detailed output.
+
+        Example:
+            >>> from psforge_grid.models import System, Bus
+            >>> System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)], name="demo")
+            <System 'demo' buses=2 branches=0 generators=0 loads=0 shunts=0 base_mva=100.0>
+            >>> System()
+            <System buses=0 branches=0 generators=0 loads=0 shunts=0 base_mva=100.0>
+        """
+        name = f" {self.name!r}" if self.name else ""
+        return (
+            f"<System{name} "
+            f"buses={self.num_buses} "
+            f"branches={self.num_branches} "
+            f"generators={self.num_generators} "
+            f"loads={self.num_loads} "
+            f"shunts={self.num_shunts} "
+            f"base_mva={self.base_mva}>"
+        )
+
     # =========================================================================
     # Factory methods
     # =========================================================================
@@ -107,7 +134,7 @@ class System:
 
         Example:
             >>> system = System.from_raw("ieee14.raw")
-            >>> print(f"Loaded {system.num_buses()} buses")
+            >>> print(f"Loaded {system.num_buses} buses")
 
         See Also:
             - from_file(): Auto-detect format from extension
@@ -138,7 +165,7 @@ class System:
 
         Example:
             >>> system = System.from_matpower("case14.m")
-            >>> print(f"Loaded {system.num_buses()} buses")
+            >>> print(f"Loaded {system.num_buses} buses")
 
         See Also:
             - from_raw(): Load PSS/E RAW format
@@ -169,7 +196,7 @@ class System:
 
         Example:
             >>> system = System.from_pop("WEST10peak.pop")
-            >>> print(f"Loaded {system.num_buses()} buses")
+            >>> print(f"Loaded {system.num_buses} buses")
 
         See Also:
             - from_raw(): Load PSS/E RAW format
@@ -200,7 +227,7 @@ class System:
 
         Example:
             >>> system = System.from_dss("network.dss")
-            >>> print(f"Loaded {system.num_buses()} buses")
+            >>> print(f"Loaded {system.num_buses} buses")
 
         See Also:
             - from_file(): Auto-detect format from extension
@@ -229,7 +256,7 @@ class System:
 
         Example:
             >>> system = System.from_dyna("cpat_model.dyna")
-            >>> print(f"Loaded {system.num_buses()} buses")
+            >>> print(f"Loaded {system.num_buses} buses")
 
         See Also:
             - from_pop(): Load CPAT .pop (ZIP+XML) format
@@ -759,31 +786,79 @@ class System:
         return issues
 
     # =========================================================================
-    # Count methods
+    # Count properties
     # =========================================================================
 
+    @property
     def num_buses(self) -> int:
-        """Return the number of buses in the system."""
+        """Number of buses in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, Bus
+            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)])
+            >>> system.num_buses
+            2
+        """
         return len(self.buses)
 
+    @property
     def num_branches(self) -> int:
-        """Return the number of branches in the system."""
+        """Number of branches (lines and transformers) in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, Branch
+            >>> system = System(branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)])
+            >>> system.num_branches
+            1
+        """
         return len(self.branches)
 
+    @property
     def num_generators(self) -> int:
-        """Return the number of generators in the system."""
+        """Number of generators in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, Generator
+            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system.num_generators
+            1
+        """
         return len(self.generators)
 
+    @property
     def num_loads(self) -> int:
-        """Return the number of loads in the system."""
+        """Number of loads in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, Load
+            >>> system = System(loads=[Load(bus_id=2, p_load=0.8, q_load=0.2)])
+            >>> system.num_loads
+            1
+        """
         return len(self.loads)
 
+    @property
     def num_shunts(self) -> int:
-        """Return the number of shunts in the system."""
+        """Number of shunt devices (capacitors and reactors) in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, Shunt
+            >>> system = System(shunts=[Shunt(bus_id=3, b_pu=0.19)])
+            >>> system.num_shunts
+            1
+        """
         return len(self.shunts)
 
+    @property
     def num_generator_costs(self) -> int:
-        """Return the number of generator cost functions in the system."""
+        """Number of generator cost functions in the system.
+
+        Example:
+            >>> from psforge_grid.models import System, GeneratorCost
+            >>> system = System(generator_costs=[GeneratorCost(gen_index=0, model=2)])
+            >>> system.num_generator_costs
+            1
+        """
         return len(self.generator_costs)
 
     # =========================================================================
@@ -1036,15 +1111,15 @@ class System:
         lines = [
             f"Power System: {name_str}",
             f"  Base MVA: {self.base_mva:.1f}",
-            f"  Components: {self.num_buses()} buses, {self.num_branches()} branches, "
-            f"{self.num_generators()} generators, {self.num_loads()} loads, "
-            f"{self.num_shunts()} shunts",
+            f"  Components: {self.num_buses} buses, {self.num_branches} branches, "
+            f"{self.num_generators} generators, {self.num_loads} loads, "
+            f"{self.num_shunts} shunts",
             f"  Total Generation: {p_gen:.2f} pu P, {q_gen:.2f} pu Q",
             f"  Total Load: {p_load:.2f} pu P, {q_load:.2f} pu Q",
         ]
 
         if self.generator_costs:
-            lines.append(f"  Generator Costs: {self.num_generator_costs()} cost functions")
+            lines.append(f"  Generator Costs: {self.num_generator_costs} cost functions")
 
         if self.description:
             lines.append(f"  Note: {self.description}")
@@ -1086,10 +1161,10 @@ class System:
                 "| Property | Value |",
                 "|----------|-------|",
                 f"| Base MVA | {self.base_mva:.1f} |",
-                f"| Buses | {self.num_buses()} |",
-                f"| Branches | {self.num_branches()} |",
-                f"| Generators | {self.num_generators()} |",
-                f"| Loads | {self.num_loads()} |",
+                f"| Buses | {self.num_buses} |",
+                f"| Branches | {self.num_branches} |",
+                f"| Generators | {self.num_generators} |",
+                f"| Loads | {self.num_loads} |",
                 f"| Total Gen (P) | {p_gen * self.base_mva:.1f} MW |",
                 f"| Total Load (P) | {p_load * self.base_mva:.1f} MW |",
             ]
@@ -1097,8 +1172,8 @@ class System:
             lines = [
                 f"Power System: {self.name or 'Unnamed'}",
                 f"Base MVA: {self.base_mva:.1f}",
-                f"Buses: {self.num_buses()}, Branches: {self.num_branches()}",
-                f"Generators: {self.num_generators()}, Loads: {self.num_loads()}",
+                f"Buses: {self.num_buses}, Branches: {self.num_branches}",
+                f"Generators: {self.num_generators}, Loads: {self.num_loads}",
                 f"Total Gen: {p_gen * self.base_mva:.1f} MW, Load: {p_load * self.base_mva:.1f} MW",
             ]
 

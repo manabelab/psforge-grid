@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - Unreleased
+
+### Changed
+
+- **BREAKING**: `System` count accessors are now properties instead of methods (#8).
+  `num_buses`, `num_branches`, `num_generators`, `num_loads`, `num_shunts` and
+  `num_generator_costs` must be accessed without parentheses:
+
+  ```python
+  system.num_buses()   # before
+  system.num_buses     # after
+  ```
+
+  This aligns `System` with every other model in the package (`Bus.is_pq`,
+  `Branch.is_transformer`, `ScenarioSet.num_scenarios`, ...), which already
+  expose derived scalars as properties. `System` was the sole outlier, and the
+  inconsistency forced callers to guess which form applied.
+
+- `System.__repr__` now returns a one-line summary instead of the
+  dataclass-generated dump of every component (#8). The old repr expanded every
+  bus, branch, generator, load and shunt recursively, reaching ~1.4 MB on
+  IEEE 300; it is now 94 characters. Use `to_description()` or
+  `to_llm_context()` for detailed output.
+
+  ```text
+  <System 'case300.raw' buses=300 branches=411 generators=69 loads=201 shunts=29 base_mva=100.0>
+  ```
+
+### Added
+
+- Runnable usage examples in the docstrings of all six `System` count
+  properties and `__repr__` (#10).
+
+### Fixed
+
+- `__version__` reported `0.6.0` while `pyproject.toml` declared `0.7.0`; both
+  now report `0.7.0`.
+- The package docstring example called `system.to_summary()`, which does not
+  exist. It now calls `to_description()` (#10).
+
 ## [0.6.0] - 2026-03-15
 
 ### Added

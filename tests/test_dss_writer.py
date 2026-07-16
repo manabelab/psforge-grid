@@ -340,7 +340,7 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        assert counts["num_loads"] == system.num_loads()
+        assert counts["num_loads"] == system.num_loads
 
     def test_round_trip_preserves_shunt_count(self):
         system = System.from_raw(FIXTURES / "ieee14.raw")
@@ -348,7 +348,7 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        assert counts["num_shunts"] == system.num_shunts()
+        assert counts["num_shunts"] == system.num_shunts
 
     def test_round_trip_preserves_branch_count(self):
         """Branch count should be preserved (lines + transformers)."""
@@ -357,7 +357,7 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        assert counts["num_branches"] == system.num_branches()
+        assert counts["num_branches"] == system.num_branches
 
     def test_round_trip_preserves_bus_count(self):
         """Bus count should be preserved (internal buses filtered out)."""
@@ -366,7 +366,7 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        assert counts["num_buses"] == system.num_buses()
+        assert counts["num_buses"] == system.num_buses
 
     def test_round_trip_preserves_generator_count(self):
         """Generator count should be preserved (including swing bus generator)."""
@@ -375,7 +375,7 @@ class TestDSSRoundTrip:
             path = Path(tmpdir) / "test.dss"
             system.to_dss(path)
             counts = self._round_trip_counts(path)
-        assert counts["num_generators"] == system.num_generators()
+        assert counts["num_generators"] == system.num_generators
 
     def test_round_trip_swing_bus_type(self):
         """Swing bus should be recovered as bus_type=3."""

@@ -38,7 +38,7 @@ class TestMatpowerParser:
         parser = MatpowerParser()
         system = parser.parse(fixtures_dir / "pglib_opf_case5_pjm.m")
         assert isinstance(system, System)
-        assert system.num_buses() == 5
+        assert system.num_buses == 5
 
 
 class TestCase5PJM:
@@ -59,27 +59,27 @@ class TestCase5PJM:
 
     def test_num_buses(self, system):
         """Test that all 5 buses are parsed."""
-        assert system.num_buses() == 5
+        assert system.num_buses == 5
 
     def test_num_generators(self, system):
         """Test that all 5 generators are parsed."""
-        assert system.num_generators() == 5
+        assert system.num_generators == 5
 
     def test_num_loads(self, system):
         """Test that 3 loads are created (buses 2, 3, 4 have non-zero Pd)."""
-        assert system.num_loads() == 3
+        assert system.num_loads == 3
 
     def test_num_branches(self, system):
         """Test that all 6 branches are parsed."""
-        assert system.num_branches() == 6
+        assert system.num_branches == 6
 
     def test_num_shunts(self, system):
         """Test that no shunts exist (all Gs=Bs=0)."""
-        assert system.num_shunts() == 0
+        assert system.num_shunts == 0
 
     def test_num_generator_costs(self, system):
         """Test that 5 cost functions are parsed."""
-        assert system.num_generator_costs() == 5
+        assert system.num_generator_costs == 5
 
     def test_bus_types(self, system):
         """Test bus type assignments."""
@@ -199,11 +199,11 @@ class TestCase14IEEE:
 
     def test_num_buses(self, system):
         """Test that all 14 buses are parsed."""
-        assert system.num_buses() == 14
+        assert system.num_buses == 14
 
     def test_num_generators(self, system):
         """Test that 5 generators are parsed (buses 1, 2, 3, 6, 8)."""
-        assert system.num_generators() == 5
+        assert system.num_generators == 5
 
     def test_generator_buses(self, system):
         """Test generator bus assignments."""
@@ -212,18 +212,18 @@ class TestCase14IEEE:
 
     def test_num_loads(self, system):
         """Test that 11 loads are created (non-zero Pd buses)."""
-        assert system.num_loads() == 11
+        assert system.num_loads == 11
 
     def test_num_shunts(self, system):
         """Test that 1 shunt is created (bus 9: Bs=19.0 MVAr)."""
-        assert system.num_shunts() == 1
+        assert system.num_shunts == 1
         shunt = system.shunts[0]
         assert shunt.bus_id == 9
         assert abs(shunt.b_pu - 0.19) < 1e-6  # 19.0 / 100.0
 
     def test_num_branches(self, system):
         """Test that 20 branches are parsed."""
-        assert system.num_branches() == 20
+        assert system.num_branches == 20
 
     def test_transformers(self, system):
         """Test that 3 transformers are identified (ratio != 0)."""
@@ -264,7 +264,7 @@ class TestCase14IEEE:
 
     def test_num_generator_costs(self, system):
         """Test that 5 cost functions are parsed."""
-        assert system.num_generator_costs() == 5
+        assert system.num_generator_costs == 5
 
     def test_validation(self, system):
         """Test that the parsed system passes validation."""
@@ -298,15 +298,15 @@ class TestCrossFormatConsistency:
 
     def test_same_num_buses(self, mat_system, raw_system):
         """Test that both formats produce the same number of buses."""
-        assert mat_system.num_buses() == raw_system.num_buses()
+        assert mat_system.num_buses == raw_system.num_buses
 
     def test_same_num_branches(self, mat_system, raw_system):
         """Test that both formats produce the same number of branches."""
-        assert mat_system.num_branches() == raw_system.num_branches()
+        assert mat_system.num_branches == raw_system.num_branches
 
     def test_same_num_generators(self, mat_system, raw_system):
         """Test that both formats produce the same number of generators."""
-        assert mat_system.num_generators() == raw_system.num_generators()
+        assert mat_system.num_generators == raw_system.num_generators
 
 
 class TestParserFactory:
@@ -346,13 +346,13 @@ class TestParserFactory:
         """Test System.from_file() auto-detection with .m extension."""
         system = System.from_file(fixtures_dir / "pglib_opf_case5_pjm.m")
         assert isinstance(system, System)
-        assert system.num_buses() == 5
+        assert system.num_buses == 5
 
     def test_system_from_matpower(self, fixtures_dir):
         """Test System.from_matpower() factory method."""
         system = System.from_matpower(fixtures_dir / "pglib_opf_case5_pjm.m")
         assert isinstance(system, System)
-        assert system.num_buses() == 5
+        assert system.num_buses == 5
 
 
 class TestGeneratorCost:

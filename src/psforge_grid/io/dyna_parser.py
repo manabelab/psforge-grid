@@ -16,7 +16,7 @@ Supported cards:
 Example:
     >>> from psforge_grid.io.dyna_parser import parse_dyna
     >>> system = parse_dyna("cpat_model.dyna")
-    >>> print(f"Loaded {system.num_buses()} buses")
+    >>> print(f"Loaded {system.num_buses} buses")
 
 See Also:
     - DynaParser: Class implementing IParser for .dyna format
@@ -100,7 +100,7 @@ def parse_dyna(filepath: str | Path) -> System:
 
     Example:
         >>> system = parse_dyna("cpat_model.dyna")
-        >>> print(f"{system.num_buses()} buses, {system.num_branches()} branches")
+        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
     """
     return _parse_dyna_impl(filepath)
 
@@ -146,10 +146,10 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
 
     logger.info(
         "Parsed .dyna file: %d buses, %d branches, %d generators, %d loads (base_mva=%.1f)",
-        system.num_buses(),
-        system.num_branches(),
-        system.num_generators(),
-        system.num_loads(),
+        system.num_buses,
+        system.num_branches,
+        system.num_generators,
+        system.num_loads,
         system.base_mva,
     )
 

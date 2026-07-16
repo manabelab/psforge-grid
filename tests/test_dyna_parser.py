@@ -183,19 +183,19 @@ class TestDynaParserIntegration:
 
     def test_bus_count(self, system: System) -> None:
         """Model system has 10 nodes (1010-1100)."""
-        assert system.num_buses() == 10
+        assert system.num_buses == 10
 
     def test_branch_count(self, system: System) -> None:
         """9 transmission lines + 5 transformers = 14 branches."""
-        assert system.num_branches() == 14
+        assert system.num_branches == 14
 
     def test_generator_count(self, system: System) -> None:
         """4 generators: G-1 (1010), G-2 (1020), G-3 (1030), SWING (1100)."""
-        assert system.num_generators() == 4
+        assert system.num_generators == 4
 
     def test_load_count(self, system: System) -> None:
         """Buses with nonzero load: 1090 (P=6.0) and 1100 (Q=-0.5, P=4.0)."""
-        assert system.num_loads() >= 1
+        assert system.num_loads >= 1
 
     def test_slack_bus(self, system: System) -> None:
         """Swing node is 1100."""
@@ -270,11 +270,11 @@ class TestDynaFactoryIntegration:
 
     def test_system_from_dyna(self) -> None:
         system = System.from_dyna(DYNA_FILE)
-        assert system.num_buses() == 10
+        assert system.num_buses == 10
 
     def test_system_from_file(self) -> None:
         system = System.from_file(DYNA_FILE)
-        assert system.num_buses() == 10
+        assert system.num_buses == 10
 
     def test_file_not_found(self) -> None:
         with pytest.raises(FileNotFoundError):

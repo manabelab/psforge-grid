@@ -49,10 +49,10 @@ class TestAddBus:
 
     def test_add_bus_success(self, small_system: System) -> None:
         """New bus with unique ID is added successfully."""
-        original_count = small_system.num_buses()
+        original_count = small_system.num_buses
         new_bus = Bus(bus_id=3, bus_type=1, base_kv=33.0)
         small_system.add_bus(new_bus)
-        assert small_system.num_buses() == original_count + 1
+        assert small_system.num_buses == original_count + 1
         assert small_system.get_bus(3) is new_bus
 
     def test_add_bus_duplicate_raises(self, small_system: System) -> None:
@@ -69,9 +69,9 @@ class TestAddBus:
 
     def test_add_bus_ieee14(self, ieee14_system: System) -> None:
         """Add bus to IEEE 14-bus system."""
-        original_count = ieee14_system.num_buses()
+        original_count = ieee14_system.num_buses
         ieee14_system.add_bus(Bus(bus_id=15, bus_type=1, base_kv=33.0))
-        assert ieee14_system.num_buses() == original_count + 1
+        assert ieee14_system.num_buses == original_count + 1
 
 
 class TestAddBranch:
@@ -80,10 +80,10 @@ class TestAddBranch:
     def test_add_branch_success(self, small_system: System) -> None:
         """Branch with valid bus references is added."""
         small_system.add_bus(Bus(bus_id=3, bus_type=1))
-        original_count = small_system.num_branches()
+        original_count = small_system.num_branches
         new_branch = Branch(from_bus=2, to_bus=3, r_pu=0.01, x_pu=0.05)
         small_system.add_branch(new_branch)
-        assert small_system.num_branches() == original_count + 1
+        assert small_system.num_branches == original_count + 1
 
     def test_add_branch_invalid_from_bus_raises(self, small_system: System) -> None:
         """from_bus not in system raises ValueError."""
@@ -109,10 +109,10 @@ class TestAddGenerator:
 
     def test_add_generator_success(self, small_system: System) -> None:
         """Generator with valid bus_id is added."""
-        original_count = small_system.num_generators()
+        original_count = small_system.num_generators
         gen = Generator(bus_id=2, p_gen=0.5, gen_id="G2")
         small_system.add_generator(gen)
-        assert small_system.num_generators() == original_count + 1
+        assert small_system.num_generators == original_count + 1
 
     def test_add_generator_invalid_bus_raises(self, small_system: System) -> None:
         """Generator with non-existent bus_id raises ValueError."""
@@ -132,10 +132,10 @@ class TestAddShunt:
 
     def test_add_shunt_success(self, small_system: System) -> None:
         """Shunt with valid bus_id is added."""
-        original_count = small_system.num_shunts()
+        original_count = small_system.num_shunts
         shunt = Shunt(bus_id=2, b_pu=0.05)
         small_system.add_shunt(shunt)
-        assert small_system.num_shunts() == original_count + 1
+        assert small_system.num_shunts == original_count + 1
 
     def test_add_shunt_invalid_bus_raises(self, small_system: System) -> None:
         """Shunt with non-existent bus_id raises ValueError."""
@@ -149,10 +149,10 @@ class TestAddLoad:
 
     def test_add_load_success(self, small_system: System) -> None:
         """Load with valid bus_id is added."""
-        original_count = small_system.num_loads()
+        original_count = small_system.num_loads
         load = Load(bus_id=1, p_load=0.3, q_load=0.1)
         small_system.add_load(load)
-        assert small_system.num_loads() == original_count + 1
+        assert small_system.num_loads == original_count + 1
 
     def test_add_load_invalid_bus_raises(self, small_system: System) -> None:
         """Load with non-existent bus_id raises ValueError."""
@@ -234,9 +234,9 @@ class TestGridAccessWorkflow:
 
     def test_add_solar_plant_to_ieee14(self, ieee14_system: System) -> None:
         """Simulate adding a solar plant with POI substation to IEEE 14-bus."""
-        original_buses = ieee14_system.num_buses()
-        original_branches = ieee14_system.num_branches()
-        original_gens = ieee14_system.num_generators()
+        original_buses = ieee14_system.num_buses
+        original_branches = ieee14_system.num_branches
+        original_gens = ieee14_system.num_generators
 
         # Step 1: Add POI substation bus
         ieee14_system.add_bus(
@@ -273,9 +273,9 @@ class TestGridAccessWorkflow:
         )
 
         # Verify
-        assert ieee14_system.num_buses() == original_buses + 1
-        assert ieee14_system.num_branches() == original_branches + 1
-        assert ieee14_system.num_generators() == original_gens + 1
+        assert ieee14_system.num_buses == original_buses + 1
+        assert ieee14_system.num_branches == original_branches + 1
+        assert ieee14_system.num_generators == original_gens + 1
 
     def test_add_svc_to_poi(self, ieee14_system: System) -> None:
         """Simulate adding SVC at POI for voltage support."""
@@ -288,7 +288,7 @@ class TestGridAccessWorkflow:
                 shunt_id="SVC1",
             )
         )
-        assert ieee14_system.num_shunts() > 0
+        assert ieee14_system.num_shunts > 0
 
     def test_validation_order_matters(self, small_system: System) -> None:
         """Adding branch before bus raises, but bus-then-branch succeeds."""
