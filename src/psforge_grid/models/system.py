@@ -783,7 +783,258 @@ class System:
                         }
                     )
 
+        issues.extend(self.check_data_completeness())
+
         return issues
+
+    def check_data_completeness(self) -> list[dict[str, str]]:
+        """Report inputs that downstream analyses need but this system lacks.
+
+        RAW and MATPOWER files routinely arrive without branch ratings or
+        machine reactances. Nothing rejects such a system: a thermal screening
+        simply has no limit to compare against, and a fault study silently
+        treats a generator with no reactance as absent, which understates fault
+        current instead of failing. This surfaces the gap so the omission is a
+        decision rather than an accident.
+
+        Returns:
+            List of dicts with 'level' and 'message', matching
+            validate_detailed(). Always 'warning': missing data is not an
+            error, since a power flow needs none of it.
+
+        Example:
+            >>> from psforge_grid.models import System, Branch
+            >>> system = System(branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)])
+            >>> for issue in system.check_data_completeness():
+            ...     print(issue["message"])
+            Branch ratings: rate_a missing on 1/1 branches. Thermal loading cannot be assessed; loading status will be NOT_CLASSIFIED. Use assign_default_ratings() to apply documented defaults.
+
+        See Also:
+            - assign_default_ratings(): opt-in defaults for missing ratings
+            - assign_default_reactances(): opt-in defaults for missing reactances
+        """
+        issues: list[dict[str, str]] = []
+
+        if self.branches:
+            missing = sum(1 for b in self.branches if b.rate_a is None)
+            if missing:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": (
+                            f"Branch ratings: rate_a missing on {missing}/{len(self.branches)} "
+                            "branches. Thermal loading cannot be assessed; loading status will "
+                            "be NOT_CLASSIFIED. Use assign_default_ratings() to apply "
+                            "documented defaults."
+                        ),
+                    }
+                )
+
+        in_service = [g for g in self.generators if g.is_in_service]
+        if in_service:
+            missing = sum(1 for g in in_service if g.get_fault_reactance() is None)
+            if missing:
+                issues.append(
+                    {
+                        "level": "warning",
+                        "message": (
+                            f"Machine reactances: sub-transient reactance missing on "
+                            f"{missing}/{len(in_service)} in-service generators. A fault study "
+                            "treats these machines as absent, which UNDERSTATES fault current. "
+                            "Use assign_default_reactances() to apply documented defaults."
+                        ),
+                    }
+                )
+
+        return issues
+
+    # =========================================================================
+    # Opt-in defaults for missing data
+    # =========================================================================
+
+    def assign_default_ratings(
+        self,
+        rule: dict[float, float] | None = None,
+        overwrite: bool = False,
+    ) -> int:
+        """Assign branch thermal ratings by voltage class. Opt-in.
+
+        This invents data. It is deliberately not automatic: the package's
+        stated position is that unspecified limits yield NOT_CLASSIFIED rather
+        than an arbitrary default (see VoltageStatus/LoadingStatus). Calling
+        this is you choosing an assumption, and the choice is recorded so
+        to_llm_context() can declare it alongside the results.
+
+        Ratings are set from the higher-voltage terminal of each branch. Note
+        this is a crude rule: a real rating depends on conductor, ambient
+        conditions and the circuit's actual duty, none of which are in a RAW
+        file. Prefer real ratings whenever you have them.
+
+        Args:
+            rule: Mapping of minimum base_kv to rating [MVA], applied as
+                'highest floor at or below the branch voltage wins'. Defaults
+                to a transmission-scale table (500kV:2000, 300kV:1200,
+                200kV:800, 100kV:400, 50kV:150, 0kV:50).
+            overwrite: If True, replace ratings that are already set. Defaults
+                to False, so real data is never clobbered.
+
+        Returns:
+            Number of branches whose rate_a was assigned.
+
+        Raises:
+            ValueError: If a branch terminal has a non-positive base_kv, which
+                cannot be classified at all.
+
+        Note:
+            Bus.base_kv defaults to 1.0, so a bus left at exactly 1.0 may be an
+            unset voltage rather than a real 1 kV bus. Those branches are still
+            rated, but the count is called out in the recorded assumption, since
+            their voltage class is unverified. Genuine low voltages are fine:
+            IEEE 300 has real 0.6 kV buses.
+
+        Example:
+            >>> from psforge_grid.models import System, Bus, Branch
+            >>> system = System(
+            ...     buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            ...     branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+            ... )
+            >>> system.assign_default_ratings()
+            1
+            >>> system.branches[0].rate_a
+            1200.0
+        """
+        table = (
+            rule
+            if rule is not None
+            else {
+                500.0: 2000.0,
+                300.0: 1200.0,
+                200.0: 800.0,
+                100.0: 400.0,
+                50.0: 150.0,
+                0.0: 50.0,
+            }
+        )
+        floors = sorted(table.keys(), reverse=True)
+        kv = {bus.bus_id: bus.base_kv for bus in self.buses}
+
+        targets = [b for b in self.branches if overwrite or b.rate_a is None]
+        invalid = {
+            bus_id
+            for b in targets
+            for bus_id in (b.from_bus, b.to_bus)
+            if kv.get(bus_id, 1.0) <= 0.0
+        }
+        if invalid:
+            raise ValueError(
+                f"Cannot assign ratings: {len(invalid)} bus(es) have a non-positive base_kv, "
+                f"which has no voltage class: {sorted(invalid)[:10]}. Set Bus.base_kv on these "
+                f"buses first."
+            )
+
+        assigned = 0
+        unverified = 0
+        for branch in targets:
+            v = max(kv[branch.from_bus], kv[branch.to_bus])
+            # 1.0 is the field's default, so it may mean 'nobody set this'.
+            # Rate it anyway, but say so rather than let it pass as known.
+            if kv[branch.from_bus] == 1.0 or kv[branch.to_bus] == 1.0:
+                unverified += 1
+            rate = next(table[f] for f in floors if v >= f)
+            branch.rate_a = rate
+            branch.rate_b = rate * 1.1
+            branch.rate_c = rate * 1.2
+            assigned += 1
+
+        if assigned:
+            note = (
+                f"Branch ratings: {assigned} branch(es) rated by voltage class, "
+                f"not from real equipment data. Thermal results depend on this assumption."
+            )
+            if unverified:
+                note += (
+                    f" {unverified} of them touch a bus left at the 1.0 kV default, so their "
+                    f"voltage class is unverified."
+                )
+            self._record_assumption(note)
+        return assigned
+
+    def assign_default_reactances(self, xdpp_pu: float = 0.2, overwrite: bool = False) -> int:
+        """Assign a sub-transient reactance to machines that lack one. Opt-in.
+
+        Like assign_default_ratings(), this invents data and is not automatic.
+        It exists because the alternative is worse: a fault study silently drops
+        a machine with no reactance, so the network loses a source and the
+        computed fault level comes out too LOW. An understated fault level is
+        the dangerous direction — it is the one that reads as safe.
+
+        Args:
+            xdpp_pu: Sub-transient reactance [pu on the machine's own mbase].
+                Defaults to 0.2, a conventional round figure for synchronous
+                machines. Real values vary widely with machine design.
+            overwrite: If True, replace reactances that are already set.
+                Defaults to False, so real data is never clobbered.
+
+        Returns:
+            Number of generators whose xdpp_pu was assigned.
+
+        Example:
+            >>> from psforge_grid.models import System, Generator
+            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system.assign_default_reactances()
+            1
+            >>> system.generators[0].xdpp_pu
+            0.2
+        """
+        if xdpp_pu <= 0:
+            raise ValueError(
+                f"xdpp_pu must be positive, got {xdpp_pu}. A zero or negative "
+                "reactance makes the machine an infinite source."
+            )
+
+        assigned = 0
+        for gen in self.generators:
+            if overwrite or gen.xdpp_pu is None:
+                gen.xdpp_pu = xdpp_pu
+                assigned += 1
+
+        if assigned:
+            self._record_assumption(
+                f"Machine reactances: {assigned} generator(s) assigned Xd''={xdpp_pu} pu, "
+                f"not from real machine data. Fault levels depend on this assumption."
+            )
+        return assigned
+
+    def _record_assumption(self, note: str) -> None:
+        """Remember an invented-data decision for to_llm_context()/to_description().
+
+        Kept off the dataclass fields on purpose: the JSON writer serialises
+        fields(), so a new field would change the on-disk schema and the
+        round-trip. Assumptions describe an in-memory analysis session, not the
+        network, so they are intentionally not persisted. Writing this system to
+        a file bakes the invented values in and drops this note with it.
+        """
+        if not hasattr(self, "_assumptions"):
+            self._assumptions: list[str] = []
+        self._assumptions.append(note)
+
+    @property
+    def assumptions(self) -> list[str]:
+        """Invented-data decisions applied to this system, newest last.
+
+        Empty unless assign_default_ratings() or assign_default_reactances()
+        was called. Not persisted by the writers.
+
+        Example:
+            >>> from psforge_grid.models import System, Generator
+            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system.assumptions
+            []
+            >>> _ = system.assign_default_reactances()
+            >>> len(system.assumptions)
+            1
+        """
+        return list(getattr(self, "_assumptions", []))
 
     # =========================================================================
     # Count properties
@@ -1266,6 +1517,9 @@ class System:
         if self.description:
             lines.append(f"  Note: {self.description}")
 
+        for note in self.assumptions:
+            lines.append(f"  ASSUMPTION: {note}")
+
         return "\n".join(lines)
 
     def to_llm_context(
@@ -1332,6 +1586,24 @@ class System:
             lines.append(f"- Slack: {len(slack)} ({', '.join(str(b.bus_id) for b in slack)})")
             lines.append(f"- PV: {len(pv)}")
             lines.append(f"- PQ: {len(pq)}")
+
+        # Anything reading this context to interpret results has to be told when
+        # the inputs were invented, otherwise it will report assumed numbers as
+        # measured ones.
+        if self.assumptions:
+            lines.append("")
+            lines.append("### Data Assumptions:")
+            lines.append("Some inputs were not in the source data and were assigned defaults.")
+            lines.append("Results that depend on them are only as good as these assumptions.")
+            for note in self.assumptions:
+                lines.append(f"- {note}")
+
+        missing = self.check_data_completeness()
+        if missing:
+            lines.append("")
+            lines.append("### Missing Data:")
+            for issue in missing:
+                lines.append(f"- {issue['message']}")
 
         return "\n".join(lines)
 

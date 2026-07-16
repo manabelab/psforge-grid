@@ -424,16 +424,23 @@ def validate(
         if format.lower() == "json":
             import json
 
+            errors = [i for i in issues if i["level"] == "error"]
             result = json.dumps(
                 {
-                    "status": "PASSED" if not issues else "FAILED",
-                    "num_errors": len([i for i in issues if i["level"] == "error"]),
+                    # Warnings must not fail the validation: this branch used to
+                    # key off `issues`, so a warning-only system reported FAILED
+                    # here while the summary branch below reported PASSED for the
+                    # same system.
+                    "status": "PASSED" if not errors else "FAILED",
+                    "num_errors": len(errors),
                     "num_warnings": len([i for i in issues if i["level"] == "warning"]),
                     "issues": issues,
                 },
                 indent=2,
             )
-            console.print(result)
+            # soft_wrap stops rich from line-wrapping long messages, which
+            # inserts newlines mid-string and makes the JSON unparseable.
+            console.print(result, soft_wrap=True)
         elif format.lower() == "summary":
             errors = [i for i in issues if i["level"] == "error"]
             warnings = [i for i in issues if i["level"] == "warning"]

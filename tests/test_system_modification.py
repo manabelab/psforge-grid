@@ -299,3 +299,158 @@ class TestGridAccessWorkflow:
         # After adding bus 3, branch should succeed
         small_system.add_bus(Bus(bus_id=3, bus_type=1))
         small_system.add_branch(Branch(from_bus=2, to_bus=3, r_pu=0.01, x_pu=0.05))
+
+
+class TestDataCompleteness:
+    """Tests for System.check_data_completeness() and the opt-in defaults."""
+
+    def test_missing_ratings_are_reported(self) -> None:
+        """A branch with no rate_a is reported, with its count."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        issues = system.check_data_completeness()
+        assert any("rate_a missing on 1/1" in i["message"] for i in issues)
+        assert all(i["level"] == "warning" for i in issues)
+
+    def test_missing_reactances_are_reported(self) -> None:
+        """An in-service generator with no reactance is reported."""
+        system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+        issues = system.check_data_completeness()
+        msg = next(i["message"] for i in issues if "reactance" in i["message"])
+        assert "1/1 in-service generators" in msg
+        # The direction of the error is the whole point: it reads as safe.
+        assert "UNDERSTATES" in msg
+
+    def test_out_of_service_generators_are_not_reported(self) -> None:
+        """A generator that is out of service cannot understate fault current."""
+        system = System(generators=[Generator(bus_id=1, p_gen=1.0, status=0)])
+        assert not any("reactance" in i["message"] for i in system.check_data_completeness())
+
+    def test_complete_system_reports_nothing(self) -> None:
+        """Data that is present is not reported as missing."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1, rate_a=500.0)],
+            generators=[Generator(bus_id=1, p_gen=1.0, xdpp_pu=0.2, xqpp_pu=0.2)],
+        )
+        assert system.check_data_completeness() == []
+
+    def test_completeness_warnings_reach_validate_detailed(self) -> None:
+        """validate_detailed() surfaces the same gaps."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert any("rate_a missing" in i["message"] for i in system.validate_detailed())
+
+    def test_missing_data_does_not_make_a_system_invalid(self) -> None:
+        """Missing ratings are a warning, never an error: a power flow needs none."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert system.validate() == []
+        assert not [i for i in system.validate_detailed() if i["level"] == "error"]
+
+    def test_assign_default_ratings_by_voltage_class(self) -> None:
+        """Ratings follow the voltage class of the higher-voltage terminal."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=138.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert system.assign_default_ratings() == 1
+        assert system.branches[0].rate_a == 1200.0
+        assert system.branches[0].rate_b == pytest.approx(1320.0)
+        assert system.check_data_completeness() == []
+
+    def test_assign_default_ratings_does_not_clobber_real_data(self) -> None:
+        """Real ratings survive; only the missing one is filled."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[
+                Branch(1, 2, r_pu=0.01, x_pu=0.1, rate_a=77.0),
+                Branch(1, 2, r_pu=0.01, x_pu=0.1),
+            ],
+        )
+        assert system.assign_default_ratings() == 1
+        assert system.branches[0].rate_a == 77.0
+        assert system.branches[1].rate_a == 1200.0
+
+    def test_assign_default_ratings_accepts_real_low_voltage_buses(self) -> None:
+        """Regression: a genuine 0.6 kV bus is ratable, not an error.
+
+        IEEE 300 has real 0.6 kV buses. An earlier guard rejected any base_kv
+        at or below 1.0 as 'unset' and refused to rate the whole system.
+        """
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=0.6), Bus(2, bus_type=1, base_kv=0.6)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert system.assign_default_ratings() == 1
+        assert system.branches[0].rate_a == 50.0
+
+    def test_assign_default_ratings_rejects_non_positive_voltage(self) -> None:
+        """A base_kv of 0 has no voltage class and cannot be guessed."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=0.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        with pytest.raises(ValueError, match="non-positive base_kv"):
+            system.assign_default_ratings()
+
+    def test_default_base_kv_is_flagged_as_unverified(self) -> None:
+        """A bus left at the 1.0 default is rated but called out as unverified."""
+        system = System(
+            buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert system.assign_default_ratings() == 1
+        assert "unverified" in system.assumptions[0]
+
+    def test_assign_default_reactances(self) -> None:
+        """Machines without a reactance get the documented default."""
+        system = System(
+            generators=[
+                Generator(bus_id=1, p_gen=1.0),
+                Generator(bus_id=2, p_gen=1.0, xdpp_pu=0.15),
+            ]
+        )
+        assert system.assign_default_reactances() == 1
+        assert system.generators[0].xdpp_pu == 0.2
+        assert system.generators[1].xdpp_pu == 0.15
+
+    def test_assign_default_reactances_rejects_zero(self) -> None:
+        """A zero reactance would make the machine an infinite source."""
+        system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+        with pytest.raises(ValueError, match="must be positive"):
+            system.assign_default_reactances(xdpp_pu=0.0)
+
+    def test_assumptions_are_declared_to_llm_context(self) -> None:
+        """An LLM reading the context is told the inputs were invented."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert "### Data Assumptions" not in system.to_llm_context()
+        system.assign_default_ratings()
+        ctx = system.to_llm_context()
+        assert "### Data Assumptions" in ctx
+        assert "rated by voltage class" in ctx
+
+    def test_missing_data_is_declared_to_llm_context(self) -> None:
+        """Gaps are surfaced even when no defaults were applied."""
+        system = System(
+            buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
+            branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+        )
+        assert "### Missing Data" in system.to_llm_context()
+
+    def test_assumptions_do_not_leak_between_systems(self) -> None:
+        """The note is per-instance, not shared class state."""
+        a = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+        b = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+        a.assign_default_reactances()
+        assert len(a.assumptions) == 1
+        assert b.assumptions == []
