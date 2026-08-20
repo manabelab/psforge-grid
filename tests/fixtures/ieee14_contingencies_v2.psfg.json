@@ -1,0 +1,57 @@
+{
+  "metadata": {
+    "format": "psforge-grid-scenario",
+    "version": "1.0"
+  },
+  "base_case": "ieee14.psfg.json",
+  "scenarios": [
+    {
+      "name": "N-1_Line_1-5",
+      "description": "Line 1-5 outage",
+      "modifications": [
+        {
+          "target": "branches",
+          "match": {
+            "from_bus_id": "B1",
+            "to_bus_id": "B5"
+          },
+          "set": {
+            "status": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "N-1_Line_2-3",
+      "description": "Line 2-3 outage",
+      "modifications": [
+        {
+          "target": "branches",
+          "match": {
+            "from_bus_id": "B2",
+            "to_bus_id": "B3"
+          },
+          "set": {
+            "status": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "heavy_load_bus14",
+      "description": "Double load at bus 14",
+      "modifications": [
+        {
+          "target": "loads",
+          "match": {
+            "bus_id": "B14"
+          },
+          "set": {
+            "p_load": 0.298,
+            "q_load": 0.1
+          }
+        }
+      ]
+    }
+  ]
+}

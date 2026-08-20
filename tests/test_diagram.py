@@ -1,4 +1,9 @@
-"""Tests for diagram data models and normalization."""
+"""Tests for diagram data models and normalization.
+
+Diagram dictionaries are keyed by the unified string identifiers:
+``bus_positions`` by ``Bus.id`` (e.g. ``"B1"``) and ``branch_routes`` by
+``Branch.id`` (e.g. ``"BR1"``).
+"""
 
 import tempfile
 from pathlib import Path
@@ -55,24 +60,24 @@ class TestDiagramLabel:
     def test_bus_label(self):
         lbl = DiagramLabel(
             element_type="bus",
-            element_id=1,
+            element_id="B1",
             text_type="name",
             offset_x=10,
             offset_y=20,
         )
         assert lbl.element_type == "bus"
-        assert lbl.element_id == 1
+        assert lbl.element_id == "B1"
         assert lbl.visible is True
         assert lbl.angle == 0.0
 
     def test_branch_label(self):
         lbl = DiagramLabel(
             element_type="branch",
-            element_id=(1, 2, "1"),
+            element_id="BR1",
             text_type="code",
             visible=False,
         )
-        assert lbl.element_id == (1, 2, "1")
+        assert lbl.element_id == "BR1"
         assert lbl.visible is False
 
 
@@ -96,19 +101,30 @@ class TestDiagramData:
         dd = DiagramData(
             coordinate_system="geographic",
             crs="EPSG:4326",
-            bus_positions={1: BusPosition(x=141, y=43)},
+            bus_positions={"B1": BusPosition(x=141, y=43)},
         )
         assert dd.coordinate_system == "geographic"
         assert dd.crs == "EPSG:4326"
+        assert dd.bus_positions["B1"].x == 141
+
+    def test_string_keyed_dicts(self):
+        """bus_positions and branch_routes are keyed by element id strings."""
+        dd = DiagramData(
+            bus_positions={"B1": BusPosition(x=0, y=0), "B2": BusPosition(x=100, y=0)},
+            branch_routes={"BR1": BranchRoute(waypoints=[(0, 0), (100, 0)])},
+        )
+        assert set(dd.bus_positions) == {"B1", "B2"}
+        assert set(dd.branch_routes) == {"BR1"}
+        assert dd.branch_routes["BR1"].waypoints == [(0, 0), (100, 0)]
 
     def test_system_fields(self):
         system = System()
         assert system.diagram_schematic is None
         assert system.diagram_geographic is None
 
-        system.diagram_schematic = DiagramData(bus_positions={1: BusPosition(x=100, y=200)})
+        system.diagram_schematic = DiagramData(bus_positions={"B1": BusPosition(x=100, y=200)})
         assert system.diagram_schematic is not None
-        assert system.diagram_schematic.bus_positions[1].x == 100
+        assert system.diagram_schematic.bus_positions["B1"].x == 100
 
 
 # =========================================================================
@@ -207,19 +223,23 @@ class TestPopParserDiagram:
         assert d.coordinate_system == "schematic"
         assert d.normalization_ref == 1920
 
-    def test_bus_positions_populated(self, pop_system):
+    def test_bus_positions_keyed_by_bus_id(self, pop_system):
+        """Every bus_positions key is the id of a bus in the system."""
         d = pop_system.diagram_schematic
         assert len(d.bus_positions) > 0
-        # All buses should have valid coordinates
-        for _bus_id, pos in d.bus_positions.items():
+        bus_ids = set(pop_system.get_bus_ids())
+        for bus_id, pos in d.bus_positions.items():
+            assert bus_id in bus_ids
             assert isinstance(pos.x, int)
             assert isinstance(pos.y, int)
 
-    def test_branch_routes_populated(self, pop_system):
+    def test_branch_routes_keyed_by_branch_id(self, pop_system):
+        """Every branch_routes key is the id of a branch in the system."""
         d = pop_system.diagram_schematic
         assert len(d.branch_routes) > 0
+        branch_ids = {br.id for br in pop_system.branches}
         for key, route in d.branch_routes.items():
-            assert len(key) == 3  # (from, to, ckt)
+            assert key in branch_ids
             assert len(route.waypoints) >= 2
 
     def test_y_axis_up_positive(self, pop_system):
@@ -276,8 +296,8 @@ class TestJsonDiagramRoundTrip:
             assert back is not None
             assert back.coordinate_system == orig.coordinate_system
             assert back.normalization_ref == orig.normalization_ref
-            assert len(back.bus_positions) == len(orig.bus_positions)
-            assert len(back.branch_routes) == len(orig.branch_routes)
+            assert set(back.bus_positions) == set(orig.bus_positions)
+            assert set(back.branch_routes) == set(orig.branch_routes)
 
             # Verify specific bus position
             for bus_id in orig.bus_positions:

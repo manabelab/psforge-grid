@@ -44,61 +44,54 @@ def assert_systems_approx_equal(
         f"base_mva mismatch: {s1.base_mva} vs {s2.base_mva}"
     )
 
-    # Sort buses by ID for comparison
-    buses1 = sorted(s1.buses, key=lambda b: b.bus_id)
-    buses2 = sorted(s2.buses, key=lambda b: b.bus_id)
+    # Sort buses by unified id for comparison. Same-format round-trips must
+    # regenerate identical ids (deterministic generation), so id equality is
+    # itself part of the contract under test.
+    buses1 = sorted(s1.buses, key=lambda b: b.id)
+    buses2 = sorted(s2.buses, key=lambda b: b.id)
     for b1, b2 in zip(buses1, buses2, strict=True):
-        assert b1.bus_id == b2.bus_id
-        assert b1.bus_type == b2.bus_type, f"Bus {b1.bus_id} type: {b1.bus_type} vs {b2.bus_type}"
+        assert b1.id == b2.id
+        assert b1.number == b2.number, f"Bus {b1.id} number: {b1.number} vs {b2.number}"
+        assert b1.bus_type == b2.bus_type, f"Bus {b1.id} type: {b1.bus_type} vs {b2.bus_type}"
         assert abs(b1.v_magnitude - b2.v_magnitude) < atol, (
-            f"Bus {b1.bus_id} v_magnitude: {b1.v_magnitude} vs {b2.v_magnitude}"
+            f"Bus {b1.id} v_magnitude: {b1.v_magnitude} vs {b2.v_magnitude}"
         )
         assert abs(b1.v_angle - b2.v_angle) < atol, (
-            f"Bus {b1.bus_id} v_angle: {b1.v_angle} vs {b2.v_angle}"
+            f"Bus {b1.id} v_angle: {b1.v_angle} vs {b2.v_angle}"
         )
         assert abs(b1.base_kv - b2.base_kv) < 0.5, (
-            f"Bus {b1.bus_id} base_kv: {b1.base_kv} vs {b2.base_kv}"
+            f"Bus {b1.id} base_kv: {b1.base_kv} vs {b2.base_kv}"
         )
 
-    # Sort branches by (from_bus, to_bus, circuit_id) for comparison
-    def branch_key(br):
-        return (br.from_bus, br.to_bus, br.circuit_id)
-
-    branches1 = sorted(s1.branches, key=branch_key)
-    branches2 = sorted(s2.branches, key=branch_key)
+    # Sort branches by unified id for comparison
+    branches1 = sorted(s1.branches, key=lambda br: br.id)
+    branches2 = sorted(s2.branches, key=lambda br: br.id)
     for br1, br2 in zip(branches1, branches2, strict=True):
-        assert br1.from_bus == br2.from_bus
-        assert br1.to_bus == br2.to_bus
-        assert abs(br1.r_pu - br2.r_pu) < atol, (
-            f"Branch {br1.from_bus}-{br1.to_bus} r_pu: {br1.r_pu} vs {br2.r_pu}"
-        )
-        assert abs(br1.x_pu - br2.x_pu) < atol, (
-            f"Branch {br1.from_bus}-{br1.to_bus} x_pu: {br1.x_pu} vs {br2.x_pu}"
-        )
-        assert abs(br1.b_pu - br2.b_pu) < atol, (
-            f"Branch {br1.from_bus}-{br1.to_bus} b_pu: {br1.b_pu} vs {br2.b_pu}"
-        )
+        assert br1.id == br2.id
+        assert br1.from_bus_id == br2.from_bus_id
+        assert br1.to_bus_id == br2.to_bus_id
+        assert abs(br1.r_pu - br2.r_pu) < atol, f"Branch {br1.id} r_pu: {br1.r_pu} vs {br2.r_pu}"
+        assert abs(br1.x_pu - br2.x_pu) < atol, f"Branch {br1.id} x_pu: {br1.x_pu} vs {br2.x_pu}"
+        assert abs(br1.b_pu - br2.b_pu) < atol, f"Branch {br1.id} b_pu: {br1.b_pu} vs {br2.b_pu}"
         assert abs(br1.tap_ratio - br2.tap_ratio) < atol
         assert abs(br1.shift_angle - br2.shift_angle) < atol
 
-    # Sort generators by (bus_id, gen_id) for comparison
-    gens1 = sorted(s1.generators, key=lambda g: (g.bus_id, g.gen_id))
-    gens2 = sorted(s2.generators, key=lambda g: (g.bus_id, g.gen_id))
+    # Sort generators by unified id for comparison
+    gens1 = sorted(s1.generators, key=lambda g: g.id)
+    gens2 = sorted(s2.generators, key=lambda g: g.id)
     for g1, g2 in zip(gens1, gens2, strict=True):
+        assert g1.id == g2.id
         assert g1.bus_id == g2.bus_id
-        assert abs(g1.p_gen - g2.p_gen) < atol, (
-            f"Gen at bus {g1.bus_id} p_gen: {g1.p_gen} vs {g2.p_gen}"
-        )
+        assert abs(g1.p_gen - g2.p_gen) < atol, f"Gen {g1.id} p_gen: {g1.p_gen} vs {g2.p_gen}"
         assert abs(g1.v_setpoint - g2.v_setpoint) < atol
 
-    # Sort loads by bus_id
-    loads1 = sorted(s1.loads, key=lambda ld: (ld.bus_id, ld.load_id))
-    loads2 = sorted(s2.loads, key=lambda ld: (ld.bus_id, ld.load_id))
+    # Sort loads by unified id
+    loads1 = sorted(s1.loads, key=lambda ld: ld.id)
+    loads2 = sorted(s2.loads, key=lambda ld: ld.id)
     for l1, l2 in zip(loads1, loads2, strict=True):
+        assert l1.id == l2.id
         assert l1.bus_id == l2.bus_id
-        assert abs(l1.p_load - l2.p_load) < atol, (
-            f"Load at bus {l1.bus_id} p_load: {l1.p_load} vs {l2.p_load}"
-        )
+        assert abs(l1.p_load - l2.p_load) < atol, f"Load {l1.id} p_load: {l1.p_load} vs {l2.p_load}"
         assert abs(l1.q_load - l2.q_load) < atol
 
 
@@ -333,56 +326,54 @@ def assert_systems_core_equal(
     )
     assert abs(s1.base_mva - s2.base_mva) < atol
 
-    # Bus data
-    buses1 = sorted(s1.buses, key=lambda b: b.bus_id)
-    buses2 = sorted(s2.buses, key=lambda b: b.bus_id)
+    # Bus data. All formats in the cross-format matrix are bus-number based,
+    # so the deterministic ids ("B{number}") must agree across formats too.
+    buses1 = sorted(s1.buses, key=lambda b: b.id)
+    buses2 = sorted(s2.buses, key=lambda b: b.id)
     for b1, b2 in zip(buses1, buses2, strict=True):
-        assert b1.bus_id == b2.bus_id
+        assert b1.id == b2.id
+        assert b1.number == b2.number
         if check_bus_type:
-            assert b1.bus_type == b2.bus_type, (
-                f"Bus {b1.bus_id} type: {b1.bus_type} vs {b2.bus_type}"
-            )
+            assert b1.bus_type == b2.bus_type, f"Bus {b1.id} type: {b1.bus_type} vs {b2.bus_type}"
         assert abs(b1.v_magnitude - b2.v_magnitude) < atol, (
-            f"Bus {b1.bus_id} Vm: {b1.v_magnitude} vs {b2.v_magnitude}"
+            f"Bus {b1.id} Vm: {b1.v_magnitude} vs {b2.v_magnitude}"
         )
         if check_angles:
             assert abs(b1.v_angle - b2.v_angle) < atol, (
-                f"Bus {b1.bus_id} Va: {b1.v_angle} vs {b2.v_angle}"
+                f"Bus {b1.id} Va: {b1.v_angle} vs {b2.v_angle}"
             )
         if check_base_kv:
             assert abs(b1.base_kv - b2.base_kv) < 0.5, (
-                f"Bus {b1.bus_id} base_kv: {b1.base_kv} vs {b2.base_kv}"
+                f"Bus {b1.id} base_kv: {b1.base_kv} vs {b2.base_kv}"
             )
 
-    # Branch data
-    def branch_key(br: object) -> tuple[int, int, str]:
-        return (br.from_bus, br.to_bus, br.circuit_id)  # type: ignore[attr-defined]
+    # Branch data. Circuit identifiers travel differently between formats,
+    # so branches are matched by terminals plus impedance order, not by id.
+    def branch_key(br: object) -> tuple[str, str, float]:
+        return (br.from_bus_id, br.to_bus_id, br.x_pu)  # type: ignore[attr-defined]
 
     branches1 = sorted(s1.branches, key=branch_key)
     branches2 = sorted(s2.branches, key=branch_key)
     for br1, br2 in zip(branches1, branches2, strict=True):
-        assert br1.from_bus == br2.from_bus
-        assert br1.to_bus == br2.to_bus
-        assert abs(br1.r_pu - br2.r_pu) < atol, (
-            f"Branch {br1.from_bus}-{br1.to_bus} r: {br1.r_pu} vs {br2.r_pu}"
-        )
-        assert abs(br1.x_pu - br2.x_pu) < atol, (
-            f"Branch {br1.from_bus}-{br1.to_bus} x: {br1.x_pu} vs {br2.x_pu}"
-        )
+        assert br1.from_bus_id == br2.from_bus_id
+        assert br1.to_bus_id == br2.to_bus_id
+        assert abs(br1.r_pu - br2.r_pu) < atol, f"Branch {br1.id} r: {br1.r_pu} vs {br2.r_pu}"
+        assert abs(br1.x_pu - br2.x_pu) < atol, f"Branch {br1.id} x: {br1.x_pu} vs {br2.x_pu}"
         assert abs(br1.tap_ratio - br2.tap_ratio) < atol
         assert abs(br1.shift_angle - br2.shift_angle) < atol
 
-    # Generator data
-    gens1 = sorted(s1.generators, key=lambda g: (g.bus_id, g.gen_id))
-    gens2 = sorted(s2.generators, key=lambda g: (g.bus_id, g.gen_id))
+    # Generator data. Machine identifiers travel differently between
+    # formats, so generators are matched by bus plus output order.
+    gens1 = sorted(s1.generators, key=lambda g: (g.bus_id, g.p_gen, g.v_setpoint))
+    gens2 = sorted(s2.generators, key=lambda g: (g.bus_id, g.p_gen, g.v_setpoint))
     for g1, g2 in zip(gens1, gens2, strict=True):
         assert g1.bus_id == g2.bus_id
         assert abs(g1.p_gen - g2.p_gen) < atol, f"Gen bus {g1.bus_id} Pg: {g1.p_gen} vs {g2.p_gen}"
         assert abs(g1.v_setpoint - g2.v_setpoint) < atol
 
     # Total load P/Q per bus (instead of individual Load objects)
-    def _total_load_by_bus(system: System) -> dict[int, tuple[float, float]]:
-        result: dict[int, tuple[float, float]] = {}
+    def _total_load_by_bus(system: System) -> dict[str, tuple[float, float]]:
+        result: dict[str, tuple[float, float]] = {}
         for load in system.loads:
             p, q = result.get(load.bus_id, (0.0, 0.0))
             result[load.bus_id] = (p + load.p_load, q + load.q_load)
@@ -522,17 +513,19 @@ class TestCrossFormat:
         assert s5.num_branches == s1.num_branches
         assert s5.num_generators == s1.num_generators
 
-        # Bus voltage magnitudes should be preserved
-        buses1 = {b.bus_id: b for b in s1.buses}
-        buses5 = {b.bus_id: b for b in s5.buses}
+        # Bus voltage magnitudes should be preserved (matched by unified id,
+        # which survives the chain because every step is bus-number based)
+        buses1 = {b.id: b for b in s1.buses}
+        buses5 = {b.id: b for b in s5.buses}
+        assert set(buses1) == set(buses5)
         for bus_id in buses1:
             assert abs(buses1[bus_id].v_magnitude - buses5[bus_id].v_magnitude) < 1e-4, (
                 f"Bus {bus_id} Vm: {buses1[bus_id].v_magnitude} vs {buses5[bus_id].v_magnitude}"
             )
 
         # Branch impedances should be preserved
-        def _branch_key(br: object) -> tuple[int, int]:
-            return (br.from_bus, br.to_bus)  # type: ignore[attr-defined]
+        def _branch_key(br: object) -> tuple[str, str, float]:
+            return (br.from_bus_id, br.to_bus_id, br.x_pu)  # type: ignore[attr-defined]
 
         br1 = sorted(s1.branches, key=_branch_key)
         br5 = sorted(s5.branches, key=_branch_key)
