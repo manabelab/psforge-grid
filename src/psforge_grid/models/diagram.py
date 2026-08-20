@@ -27,7 +27,7 @@ Example:
     >>> from psforge_grid.models.diagram import DiagramData, BusPosition
     >>> diagram = DiagramData(
     ...     coordinate_system="schematic",
-    ...     bus_positions={1: BusPosition(x=960, y=540)},
+    ...     bus_positions={"B1": BusPosition(x=960, y=540)},
     ... )
 """
 
@@ -86,8 +86,8 @@ class DiagramLabel:
     Attributes:
         element_type: Type of the parent element
             ("bus", "branch", "generator", "load").
-        element_id: Identifier of the parent element. Integer for buses,
-            generators, and loads. Tuple (from_bus, to_bus, ckt) for branches.
+        element_id: ``id`` of the parent element (unified string identifier,
+            e.g. ``"B1"`` for a bus, ``"BR1_2_1"`` for a branch).
         text_type: Kind of text displayed
             ("name", "code", "voltage", "result").
         offset_x: Horizontal offset from the parent element (right is positive).
@@ -97,7 +97,7 @@ class DiagramLabel:
     """
 
     element_type: str
-    element_id: int | tuple[int, int, str]
+    element_id: str
     text_type: str
     offset_x: int = 0
     offset_y: int = 0
@@ -147,8 +147,8 @@ class DiagramData:
         normalization_ref: Reference size for the short edge when normalizing
             schematic coordinates. Default is 1920 (Full HD aligned).
             Ignored for geographic.
-        bus_positions: Mapping from bus_id to its position.
-        branch_routes: Mapping from (from_bus, to_bus, ckt) to its route.
+        bus_positions: Mapping from ``Bus.id`` to its position.
+        branch_routes: Mapping from ``Branch.id`` to its route.
         labels: List of text labels. Data class defined but parser support
             is planned for a future release.
         import_meta: Metadata for reversing normalization on export.
@@ -159,8 +159,8 @@ class DiagramData:
     coordinate_system: str = "schematic"
     crs: str | None = None
     normalization_ref: int = 1920
-    bus_positions: dict[int, BusPosition] = field(default_factory=dict)
-    branch_routes: dict[tuple[int, int, str], BranchRoute] = field(default_factory=dict)
+    bus_positions: dict[str, BusPosition] = field(default_factory=dict)
+    branch_routes: dict[str, BranchRoute] = field(default_factory=dict)
     labels: list[DiagramLabel] = field(default_factory=list)
     import_meta: ImportMeta | None = None
 

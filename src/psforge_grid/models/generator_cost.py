@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from psforge_grid.models.identity import validate_id
+
 
 @dataclass
 class GeneratorCost:
@@ -17,8 +19,12 @@ class GeneratorCost:
     and piecewise linear cost models as defined in the MATPOWER format.
 
     Attributes:
-        gen_index: Index into System.generators list (0-based).
-            Links this cost to a specific generator.
+        id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
+            whole system, all element types combined. Parsers generate it
+            deterministically from the linked generator (e.g. ``GC_G1_1``).
+        generator_id: ``Generator.id`` of the generator this cost belongs to.
+            This is a stable reference — unlike a list index, it survives
+            reordering of ``System.generators``.
         model: Cost model type:
             - 1: Piecewise linear (points are (MW, $/hr) pairs)
             - 2: Polynomial (coefficients are c_n, ..., c_1, c_0)
@@ -29,6 +35,10 @@ class GeneratorCost:
                 where cost = c_n * P^n + ... + c_1 * P + c_0
             For piecewise linear (model=1): [x_1, f_1, x_2, f_2, ...]
                 where (x_i, f_i) are break points in (MW, $/hr)
+        order: Sort/display order (default: None). Parsers assign the
+            position within the source file (1.0, 2.0, ...).
+        name: Cost function name (optional, free text)
+        tags: Attribute/grouping tags (``"key:value"`` convention).
         description: Free-text description for LLM-friendly output.
 
     Note:
@@ -36,31 +46,36 @@ class GeneratorCost:
           coefficients = [c2, c1, c0] where cost = c2*P^2 + c1*P + c0
         - Power values in coefficients are in MW (not per-unit)
         - Cost values are in $/hr
-        - gen_index is 0-based and corresponds to System.generators[gen_index]
 
     Example:
         >>> # Quadratic cost: 0.04*P^2 + 20*P + 100 $/hr
         >>> cost = GeneratorCost(
-        ...     gen_index=0, model=2,
+        ...     "GC_G1_1", generator_id="G1_1", model=2,
         ...     coefficients=[0.04, 20.0, 100.0]
         ... )
         >>> cost.evaluate(50.0)  # Cost at 50 MW
         1200.0
     """
 
-    gen_index: int
+    id: str
+    generator_id: str
     model: int
     startup: float = 0.0
     shutdown: float = 0.0
     coefficients: list[float] = field(default_factory=list)
+    order: float | None = None
+    name: str | None = None
+    tags: list[str] = field(default_factory=list)
     description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate cost model type after initialization.
 
         Raises:
-            ValueError: If model is not 1 or 2.
+            ValueError: If id violates the identifier character set, or if
+                model is not 1 or 2.
         """
+        validate_id(self.id, "GeneratorCost")
         if self.model not in [1, 2]:
             raise ValueError(
                 f"Invalid cost model: {self.model}. Must be 1 (piecewise linear) or 2 (polynomial)."
@@ -72,9 +87,11 @@ class GeneratorCost:
 
         Example:
             >>> from psforge_grid.models import GeneratorCost
-            >>> GeneratorCost(gen_index=0, model=2, coefficients=[0.04, 20.0, 100.0]).is_polynomial
+            >>> GeneratorCost("GC1", generator_id="G1", model=2,
+            ...     coefficients=[0.04, 20.0, 100.0]).is_polynomial
             True
-            >>> GeneratorCost(gen_index=0, model=1, coefficients=[0.0, 0.0, 100.0]).is_polynomial
+            >>> GeneratorCost("GC1", generator_id="G1", model=1,
+            ...     coefficients=[0.0, 0.0, 100.0]).is_polynomial
             False
         """
         return self.model == 2
@@ -85,10 +102,11 @@ class GeneratorCost:
 
         Example:
             >>> from psforge_grid.models import GeneratorCost
-            >>> cost = GeneratorCost(gen_index=0, model=1, coefficients=[0.0, 0.0, 100.0, 2000.0])
+            >>> cost = GeneratorCost("GC1", generator_id="G1", model=1,
+            ...     coefficients=[0.0, 0.0, 100.0, 2000.0])
             >>> cost.is_piecewise_linear
             True
-            >>> GeneratorCost(gen_index=0, model=2).is_piecewise_linear
+            >>> GeneratorCost("GC1", generator_id="G1", model=2).is_piecewise_linear
             False
         """
         return self.model == 1
@@ -99,9 +117,10 @@ class GeneratorCost:
 
         Example:
             >>> from psforge_grid.models import GeneratorCost
-            >>> GeneratorCost(gen_index=0, model=2, coefficients=[0.04, 20.0, 100.0]).n_coefficients
+            >>> GeneratorCost("GC1", generator_id="G1", model=2,
+            ...     coefficients=[0.04, 20.0, 100.0]).n_coefficients
             3
-            >>> GeneratorCost(gen_index=0, model=2).n_coefficients
+            >>> GeneratorCost("GC1", generator_id="G1", model=2).n_coefficients
             0
         """
         return len(self.coefficients)
@@ -120,7 +139,7 @@ class GeneratorCost:
                 or if coefficients are empty.
 
         Example:
-            >>> cost = GeneratorCost(gen_index=0, model=2,
+            >>> cost = GeneratorCost("GC1", generator_id="G1", model=2,
             ...     coefficients=[0.04, 20.0, 100.0])
             >>> cost.evaluate(50.0)
             1200.0
@@ -147,10 +166,10 @@ class GeneratorCost:
             Multi-line string describing the cost function for LLM context.
 
         Example:
-            >>> cost = GeneratorCost(gen_index=0, model=2,
+            >>> cost = GeneratorCost("GC_G1_1", generator_id="G1_1", model=2,
             ...     coefficients=[0.04, 20.0, 100.0])
             >>> print(cost.to_description())
-            Generator Cost for gen_index=0: Polynomial
+            Generator Cost GC_G1_1 for generator G1_1: Polynomial
               Coefficients: [0.04, 20.0, 100.0]
               Cost function: 0.0400*P^2 + 20.0000*P + 100.0000
               Startup: $0.00, Shutdown: $0.00
@@ -158,7 +177,7 @@ class GeneratorCost:
         model_name = "Polynomial" if self.is_polynomial else "Piecewise Linear"
 
         lines = [
-            f"Generator Cost for gen_index={self.gen_index}: {model_name}",
+            f"Generator Cost {self.id} for generator {self.generator_id}: {model_name}",
             f"  Coefficients: {self.coefficients}",
         ]
 
@@ -176,6 +195,9 @@ class GeneratorCost:
             lines.append(f"  Cost function: {' + '.join(terms)}")
 
         lines.append(f"  Startup: ${self.startup:.2f}, Shutdown: ${self.shutdown:.2f}")
+
+        if self.tags:
+            lines.append(f"  Tags: {', '.join(self.tags)}")
 
         if self.description:
             lines.append(f"  Note: {self.description}")

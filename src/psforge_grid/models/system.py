@@ -13,6 +13,7 @@ Export Methods (write):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,8 +22,12 @@ from psforge_grid.models.bus import Bus
 from psforge_grid.models.diagram import DiagramData
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
+from psforge_grid.models.identity import ID_PATTERN
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
+
+CASE_TIME_PATTERN = re.compile(r"^\d{4}(-\d{2}(-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?)?)?$")
+"""ISO-8601 with partial precision: "2026", "2026-08", "2026-08-20", "2026-08-20T15:00"."""
 
 
 @dataclass(repr=False)
@@ -45,6 +50,18 @@ class System:
             50 Hz for Japan/Europe, 60 Hz for North America.
             None means the source format did not provide this information.
         name: System name (optional, default: empty string)
+        id: Case identifier (default: None). Same character set as element
+            ids (``[A-Za-z0-9_]+``); a natural primary key when systems are
+            stored in a database. Never auto-generated — case identity is
+            the user's decision.
+        order: Sort order within a collection of cases (default: None).
+        tags: Attribute/grouping tags. Hierarchies use the ``"key:value"``
+            convention, e.g. ``["area:west", "study:2030peak"]``.
+        case_time: Point in time this network data represents (default: None).
+            ISO-8601 with partial precision allowed: ``"2026"``, ``"2026-08"``,
+            ``"2026-08-20"``, or ``"2026-08-20T15:00"``. A string rather than
+            a datetime because "the August 2026 snapshot" has no meaningful
+            day or hour; lexicographic order still matches chronological order.
         description: Free-text description providing context about the system.
             For LLM-friendly output.
         diagram_schematic: Schematic single-line diagram layout data.
@@ -58,15 +75,17 @@ class System:
     Note:
         - All per-unit values in components are based on base_mva
         - This class serves as the primary interface between I/O parsers and analysis algorithms
-        - Use helper methods to query components by bus ID
+        - Every element carries a unified ``id`` (unique string across the
+          whole system); use helper methods to query components by id
 
     Example:
         >>> from psforge_grid.models import System, Bus, Branch, Generator, Load
         >>> system = System(
-        ...     buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)],
-        ...     branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
-        ...     generators=[Generator(bus_id=1, p_gen=1.0)],
-        ...     loads=[Load(bus_id=2, p_load=0.8, q_load=0.2)]
+        ...     buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1)],
+        ...     branches=[Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
+        ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
+        ...     loads=[Load("LD2_1", bus_id="B2", p_load=0.8, q_load=0.2)],
+        ...     case_time="2026-08",
         ... )
     """
 
@@ -79,6 +98,10 @@ class System:
     base_mva: float = 100.0
     frequency_hz: float | None = None
     name: str = ""
+    id: str | None = None
+    order: float | None = None
+    tags: list[str] = field(default_factory=list)
+    case_time: str | None = None
     description: str | None = None
     diagram_schematic: DiagramData | None = None
     diagram_geographic: DiagramData | None = None
@@ -94,7 +117,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)], name="demo")
+            >>> System(buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1)], name="demo")
             <System 'demo' buses=2 branches=0 generators=0 loads=0 shunts=0 base_mva=100.0>
             >>> System()
             <System buses=0 branches=0 generators=0 loads=0 shunts=0 base_mva=100.0>
@@ -472,113 +495,133 @@ class System:
     # Modification methods (validated)
     # =========================================================================
 
+    def _check_new_id(self, id_: str) -> None:
+        """Reject an element id that is already used anywhere in this system.
+
+        Ids are unique across the whole system, all element types combined,
+        so a Bus and a Generator can never share an id either.
+        """
+        if id_ in self.used_ids():
+            raise ValueError(
+                f"Element id {id_!r} already exists in this system. "
+                "Ids are unique across all element types; choose another id."
+            )
+
     def add_bus(self, bus: Bus) -> None:
         """Add a bus with validation.
 
-        Validates that the bus ID does not already exist in the system
-        before adding. Use this method instead of direct list append
+        Validates that the bus id is not already used anywhere in the
+        system before adding. Use this method instead of direct list append
         for safer system modification.
 
         Args:
             bus: Bus to add
 
         Raises:
-            ValueError: If bus_id already exists in the system.
+            ValueError: If the id already exists in the system.
 
         Example:
-            >>> system.add_bus(Bus(bus_id=15, bus_type=1, base_kv=33.0))
+            >>> system.add_bus(Bus("B15", bus_type=1, base_kv=33.0))
         """
-        if any(b.bus_id == bus.bus_id for b in self.buses):
-            raise ValueError(
-                f"Bus {bus.bus_id} already exists. "
-                f"Use a unique bus_id (current max: {max(b.bus_id for b in self.buses)})."
-            )
+        self._check_new_id(bus.id)
         self.buses.append(bus)
 
     def add_branch(self, branch: Branch) -> None:
         """Add a branch with validation.
 
-        Validates that both from_bus and to_bus exist in the system
-        before adding.
+        Validates that the branch id is unused and that both terminal buses
+        exist in the system before adding.
 
         Args:
             branch: Branch to add
 
         Raises:
-            ValueError: If from_bus or to_bus not found in system.
+            ValueError: If the id already exists, or if from_bus_id or
+                to_bus_id is not found in the system.
 
         Example:
-            >>> system.add_branch(Branch(from_bus=14, to_bus=15, r_pu=0.01, x_pu=0.05))
+            >>> system.add_branch(Branch("BR14_15_1", "B14", "B15", r_pu=0.01, x_pu=0.05))
         """
-        bus_ids = {b.bus_id for b in self.buses}
-        if branch.from_bus not in bus_ids:
+        self._check_new_id(branch.id)
+        bus_ids = {b.id for b in self.buses}
+        if branch.from_bus_id not in bus_ids:
             raise ValueError(
-                f"from_bus {branch.from_bus} not found in system. "
-                f"Available bus IDs: {sorted(bus_ids)}"
+                f"from_bus_id {branch.from_bus_id!r} not found in system. "
+                f"Available bus ids: {sorted(bus_ids)}"
             )
-        if branch.to_bus not in bus_ids:
+        if branch.to_bus_id not in bus_ids:
             raise ValueError(
-                f"to_bus {branch.to_bus} not found in system. Available bus IDs: {sorted(bus_ids)}"
+                f"to_bus_id {branch.to_bus_id!r} not found in system. "
+                f"Available bus ids: {sorted(bus_ids)}"
             )
         self.branches.append(branch)
 
     def add_generator(self, generator: Generator) -> None:
         """Add a generator with validation.
 
-        Validates that the generator's bus_id exists in the system.
+        Validates that the generator id is unused and that its bus exists
+        in the system.
 
         Args:
             generator: Generator to add
 
         Raises:
-            ValueError: If bus_id not found in system.
+            ValueError: If the id already exists, or if bus_id is not
+                found in the system.
 
         Example:
-            >>> system.add_generator(Generator(bus_id=15, p_gen=0.5, gen_id="PV1"))
+            >>> system.add_generator(Generator("G15_PV1", bus_id="B15", p_gen=0.5))
         """
-        if not any(b.bus_id == generator.bus_id for b in self.buses):
+        self._check_new_id(generator.id)
+        if not any(b.id == generator.bus_id for b in self.buses):
             raise ValueError(
-                f"Bus {generator.bus_id} not found in system. Add the bus first with add_bus()."
+                f"Bus {generator.bus_id!r} not found in system. Add the bus first with add_bus()."
             )
         self.generators.append(generator)
 
     def add_shunt(self, shunt: Shunt) -> None:
         """Add a shunt device with validation.
 
-        Validates that the shunt's bus_id exists in the system.
+        Validates that the shunt id is unused and that its bus exists in
+        the system.
 
         Args:
             shunt: Shunt to add
 
         Raises:
-            ValueError: If bus_id not found in system.
+            ValueError: If the id already exists, or if bus_id is not
+                found in the system.
 
         Example:
-            >>> system.add_shunt(Shunt(bus_id=15, b_pu=0.05))
+            >>> system.add_shunt(Shunt("SH15_1", bus_id="B15", b_pu=0.05))
         """
-        if not any(b.bus_id == shunt.bus_id for b in self.buses):
+        self._check_new_id(shunt.id)
+        if not any(b.id == shunt.bus_id for b in self.buses):
             raise ValueError(
-                f"Bus {shunt.bus_id} not found in system. Add the bus first with add_bus()."
+                f"Bus {shunt.bus_id!r} not found in system. Add the bus first with add_bus()."
             )
         self.shunts.append(shunt)
 
     def add_load(self, load: Load) -> None:
         """Add a load with validation.
 
-        Validates that the load's bus_id exists in the system.
+        Validates that the load id is unused and that its bus exists in
+        the system.
 
         Args:
             load: Load to add
 
         Raises:
-            ValueError: If bus_id not found in system.
+            ValueError: If the id already exists, or if bus_id is not
+                found in the system.
 
         Example:
-            >>> system.add_load(Load(bus_id=15, p_load=0.3, q_load=0.1))
+            >>> system.add_load(Load("LD15_1", bus_id="B15", p_load=0.3, q_load=0.1))
         """
-        if not any(b.bus_id == load.bus_id for b in self.buses):
+        self._check_new_id(load.id)
+        if not any(b.id == load.bus_id for b in self.buses):
             raise ValueError(
-                f"Bus {load.bus_id} not found in system. Add the bus first with add_bus()."
+                f"Bus {load.bus_id!r} not found in system. Add the bus first with add_bus()."
             )
         self.loads.append(load)
 
@@ -590,10 +633,14 @@ class System:
         """Validate system consistency.
 
         Checks structural integrity of the system data, including:
-        - Duplicate bus IDs
+        - Element id syntax ([A-Za-z0-9_]+; catches data loaded around
+          __post_init__, e.g. hand-edited JSON)
+        - Duplicate ids across ALL element types (system-wide uniqueness)
         - Slack bus existence
-        - Branch bus references (from_bus, to_bus)
+        - Branch bus references (from_bus_id, to_bus_id)
         - Generator, load, and shunt bus references
+        - GeneratorCost generator references (generator_id)
+        - case_time format (ISO-8601, partial precision allowed)
 
         Returns a list of error messages. An empty list means the system
         is valid and ready for power flow calculation.
@@ -610,15 +657,27 @@ class System:
             ...     print("System is valid")
         """
         errors: list[str] = []
-        bus_ids = {b.bus_id for b in self.buses}
+        bus_ids = {b.id for b in self.buses}
 
-        # Duplicate bus IDs
-        if len(bus_ids) != len(self.buses):
-            seen: set[int] = set()
-            for b in self.buses:
-                if b.bus_id in seen:
-                    errors.append(f"Duplicate bus_id: {b.bus_id}")
-                seen.add(b.bus_id)
+        # Id syntax and system-wide duplicates (all element types combined)
+        all_elements: list[tuple[str, str]] = [
+            *(("Bus", b.id) for b in self.buses),
+            *(("Branch", br.id) for br in self.branches),
+            *(("Generator", g.id) for g in self.generators),
+            *(("Load", ld.id) for ld in self.loads),
+            *(("Shunt", s.id) for s in self.shunts),
+            *(("GeneratorCost", c.id) for c in self.generator_costs),
+        ]
+        seen: dict[str, str] = {}
+        for kind, id_ in all_elements:
+            if not ID_PATTERN.match(id_):
+                errors.append(f"{kind} id {id_!r} is invalid: ids must match [A-Za-z0-9_]+")
+            if id_ in seen:
+                errors.append(f"Duplicate id {id_!r}: used by {seen[id_]} and {kind}")
+            else:
+                seen[id_] = kind
+        if self.id is not None and not ID_PATTERN.match(self.id):
+            errors.append(f"System id {self.id!r} is invalid: ids must match [A-Za-z0-9_]+")
 
         # Slack bus existence
         slack_buses = [b for b in self.buses if b.bus_type == 3]
@@ -626,30 +685,41 @@ class System:
             errors.append("No slack bus (bus_type=3) found")
 
         # Branch bus references
-        for i, br in enumerate(self.branches):
-            if br.from_bus not in bus_ids:
-                errors.append(
-                    f"Branch[{i}] ({br.from_bus}-{br.to_bus}): from_bus {br.from_bus} not in system"
-                )
-            if br.to_bus not in bus_ids:
-                errors.append(
-                    f"Branch[{i}] ({br.from_bus}-{br.to_bus}): to_bus {br.to_bus} not in system"
-                )
+        for br in self.branches:
+            if br.from_bus_id not in bus_ids:
+                errors.append(f"Branch {br.id}: from_bus_id {br.from_bus_id!r} not in system")
+            if br.to_bus_id not in bus_ids:
+                errors.append(f"Branch {br.id}: to_bus_id {br.to_bus_id!r} not in system")
 
         # Generator bus references
         for gen in self.generators:
             if gen.bus_id not in bus_ids:
-                errors.append(f"Generator '{gen.gen_id}' at bus {gen.bus_id}: bus not in system")
+                errors.append(f"Generator {gen.id}: bus_id {gen.bus_id!r} not in system")
 
         # Load bus references
         for load in self.loads:
             if load.bus_id not in bus_ids:
-                errors.append(f"Load '{load.load_id}' at bus {load.bus_id}: bus not in system")
+                errors.append(f"Load {load.id}: bus_id {load.bus_id!r} not in system")
 
         # Shunt bus references
         for shunt in self.shunts:
             if shunt.bus_id not in bus_ids:
-                errors.append(f"Shunt '{shunt.shunt_id}' at bus {shunt.bus_id}: bus not in system")
+                errors.append(f"Shunt {shunt.id}: bus_id {shunt.bus_id!r} not in system")
+
+        # GeneratorCost generator references
+        generator_ids = {g.id for g in self.generators}
+        for cost in self.generator_costs:
+            if cost.generator_id not in generator_ids:
+                errors.append(
+                    f"GeneratorCost {cost.id}: generator_id {cost.generator_id!r} not in system"
+                )
+
+        # case_time format
+        if self.case_time is not None and not CASE_TIME_PATTERN.match(self.case_time):
+            errors.append(
+                f"case_time {self.case_time!r} is not ISO-8601 "
+                "(expected e.g. '2026', '2026-08', '2026-08-20', '2026-08-20T15:00')"
+            )
 
         return errors
 
@@ -694,7 +764,7 @@ class System:
             issues.append(
                 {
                     "level": "warning",
-                    "message": f"Multiple slack buses found: {[b.bus_id for b in slack_buses]}",
+                    "message": f"Multiple slack buses found: {[b.id for b in slack_buses]}",
                 }
             )
 
@@ -704,40 +774,40 @@ class System:
                 issues.append(
                     {
                         "level": "error" if strict else "warning",
-                        "message": f"Bus {bus.bus_id}: Very low voltage {bus.v_magnitude:.3f} pu",
+                        "message": f"Bus {bus.id}: Very low voltage {bus.v_magnitude:.3f} pu",
                     }
                 )
             elif bus.v_magnitude < 0.9:
                 issues.append(
                     {
                         "level": "warning",
-                        "message": f"Bus {bus.bus_id}: Low voltage {bus.v_magnitude:.3f} pu",
+                        "message": f"Bus {bus.id}: Low voltage {bus.v_magnitude:.3f} pu",
                     }
                 )
             elif bus.v_magnitude > 1.1:
                 issues.append(
                     {
                         "level": "warning",
-                        "message": f"Bus {bus.bus_id}: High voltage {bus.v_magnitude:.3f} pu",
+                        "message": f"Bus {bus.id}: High voltage {bus.v_magnitude:.3f} pu",
                     }
                 )
             elif bus.v_magnitude > 1.2:
                 issues.append(
                     {
                         "level": "error" if strict else "warning",
-                        "message": f"Bus {bus.bus_id}: Very high voltage {bus.v_magnitude:.3f} pu",
+                        "message": f"Bus {bus.id}: Very high voltage {bus.v_magnitude:.3f} pu",
                     }
                 )
 
         # Check PV buses have generators
         pv_buses = self.get_pv_buses()
         for bus in pv_buses:
-            gens = self.get_bus_generators(bus.bus_id)
+            gens = self.get_bus_generators(bus.id)
             if not gens:
                 issues.append(
                     {
                         "level": "error",
-                        "message": f"PV bus {bus.bus_id} has no generator",
+                        "message": f"PV bus {bus.id} has no generator",
                     }
                 )
 
@@ -747,14 +817,14 @@ class System:
                 issues.append(
                     {
                         "level": "error",
-                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative reactance X={branch.x_pu:.4f}",
+                        "message": f"Branch {branch.id}: Negative reactance X={branch.x_pu:.4f}",
                     }
                 )
             if branch.r_pu < 0:
                 issues.append(
                     {
                         "level": "warning",
-                        "message": f"Branch {branch.from_bus}-{branch.to_bus}: Negative resistance R={branch.r_pu:.4f}",
+                        "message": f"Branch {branch.id}: Negative resistance R={branch.r_pu:.4f}",
                     }
                 )
 
@@ -762,11 +832,11 @@ class System:
         if strict:
             # Check all buses are referenced
             bus_ids = set(self.get_bus_ids())
-            referenced_buses: set[int] = set()
+            referenced_buses: set[str] = set()
 
             for branch in self.branches:
-                referenced_buses.add(branch.from_bus)
-                referenced_buses.add(branch.to_bus)
+                referenced_buses.add(branch.from_bus_id)
+                referenced_buses.add(branch.to_bus_id)
             for gen in self.generators:
                 referenced_buses.add(gen.bus_id)
             for load in self.loads:
@@ -804,7 +874,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Branch
-            >>> system = System(branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)])
+            >>> system = System(branches=[Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1)])
             >>> for issue in system.check_data_completeness():
             ...     print(issue["message"])
             Branch ratings: rate_a missing on 1/1 branches. Thermal loading cannot be assessed; loading status will be NOT_CLASSIFIED. Use assign_default_ratings() to apply documented defaults.
@@ -895,8 +965,11 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Bus, Branch
             >>> system = System(
-            ...     buses=[Bus(1, bus_type=3, base_kv=345.0), Bus(2, bus_type=1, base_kv=345.0)],
-            ...     branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)],
+            ...     buses=[
+            ...         Bus("B1", bus_type=3, base_kv=345.0),
+            ...         Bus("B2", bus_type=1, base_kv=345.0),
+            ...     ],
+            ...     branches=[Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
             ... )
             >>> system.assign_default_ratings()
             1
@@ -916,13 +989,13 @@ class System:
             }
         )
         floors = sorted(table.keys(), reverse=True)
-        kv = {bus.bus_id: bus.base_kv for bus in self.buses}
+        kv = {bus.id: bus.base_kv for bus in self.buses}
 
         targets = [b for b in self.branches if overwrite or b.rate_a is None]
         invalid = {
             bus_id
             for b in targets
-            for bus_id in (b.from_bus, b.to_bus)
+            for bus_id in (b.from_bus_id, b.to_bus_id)
             if kv.get(bus_id, 1.0) <= 0.0
         }
         if invalid:
@@ -935,10 +1008,10 @@ class System:
         assigned = 0
         unverified = 0
         for branch in targets:
-            v = max(kv[branch.from_bus], kv[branch.to_bus])
+            v = max(kv[branch.from_bus_id], kv[branch.to_bus_id])
             # 1.0 is the field's default, so it may mean 'nobody set this'.
             # Rate it anyway, but say so rather than let it pass as known.
-            if kv[branch.from_bus] == 1.0 or kv[branch.to_bus] == 1.0:
+            if kv[branch.from_bus_id] == 1.0 or kv[branch.to_bus_id] == 1.0:
                 unverified += 1
             rate = next(table[f] for f in floors if v >= f)
             branch.rate_a = rate
@@ -980,7 +1053,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Generator
-            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system = System(generators=[Generator("G1", bus_id="B1", p_gen=1.0)])
             >>> system.assign_default_reactances()
             1
             >>> system.generators[0].xdpp_pu
@@ -1027,7 +1100,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Generator
-            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system = System(generators=[Generator("G1", bus_id="B1", p_gen=1.0)])
             >>> system.assumptions
             []
             >>> _ = system.assign_default_reactances()
@@ -1046,7 +1119,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)])
+            >>> system = System(buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1)])
             >>> system.num_buses
             2
         """
@@ -1058,7 +1131,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Branch
-            >>> system = System(branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1)])
+            >>> system = System(branches=[Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1)])
             >>> system.num_branches
             1
         """
@@ -1070,7 +1143,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Generator
-            >>> system = System(generators=[Generator(bus_id=1, p_gen=1.0)])
+            >>> system = System(generators=[Generator("G1", bus_id="B1", p_gen=1.0)])
             >>> system.num_generators
             1
         """
@@ -1082,7 +1155,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Load
-            >>> system = System(loads=[Load(bus_id=2, p_load=0.8, q_load=0.2)])
+            >>> system = System(loads=[Load("LD1", bus_id="B2", p_load=0.8, q_load=0.2)])
             >>> system.num_loads
             1
         """
@@ -1094,7 +1167,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Shunt
-            >>> system = System(shunts=[Shunt(bus_id=3, b_pu=0.19)])
+            >>> system = System(shunts=[Shunt("SH1", bus_id="B3", b_pu=0.19)])
             >>> system.num_shunts
             1
         """
@@ -1106,7 +1179,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, GeneratorCost
-            >>> system = System(generator_costs=[GeneratorCost(gen_index=0, model=2)])
+            >>> system = System(generator_costs=[GeneratorCost("GC1", generator_id="G1", model=2)])
             >>> system.num_generator_costs
             1
         """
@@ -1116,74 +1189,255 @@ class System:
     # Bus lookup methods
     # =========================================================================
 
-    def get_bus(self, bus_id: int) -> Bus | None:
-        """Get a bus by its ID.
+    def get_bus(self, bus_id: str) -> Bus | None:
+        """Get a bus by its id.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
 
         Returns:
             Bus object if found, None otherwise
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1, base_kv=230.0)])
-            >>> system.get_bus(2).base_kv
+            >>> system = System(buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1, base_kv=230.0)])
+            >>> system.get_bus("B2").base_kv
             230.0
-            >>> system.get_bus(99) is None  # missing bus returns None
+            >>> system.get_bus("B99") is None  # missing bus returns None
             True
         """
         for bus in self.buses:
-            if bus.bus_id == bus_id:
+            if bus.id == bus_id:
                 return bus
         return None
 
-    def get_bus_index(self, bus_id: int) -> int:
+    def get_bus_index(self, bus_id: str) -> int:
         """Get the index of a bus in the buses list.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
 
         Returns:
             Index in buses list (0-based)
 
         Raises:
-            ValueError: If bus_id is not found
+            ValueError: If the bus id is not found
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=1)])
-            >>> system.get_bus_index(2)  # bus ID 2 is at list index 1
+            >>> system = System(buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1)])
+            >>> system.get_bus_index("B2")  # bus "B2" is at list index 1
             1
         """
         for i, bus in enumerate(self.buses):
-            if bus.bus_id == bus_id:
+            if bus.id == bus_id:
                 return i
-        raise ValueError(f"Bus {bus_id} not found in system")
+        raise ValueError(f"Bus {bus_id!r} not found in system")
 
-    def get_bus_ids(self) -> list[int]:
-        """Get all bus IDs in the system.
+    def get_bus_ids(self) -> list[str]:
+        """Get all bus ids in the system.
 
         Returns:
-            List of bus IDs
+            List of bus ids
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(4, bus_type=1)])
+            >>> system = System(buses=[Bus("B1", bus_type=3), Bus("B4", bus_type=1)])
             >>> system.get_bus_ids()
-            [1, 4]
+            ['B1', 'B4']
         """
-        return [bus.bus_id for bus in self.buses]
+        return [bus.id for bus in self.buses]
+
+    def used_ids(self) -> set[str]:
+        """Get every element id used in this system, all element types combined.
+
+        The unified identity contract makes ids unique across the whole
+        system; this is the set the uniqueness checks and id generators
+        test against.
+
+        Returns:
+            Set of all element ids (buses, branches, generators, loads,
+            shunts, generator costs). The System's own ``id`` is a case
+            identifier, not an element id, and is not included.
+
+        Example:
+            >>> from psforge_grid.models import System, Bus, Generator
+            >>> system = System(
+            ...     buses=[Bus("B1", bus_type=3)],
+            ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
+            ... )
+            >>> sorted(system.used_ids())
+            ['B1', 'G1_1']
+        """
+        ids: set[str] = set()
+        for group in (
+            self.buses,
+            self.branches,
+            self.generators,
+            self.loads,
+            self.shunts,
+            self.generator_costs,
+        ):
+            ids.update(e.id for e in group)
+        return ids
+
+    def get_element(
+        self, element_id: str
+    ) -> Bus | Branch | Generator | Load | Shunt | GeneratorCost | None:
+        """Get any element by its id, searching across all element types.
+
+        Because ids are unique system-wide, an id alone identifies the
+        element without knowing its type.
+
+        Args:
+            element_id: Element id to search for
+
+        Returns:
+            The matching element, or None if no element has this id.
+
+        Example:
+            >>> from psforge_grid.models import System, Bus, Generator
+            >>> system = System(
+            ...     buses=[Bus("B1", bus_type=3)],
+            ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
+            ... )
+            >>> system.get_element("G1_1").p_gen
+            1.0
+            >>> system.get_element("X99") is None
+            True
+        """
+        for group in (
+            self.buses,
+            self.branches,
+            self.generators,
+            self.loads,
+            self.shunts,
+            self.generator_costs,
+        ):
+            for element in group:
+                if element.id == element_id:
+                    return element
+        return None
+
+    def assign_ids(self) -> dict[str, str]:
+        """Regenerate every element id using the standard deterministic rules.
+
+        Rewrites all element ids from format-provided keys (``Bus.number``,
+        ``circuit_id``, ``machine_id``, ...) with the same rules the parsers
+        use (``B1``, ``BR1_2_1``, ``G1_1``, ...), and updates every reference
+        (``from_bus_id``/``to_bus_id``/``bus_id``/``generator_id`` and
+        diagram keys) consistently. Opt-in, like assign_default_ratings():
+        renaming identifiers is a decision, not a side effect.
+
+        Elements without a format-provided key fall back to their 1-based
+        list position.
+
+        Returns:
+            Mapping from old id to new id for every renamed element
+            (identity mappings are omitted).
+
+        Example:
+            >>> from psforge_grid.models import System, Bus
+            >>> system = System(buses=[Bus("node_a", bus_type=3, number=1)])
+            >>> system.assign_ids()
+            {'node_a': 'B1'}
+            >>> system.buses[0].id
+            'B1'
+        """
+        from psforge_grid.models.identity import make_unique, sanitize_id
+
+        mapping: dict[str, str] = {}
+        used: set[str] = set()
+
+        def rename(old: str, candidate: str) -> str:
+            new = make_unique(candidate, used)
+            used.add(new)
+            if new != old:
+                mapping[old] = new
+            return new
+
+        # Buses first: everything else references them.
+        bus_key: dict[str, str] = {}  # old bus id -> key used in dependent ids
+        for i, bus in enumerate(self.buses):
+            key = str(bus.number) if bus.number is not None else str(i + 1)
+            bus_key[bus.id] = key
+            bus.id = rename(bus.id, f"B{key}")
+
+        per_bus_count: dict[tuple[str, str], int] = {}
+
+        def seq(kind: str, old_bus_id: str) -> str:
+            per_bus_count[(kind, old_bus_id)] = per_bus_count.get((kind, old_bus_id), 0) + 1
+            return str(per_bus_count[(kind, old_bus_id)])
+
+        for branch in self.branches:
+            fk = bus_key.get(branch.from_bus_id, branch.from_bus_id)
+            tk = bus_key.get(branch.to_bus_id, branch.to_bus_id)
+            ckt = sanitize_id(branch.circuit_id) if branch.circuit_id is not None else "1"
+            branch.id = rename(branch.id, f"BR{fk}_{tk}_{ckt}")
+
+        gen_new_id: dict[str, str] = {}  # old generator id -> new id
+        for gen in self.generators:
+            bk = bus_key.get(gen.bus_id, gen.bus_id)
+            sub = (
+                sanitize_id(gen.machine_id)
+                if gen.machine_id is not None
+                else seq("gen", gen.bus_id)
+            )
+            old = gen.id
+            gen.id = rename(old, f"G{bk}_{sub}")
+            gen_new_id[old] = gen.id
+
+        for load in self.loads:
+            bk = bus_key.get(load.bus_id, load.bus_id)
+            sub = (
+                sanitize_id(load.load_id) if load.load_id is not None else seq("load", load.bus_id)
+            )
+            load.id = rename(load.id, f"LD{bk}_{sub}")
+
+        for shunt in self.shunts:
+            bk = bus_key.get(shunt.bus_id, shunt.bus_id)
+            sub = (
+                sanitize_id(shunt.shunt_id)
+                if shunt.shunt_id is not None
+                else seq("shunt", shunt.bus_id)
+            )
+            shunt.id = rename(shunt.id, f"SH{bk}_{sub}")
+
+        for cost in self.generator_costs:
+            new_gen = gen_new_id.get(cost.generator_id, cost.generator_id)
+            cost.id = rename(cost.id, f"GC_{new_gen}")
+
+        # Rewrite references and diagram keys.
+        for branch in self.branches:
+            branch.from_bus_id = mapping.get(branch.from_bus_id, branch.from_bus_id)
+            branch.to_bus_id = mapping.get(branch.to_bus_id, branch.to_bus_id)
+        for gen in self.generators:
+            gen.bus_id = mapping.get(gen.bus_id, gen.bus_id)
+        for load in self.loads:
+            load.bus_id = mapping.get(load.bus_id, load.bus_id)
+        for shunt in self.shunts:
+            shunt.bus_id = mapping.get(shunt.bus_id, shunt.bus_id)
+        for cost in self.generator_costs:
+            cost.generator_id = mapping.get(cost.generator_id, cost.generator_id)
+        for diagram in (self.diagram_schematic, self.diagram_geographic):
+            if diagram is None:
+                continue
+            diagram.bus_positions = {mapping.get(k, k): v for k, v in diagram.bus_positions.items()}
+            diagram.branch_routes = {mapping.get(k, k): v for k, v in diagram.branch_routes.items()}
+            for label in diagram.labels:
+                label.element_id = mapping.get(label.element_id, label.element_id)
+
+        return mapping
 
     # =========================================================================
     # Component lookup by bus
     # =========================================================================
 
-    def get_bus_generators(self, bus_id: int, in_service_only: bool = True) -> list[Generator]:
+    def get_bus_generators(self, bus_id: str, in_service_only: bool = True) -> list[Generator]:
         """Get all generators connected to a specific bus.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
             in_service_only: If True, return only in-service generators
 
         Returns:
@@ -1192,12 +1446,12 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Generator
             >>> system = System(generators=[
-            ...     Generator(bus_id=1, p_gen=1.0),
-            ...     Generator(bus_id=1, p_gen=0.5, status=0),  # out of service
+            ...     Generator("G1_1", bus_id="B1", p_gen=1.0),
+            ...     Generator("G1_2", bus_id="B1", p_gen=0.5, status=0),  # out of service
             ... ])
-            >>> len(system.get_bus_generators(1))
+            >>> len(system.get_bus_generators("B1"))
             1
-            >>> len(system.get_bus_generators(1, in_service_only=False))
+            >>> len(system.get_bus_generators("B1", in_service_only=False))
             2
         """
         gens = [g for g in self.generators if g.bus_id == bus_id]
@@ -1205,11 +1459,11 @@ class System:
             gens = [g for g in gens if g.is_in_service]
         return gens
 
-    def get_bus_loads(self, bus_id: int, in_service_only: bool = True) -> list[Load]:
+    def get_bus_loads(self, bus_id: str, in_service_only: bool = True) -> list[Load]:
         """Get all loads connected to a specific bus.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
             in_service_only: If True, return only in-service loads
 
         Returns:
@@ -1217,10 +1471,10 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Load
-            >>> system = System(loads=[Load(bus_id=2, p_load=0.8, q_load=0.2)])
-            >>> system.get_bus_loads(2)[0].p_load
+            >>> system = System(loads=[Load("LD2_1", bus_id="B2", p_load=0.8, q_load=0.2)])
+            >>> system.get_bus_loads("B2")[0].p_load
             0.8
-            >>> system.get_bus_loads(3)  # no loads at bus 3
+            >>> system.get_bus_loads("B3")  # no loads at bus B3
             []
         """
         loads = [load for load in self.loads if load.bus_id == bus_id]
@@ -1228,11 +1482,11 @@ class System:
             loads = [load for load in loads if load.is_in_service]
         return loads
 
-    def get_bus_shunts(self, bus_id: int, in_service_only: bool = True) -> list[Shunt]:
+    def get_bus_shunts(self, bus_id: str, in_service_only: bool = True) -> list[Shunt]:
         """Get all shunts connected to a specific bus.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
             in_service_only: If True, return only in-service shunts
 
         Returns:
@@ -1241,12 +1495,12 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Shunt
             >>> system = System(shunts=[
-            ...     Shunt(bus_id=3, b_pu=0.19),
-            ...     Shunt(bus_id=3, b_pu=-0.2, status=0),  # out of service
+            ...     Shunt("SH3_1", bus_id="B3", b_pu=0.19),
+            ...     Shunt("SH3_2", bus_id="B3", b_pu=-0.2, status=0),  # out of service
             ... ])
-            >>> len(system.get_bus_shunts(3))
+            >>> len(system.get_bus_shunts("B3"))
             1
-            >>> len(system.get_bus_shunts(3, in_service_only=False))
+            >>> len(system.get_bus_shunts("B3", in_service_only=False))
             2
         """
         shunts = [s for s in self.shunts if s.bus_id == bus_id]
@@ -1254,28 +1508,28 @@ class System:
             shunts = [s for s in shunts if s.status == 1]
         return shunts
 
-    def get_branches_at_bus(self, bus_id: int, in_service_only: bool = True) -> list[Branch]:
+    def get_branches_at_bus(self, bus_id: str, in_service_only: bool = True) -> list[Branch]:
         """Get all branches connected to a specific bus.
 
         Args:
-            bus_id: Bus ID to search for
+            bus_id: ``Bus.id`` to search for
             in_service_only: If True, return only in-service branches
 
         Returns:
-            List of Branch objects connected to the bus (either from_bus or to_bus)
+            List of Branch objects connected to the bus (either terminal)
 
         Example:
             >>> from psforge_grid.models import System, Branch
             >>> system = System(branches=[
-            ...     Branch(1, 2, r_pu=0.01, x_pu=0.1),
-            ...     Branch(2, 3, r_pu=0.02, x_pu=0.2),
+            ...     Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1),
+            ...     Branch("BR2_3_1", "B2", "B3", r_pu=0.02, x_pu=0.2),
             ... ])
-            >>> len(system.get_branches_at_bus(2))  # matches from_bus or to_bus
+            >>> len(system.get_branches_at_bus("B2"))  # matches either terminal
             2
-            >>> len(system.get_branches_at_bus(1))
+            >>> len(system.get_branches_at_bus("B1"))
             1
         """
-        branches = [b for b in self.branches if b.from_bus == bus_id or b.to_bus == bus_id]
+        branches = [b for b in self.branches if bus_id in (b.from_bus_id, b.to_bus_id)]
         if in_service_only:
             branches = [b for b in branches if b.is_in_service]
         return branches
@@ -1284,13 +1538,13 @@ class System:
     # Power injection calculations
     # =========================================================================
 
-    def get_bus_p_injection(self, bus_id: int) -> float:
+    def get_bus_p_injection(self, bus_id: str) -> float:
         """Calculate net active power injection at a bus [p.u.].
 
         P_injection = sum(P_gen) - sum(P_load)
 
         Args:
-            bus_id: Bus ID
+            bus_id: ``Bus.id``
 
         Returns:
             Net active power injection (generation - load) [p.u.]
@@ -1298,17 +1552,17 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Generator, Load
             >>> system = System(
-            ...     generators=[Generator(bus_id=1, p_gen=1.0)],
-            ...     loads=[Load(bus_id=1, p_load=0.25)],
+            ...     generators=[Generator("G1", bus_id="B1", p_gen=1.0)],
+            ...     loads=[Load("LD1", bus_id="B1", p_load=0.25)],
             ... )
-            >>> system.get_bus_p_injection(1)  # 1.0 generated - 0.25 consumed
+            >>> system.get_bus_p_injection("B1")  # 1.0 generated - 0.25 consumed
             0.75
         """
         p_gen = sum(g.p_gen for g in self.get_bus_generators(bus_id))
         p_load = sum(load.p_load for load in self.get_bus_loads(bus_id))
         return p_gen - p_load
 
-    def get_bus_q_injection(self, bus_id: int) -> float:
+    def get_bus_q_injection(self, bus_id: str) -> float:
         """Calculate net reactive power injection at a bus [p.u.].
 
         Q_injection = sum(Q_gen) - sum(Q_load)
@@ -1321,7 +1575,7 @@ class System:
             you need the shunt term.
 
         Args:
-            bus_id: Bus ID
+            bus_id: ``Bus.id``
 
         Returns:
             Net reactive power injection [p.u.], excluding shunts
@@ -1329,21 +1583,21 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Generator, Load
             >>> system = System(
-            ...     generators=[Generator(bus_id=1, p_gen=1.0, q_gen=0.5)],
-            ...     loads=[Load(bus_id=1, p_load=0.25, q_load=0.25)],
+            ...     generators=[Generator("G1", bus_id="B1", p_gen=1.0, q_gen=0.5)],
+            ...     loads=[Load("LD1", bus_id="B1", p_load=0.25, q_load=0.25)],
             ... )
-            >>> system.get_bus_q_injection(1)  # 0.5 generated - 0.25 consumed
+            >>> system.get_bus_q_injection("B1")  # 0.5 generated - 0.25 consumed
             0.25
         """
         q_gen = sum(g.q_gen for g in self.get_bus_generators(bus_id))
         q_load = sum(load.q_load for load in self.get_bus_loads(bus_id))
         return q_gen - q_load
 
-    def get_bus_shunt_admittance(self, bus_id: int) -> tuple[float, float]:
+    def get_bus_shunt_admittance(self, bus_id: str) -> tuple[float, float]:
         """Get total shunt admittance at a bus.
 
         Args:
-            bus_id: Bus ID
+            bus_id: ``Bus.id``
 
         Returns:
             Tuple of (G_total, B_total) [p.u.]
@@ -1351,10 +1605,10 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Shunt
             >>> system = System(shunts=[
-            ...     Shunt(bus_id=3, g_pu=0.5, b_pu=0.25),
-            ...     Shunt(bus_id=3, b_pu=0.25),
+            ...     Shunt("SH3_1", bus_id="B3", g_pu=0.5, b_pu=0.25),
+            ...     Shunt("SH3_2", bus_id="B3", b_pu=0.25),
             ... ])
-            >>> system.get_bus_shunt_admittance(3)  # summed over both shunts
+            >>> system.get_bus_shunt_admittance("B3")  # summed over both shunts
             (0.5, 0.5)
         """
         g_total = sum(s.g_pu for s in self.get_bus_shunts(bus_id))
@@ -1373,9 +1627,11 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=2), Bus(3, bus_type=1)])
-            >>> [bus.bus_id for bus in system.get_slack_buses()]
-            [1]
+            >>> system = System(
+            ...     buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=2), Bus("B3", bus_type=1)]
+            ... )
+            >>> [bus.id for bus in system.get_slack_buses()]
+            ['B1']
         """
         return [bus for bus in self.buses if bus.is_slack]
 
@@ -1387,9 +1643,11 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=2), Bus(3, bus_type=1)])
-            >>> [bus.bus_id for bus in system.get_pv_buses()]
-            [2]
+            >>> system = System(
+            ...     buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=2), Bus("B3", bus_type=1)]
+            ... )
+            >>> [bus.id for bus in system.get_pv_buses()]
+            ['B2']
         """
         return [bus for bus in self.buses if bus.is_pv]
 
@@ -1401,9 +1659,11 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Bus
-            >>> system = System(buses=[Bus(1, bus_type=3), Bus(2, bus_type=2), Bus(3, bus_type=1)])
-            >>> [bus.bus_id for bus in system.get_pq_buses()]
-            [3]
+            >>> system = System(
+            ...     buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=2), Bus("B3", bus_type=1)]
+            ... )
+            >>> [bus.id for bus in system.get_pq_buses()]
+            ['B3']
         """
         return [bus for bus in self.buses if bus.is_pq]
 
@@ -1416,8 +1676,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Branch
             >>> system = System(branches=[
-            ...     Branch(1, 2, r_pu=0.01, x_pu=0.1),
-            ...     Branch(2, 3, r_pu=0.02, x_pu=0.2, status=0),  # out of service
+            ...     Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1),
+            ...     Branch("BR2_3_1", "B2", "B3", r_pu=0.02, x_pu=0.2, status=0),  # out of service
             ... ])
             >>> len(system.get_in_service_branches())
             1
@@ -1436,8 +1696,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Generator
             >>> system = System(generators=[
-            ...     Generator(bus_id=1, p_gen=1.0, q_gen=0.25),
-            ...     Generator(bus_id=2, p_gen=0.5, q_gen=0.25, status=0),  # out of service
+            ...     Generator("G1", bus_id="B1", p_gen=1.0, q_gen=0.25),
+            ...     Generator("G2", bus_id="B2", p_gen=0.5, q_gen=0.25, status=0),  # out of service
             ... ])
             >>> system.total_generation()
             (1.0, 0.25)
@@ -1463,8 +1723,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Load
             >>> system = System(loads=[
-            ...     Load(bus_id=2, p_load=0.8, q_load=0.25),
-            ...     Load(bus_id=3, p_load=0.5, q_load=0.25, status=0),  # out of service
+            ...     Load("LD2", bus_id="B2", p_load=0.8, q_load=0.25),
+            ...     Load("LD3", bus_id="B3", p_load=0.5, q_load=0.25, status=0),  # out of service
             ... ])
             >>> system.total_load()
             (0.8, 0.25)
@@ -1504,6 +1764,12 @@ class System:
         lines = [
             f"Power System: {name_str}",
             f"  Base MVA: {self.base_mva:.1f}",
+        ]
+
+        if self.case_time:
+            lines.append(f"  Case time: {self.case_time}")
+
+        lines += [
             f"  Components: {self.num_buses} buses, {self.num_branches} branches, "
             f"{self.num_generators} generators, {self.num_loads} loads, "
             f"{self.num_shunts} shunts",
@@ -1583,7 +1849,7 @@ class System:
             slack = [b for b in self.buses if b.is_slack]
             pv = [b for b in self.buses if b.is_pv]
             pq = [b for b in self.buses if b.is_pq]
-            lines.append(f"- Slack: {len(slack)} ({', '.join(str(b.bus_id) for b in slack)})")
+            lines.append(f"- Slack: {len(slack)} ({', '.join(b.id for b in slack)})")
             lines.append(f"- PV: {len(pv)}")
             lines.append(f"- PQ: {len(pq)}")
 
@@ -1618,11 +1884,11 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Bus
             >>> system = System(buses=[
-            ...     Bus(1, bus_type=3, name="Main", description="Utility interconnection"),
-            ...     Bus(2, bus_type=1),  # no description -> omitted
+            ...     Bus("B1", bus_type=3, name="Main", description="Utility interconnection"),
+            ...     Bus("B2", bus_type=1),  # no description -> omitted
             ... ])
             >>> print(system.get_all_descriptions())
-            Bus 1 (Main): Utility interconnection
+            Bus B1 (Main): Utility interconnection
         """
         lines = []
 
@@ -1631,27 +1897,27 @@ class System:
 
         for bus in self.buses:
             if bus.description:
-                name = bus.name or f"Bus {bus.bus_id}"
-                lines.append(f"Bus {bus.bus_id} ({name}): {bus.description}")
+                name = bus.name or f"Bus {bus.id}"
+                lines.append(f"Bus {bus.id} ({name}): {bus.description}")
 
         for branch in self.branches:
             if branch.description:
-                name = branch.name or f"{branch.from_bus}-{branch.to_bus}"
-                lines.append(f"Branch {name}: {branch.description}")
+                name = branch.name or f"{branch.from_bus_id}-{branch.to_bus_id}"
+                lines.append(f"Branch {branch.id} ({name}): {branch.description}")
 
         for gen in self.generators:
             if gen.description:
-                name = gen.name or f"Gen {gen.gen_id} at Bus {gen.bus_id}"
-                lines.append(f"Generator {name}: {gen.description}")
+                name = gen.name or f"at Bus {gen.bus_id}"
+                lines.append(f"Generator {gen.id} ({name}): {gen.description}")
 
         for load in self.loads:
             if load.description:
-                name = load.name or f"Load {load.load_id} at Bus {load.bus_id}"
-                lines.append(f"Load {name}: {load.description}")
+                name = load.name or f"at Bus {load.bus_id}"
+                lines.append(f"Load {load.id} ({name}): {load.description}")
 
         for shunt in self.shunts:
             if shunt.description:
-                name = shunt.name or f"Shunt {shunt.shunt_id} at Bus {shunt.bus_id}"
-                lines.append(f"Shunt {name}: {shunt.description}")
+                name = shunt.name or f"at Bus {shunt.bus_id}"
+                lines.append(f"Shunt {shunt.id} ({name}): {shunt.description}")
 
         return "\n".join(lines) if lines else "No descriptions available."

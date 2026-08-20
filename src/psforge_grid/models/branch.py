@@ -6,7 +6,9 @@ This module defines the Branch class representing transmission lines and transfo
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from psforge_grid.models.identity import validate_id
 
 
 @dataclass
@@ -18,8 +20,12 @@ class Branch:
     using the pi-equivalent circuit model.
 
     Attributes:
-        from_bus: From-bus ID (sending end)
-        to_bus: To-bus ID (receiving end)
+        id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
+            whole system, all element types combined. Parsers generate it
+            deterministically from the source data (e.g. ``BR1_2_1`` from
+            bus numbers 1-2, circuit "1").
+        from_bus_id: ``Bus.id`` of the sending end
+        to_bus_id: ``Bus.id`` of the receiving end
         r_pu: Series resistance [p.u.] on system base (positive sequence)
         x_pu: Series reactance [p.u.] on system base (positive sequence)
         b_pu: Total line charging susceptance [p.u.] (default: 0.0)
@@ -36,7 +42,10 @@ class Branch:
         angmax: Maximum angle difference (theta_from - theta_to) [rad]
             (default: None, unlimited). Used in OPF constraints.
         status: Operating status (1: in-service, 0: out-of-service)
-        circuit_id: Circuit identifier for parallel branches (default: "1")
+        circuit_id: Circuit identifier for parallel branches in the source
+            format (default: None). PSS/E RAW and CPAT provide this; None
+            means the source format did not provide one. Kept for lossless
+            round-trip; the branch itself is identified by ``id``.
         r0_pu: Zero-sequence series resistance [p.u.] (default: None)
             Used for unbalanced fault analysis (1LG, 2LG).
         x0_pu: Zero-sequence series reactance [p.u.] (default: None)
@@ -49,10 +58,10 @@ class Branch:
             Writers may infer from shift_angle if None.
         nomv_from: From-side winding nominal voltage [kV] (default: None).
             None means the source format did not provide this information.
-            Writers may infer from the from_bus base_kv if None.
+            Writers may infer from the from-side bus base_kv if None.
         nomv_to: To-side winding nominal voltage [kV] (default: None).
             None means the source format did not provide this information.
-            Writers may infer from the to_bus base_kv if None.
+            Writers may infer from the to-side bus base_kv if None.
         sbase_mva: Transformer rated capacity [MVA] (default: None).
             None means the source format did not provide this information.
             Writers may use system base_mva if None.
@@ -77,7 +86,11 @@ class Branch:
             None means the source format did not provide this information.
         tap_min: Minimum tap ratio limit (default: None).
             None means the source format did not provide this information.
-        name: Branch name (optional)
+        order: Sort/display order (default: None). Parsers assign the
+            position within the source file (1.0, 2.0, ...).
+        name: Branch name (optional, free text)
+        tags: Attribute/grouping tags. Hierarchies use the ``"key:value"``
+            convention, e.g. ``["voltage:500kV"]``.
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
 
@@ -87,17 +100,17 @@ class Branch:
         - For transformers: tap_ratio represents the turns ratio
         - Phase shifters: shift_angle is in radians (not degrees)
         - Ratings: rate_a (normal) < rate_b (short-term) < rate_c (emergency)
-        - circuit_id distinguishes parallel lines between same buses
 
     Example:
         >>> # Transmission line: 0.01 + j0.1 p.u., B = 0.02 p.u.
-        >>> line = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1, b_pu=0.02)
+        >>> line = Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1, b_pu=0.02)
         >>> # Transformer with 1.05 tap ratio
-        >>> xfmr = Branch(from_bus=1, to_bus=3, r_pu=0.0, x_pu=0.05, tap_ratio=1.05)
+        >>> xfmr = Branch("BR1_3_1", "B1", "B3", r_pu=0.0, x_pu=0.05, tap_ratio=1.05)
     """
 
-    from_bus: int
-    to_bus: int
+    id: str
+    from_bus_id: str
+    to_bus_id: str
     r_pu: float
     x_pu: float
     b_pu: float = 0.0
@@ -109,7 +122,7 @@ class Branch:
     angmin: float | None = None
     angmax: float | None = None
     status: int = 1
-    circuit_id: str = "1"
+    circuit_id: str | None = None
     r0_pu: float | None = None
     x0_pu: float | None = None
     b0_pu: float | None = None
@@ -124,15 +137,19 @@ class Branch:
     reg_target_voltage_pu: float | None = None
     tap_max: float | None = None
     tap_min: float | None = None
+    order: float | None = None
     name: str | None = None
+    tags: list[str] = field(default_factory=list)
     description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate branch data after initialization.
 
         Raises:
-            ValueError: If status is not 0 or 1, or if tap_ratio is zero.
+            ValueError: If id violates the identifier character set, if
+                status is not 0 or 1, or if tap_ratio is zero.
         """
+        validate_id(self.id, "Branch")
         if self.status not in [0, 1]:
             raise ValueError(
                 f"Invalid status: {self.status}. Must be 0 (out-of-service) or 1 (in-service)."
@@ -151,9 +168,9 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).is_transformer
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).is_transformer
             False
-            >>> Branch(1, 2, r_pu=0.0, x_pu=0.1, tap_ratio=1.05).is_transformer
+            >>> Branch("BR2", "B1", "B2", r_pu=0.0, x_pu=0.1, tap_ratio=1.05).is_transformer
             True
         """
         if self.is_xfmr is True:
@@ -166,9 +183,9 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).is_in_service
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).is_in_service
             True
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, status=0).is_in_service
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1, status=0).is_in_service
             False
         """
         return self.status == 1
@@ -179,9 +196,9 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).branch_type_name
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).branch_type_name
             'Transmission Line'
-            >>> Branch(1, 2, r_pu=0.0, x_pu=0.1, shift_angle=3.0).branch_type_name
+            >>> Branch("BR2", "B1", "B2", r_pu=0.0, x_pu=0.1, shift_angle=3.0).branch_type_name
             'Phase-Shifting Transformer'
         """
         if self.is_transformer:
@@ -196,7 +213,7 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).impedance_pu
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).impedance_pu
             (0.01+0.1j)
         """
         return complex(self.r_pu, self.x_pu)
@@ -210,9 +227,10 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, r0_pu=0.03, x0_pu=0.3).zero_sequence_impedance_pu
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1,
+            ...     r0_pu=0.03, x0_pu=0.3).zero_sequence_impedance_pu
             (0.03+0.3j)
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).zero_sequence_impedance_pu is None
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).zero_sequence_impedance_pu is None
             True
         """
         if self.r0_pu is not None and self.x0_pu is not None:
@@ -225,9 +243,10 @@ class Branch:
 
         Example:
             >>> from psforge_grid.models import Branch
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1).has_zero_sequence_data
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1).has_zero_sequence_data
             False
-            >>> Branch(1, 2, r_pu=0.01, x_pu=0.1, r0_pu=0.03, x0_pu=0.3).has_zero_sequence_data
+            >>> Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1,
+            ...     r0_pu=0.03, x0_pu=0.3).has_zero_sequence_data
             True
         """
         return self.r0_pu is not None and self.x0_pu is not None
@@ -239,9 +258,9 @@ class Branch:
             Multi-line string describing the branch for LLM context.
 
         Example:
-            >>> branch = Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.1, rate_a=100)
+            >>> branch = Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1, rate_a=100)
             >>> print(branch.to_description())
-            Branch 1-2: Transmission Line
+            Branch BR1_2_1 (B1-B2): Transmission Line
               Impedance: 0.0100 + j0.1000 pu
               Rating: 100.0 MVA
               Status: In-service
@@ -250,7 +269,8 @@ class Branch:
         status_str = "In-service" if self.is_in_service else "Out-of-service"
 
         lines = [
-            f"Branch {self.from_bus}-{self.to_bus}{name_str}: {self.branch_type_name}",
+            f"Branch {self.id} ({self.from_bus_id}-{self.to_bus_id}){name_str}: "
+            f"{self.branch_type_name}",
             f"  Impedance: {self.r_pu:.4f} + j{self.x_pu:.4f} pu",
         ]
 
@@ -272,6 +292,9 @@ class Branch:
             lines.append(f"  Angle limits: [{min_str}, {max_str}]")
 
         lines.append(f"  Status: {status_str}")
+
+        if self.tags:
+            lines.append(f"  Tags: {', '.join(self.tags)}")
 
         if self.description:
             lines.append(f"  Note: {self.description}")

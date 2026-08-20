@@ -50,7 +50,7 @@ class Modification:
     Example:
         >>> mod = Modification(
         ...     target="branches",
-        ...     match={"from_bus": 1, "to_bus": 5},
+        ...     match={"id": "BR1_5_1"},
         ...     set_values={"status": 0},
         ...     description="Take line 1-5 out of service",
         ... )
@@ -143,7 +143,7 @@ class ScenarioDefinition:
         ...     name="N-1_Line_1-5",
         ...     description="Line 1-5 outage contingency",
         ...     modifications=[
-        ...         Modification(target="branches", match={"from_bus": 1, "to_bus": 5},
+        ...         Modification(target="branches", match={"id": "BR1_5_1"},
         ...                      set_values={"status": 0}),
         ...     ],
         ... )
