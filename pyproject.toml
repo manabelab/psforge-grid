@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "psforge-grid"
-version = "0.9.1"
+version = "0.10.0"
 description = "Core data models and I/O for the psforge power system analysis ecosystem. LLM-friendly design for AI-assisted analysis."
 readme = "README.md"
 license = "LicenseRef-Dual-MIT-Commercial"
@@ -102,6 +102,12 @@ quote-style = "double"
 indent-style = "space"
 
 # Mypy configuration
+[tool.pytest.ini_options]
+# Docstring examples are executed (pytest --doctest-modules src/), so that an
+# example cannot silently stop working. ELLIPSIS lets an example show the
+# shape of a long output without pinning every digit of it.
+doctest_optionflags = ["ELLIPSIS", "NORMALIZE_WHITESPACE"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
