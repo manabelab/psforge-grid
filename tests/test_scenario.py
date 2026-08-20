@@ -1,7 +1,9 @@
 """Tests for ScenarioSet dataclass API.
 
 Tests Modification, ScenarioDefinition, and ScenarioSet data models
-including serialization, deserialization, and resolution.
+including serialization, deserialization, and resolution. Match criteria
+use the unified (v2) element schema: string ``id`` and string references
+(``from_bus_id``, ``to_bus_id``, ``bus_id``).
 """
 
 from __future__ import annotations
@@ -31,23 +33,23 @@ def simple_system() -> System:
     """Create a simple 3-bus system for testing."""
     return System(
         buses=[
-            Bus(bus_id=1, bus_type=3, v_magnitude=1.06, base_kv=69.0, name="SLACK"),
-            Bus(bus_id=2, bus_type=2, v_magnitude=1.04, base_kv=69.0, name="GEN2"),
-            Bus(bus_id=3, bus_type=1, v_magnitude=1.00, base_kv=13.8, name="LOAD3"),
+            Bus("B1", bus_type=3, v_magnitude=1.06, base_kv=69.0, number=1, name="SLACK"),
+            Bus("B2", bus_type=2, v_magnitude=1.04, base_kv=69.0, number=2, name="GEN2"),
+            Bus("B3", bus_type=1, v_magnitude=1.00, base_kv=13.8, number=3, name="LOAD3"),
         ],
         branches=[
-            Branch(from_bus=1, to_bus=2, r_pu=0.01, x_pu=0.05, b_pu=0.02),
-            Branch(from_bus=2, to_bus=3, r_pu=0.0, x_pu=0.1, tap_ratio=1.05, is_xfmr=True),
+            Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.05, b_pu=0.02),
+            Branch("BR2", "B2", "B3", r_pu=0.0, x_pu=0.1, tap_ratio=1.05, is_xfmr=True),
         ],
         generators=[
-            Generator(bus_id=1, p_gen=1.0, q_gen=0.5, v_setpoint=1.06, p_max=2.0),
-            Generator(bus_id=2, p_gen=0.8, q_gen=0.2, v_setpoint=1.04),
+            Generator("G1", bus_id="B1", p_gen=1.0, q_gen=0.5, v_setpoint=1.06, p_max=2.0),
+            Generator("G2", bus_id="B2", p_gen=0.8, q_gen=0.2, v_setpoint=1.04),
         ],
         loads=[
-            Load(bus_id=3, p_load=1.5, q_load=0.3),
+            Load("LD1", bus_id="B3", p_load=1.5, q_load=0.3),
         ],
         shunts=[
-            Shunt(bus_id=3, g_pu=0.0, b_pu=0.05),
+            Shunt("SH1", bus_id="B3", g_pu=0.0, b_pu=0.05),
         ],
         base_mva=100.0,
         name="Test 3-Bus System",
@@ -77,12 +79,12 @@ class TestModification:
         """to_dict() maps set_values to 'set' key."""
         mod = Modification(
             target="branches",
-            match={"from_bus": 1, "to_bus": 5},
+            match={"id": "BR2"},
             set_values={"status": 0},
         )
         d = mod.to_dict()
         assert d["target"] == "branches"
-        assert d["match"] == {"from_bus": 1, "to_bus": 5}
+        assert d["match"] == {"id": "BR2"}
         assert d["set"] == {"status": 0}
         assert "set_values" not in d
 
@@ -90,7 +92,7 @@ class TestModification:
         """to_dict() includes description when set."""
         mod = Modification(
             target="loads",
-            match={"bus_id": 3},
+            match={"bus_id": "B3"},
             set_values={"p_load": 3.0},
             description="Increase load",
         )
@@ -99,7 +101,7 @@ class TestModification:
 
     def test_to_dict_omits_none_description(self) -> None:
         """to_dict() omits description when None."""
-        mod = Modification(target="loads", match={"bus_id": 3}, set_values={"p_load": 3.0})
+        mod = Modification(target="loads", match={"bus_id": "B3"}, set_values={"p_load": 3.0})
         d = mod.to_dict()
         assert "description" not in d
 
@@ -107,19 +109,19 @@ class TestModification:
         """from_dict() maps 'set' key to set_values."""
         data = {
             "target": "branches",
-            "match": {"from_bus": 1, "to_bus": 5},
+            "match": {"from_bus_id": "B1", "to_bus_id": "B5"},
             "set": {"status": 0},
         }
         mod = Modification.from_dict(data)
         assert mod.target == "branches"
-        assert mod.match == {"from_bus": 1, "to_bus": 5}
+        assert mod.match == {"from_bus_id": "B1", "to_bus_id": "B5"}
         assert mod.set_values == {"status": 0}
 
     def test_to_description(self) -> None:
         """to_description() returns readable string."""
         mod = Modification(
             target="branches",
-            match={"from_bus": 1, "to_bus": 5},
+            match={"from_bus_id": "B1", "to_bus_id": "B5"},
             set_values={"status": 0},
             description="Take line 1-5 out of service",
         )
@@ -129,12 +131,12 @@ class TestModification:
         """to_description() auto-generates when no description set."""
         mod = Modification(
             target="branches",
-            match={"from_bus": 1},
+            match={"from_bus_id": "B1"},
             set_values={"status": 0},
         )
         desc = mod.to_description()
         assert "branches" in desc
-        assert "from_bus=1" in desc
+        assert "from_bus_id=B1" in desc
         assert "status=0" in desc
 
 
@@ -149,8 +151,8 @@ class TestScenarioDefinition:
     def test_create_with_modifications(self) -> None:
         """Create a ScenarioDefinition with modifications."""
         mods = [
-            Modification(target="branches", match={"from_bus": 1}, set_values={"status": 0}),
-            Modification(target="loads", match={"bus_id": 3}, set_values={"p_load": 3.0}),
+            Modification(target="branches", match={"from_bus_id": "B1"}, set_values={"status": 0}),
+            Modification(target="loads", match={"bus_id": "B3"}, set_values={"p_load": 3.0}),
         ]
         sd = ScenarioDefinition(name="test", modifications=mods, description="Test scenario")
         assert sd.name == "test"
@@ -162,7 +164,7 @@ class TestScenarioDefinition:
         mods = [
             Modification(
                 target="branches",
-                match={"from_bus": 1, "to_bus": 5},
+                match={"id": "BR2"},
                 set_values={"status": 0},
                 description="Line outage",
             ),
@@ -175,6 +177,7 @@ class TestScenarioDefinition:
         assert restored.description == original.description
         assert len(restored.modifications) == len(original.modifications)
         assert restored.modifications[0].target == "branches"
+        assert restored.modifications[0].match == {"id": "BR2"}
         assert restored.modifications[0].set_values == {"status": 0}
 
     def test_to_description(self) -> None:
@@ -185,7 +188,7 @@ class TestScenarioDefinition:
             modifications=[
                 Modification(
                     target="branches",
-                    match={"from_bus": 1, "to_bus": 5},
+                    match={"from_bus_id": "B1", "to_bus_id": "B5"},
                     set_values={"status": 0},
                 ),
             ],
@@ -221,7 +224,7 @@ class TestScenarioSet:
                     modifications=[
                         Modification(
                             target="branches",
-                            match={"from_bus": 1, "to_bus": 2},
+                            match={"from_bus_id": "B1", "to_bus_id": "B2"},
                             set_values={"status": 0},
                         ),
                     ],
@@ -230,8 +233,32 @@ class TestScenarioSet:
         )
         result = ss.resolve()
         assert "line_outage" in result
-        line_12 = [b for b in result["line_outage"].branches if b.from_bus == 1 and b.to_bus == 2]
+        line_12 = [b for b in result["line_outage"].branches if b.id == "BR1"]
         assert line_12[0].status == 0
+
+    def test_resolve_matches_by_element_id(self, simple_system: System) -> None:
+        """resolve() matches elements by their unified string id."""
+        ss = ScenarioSet(
+            base=simple_system,
+            scenarios=[
+                ScenarioDefinition(
+                    name="xfmr_out",
+                    modifications=[
+                        Modification(
+                            target="branches",
+                            match={"id": "BR2"},
+                            set_values={"status": 0},
+                        ),
+                    ],
+                ),
+            ],
+        )
+        result = ss.resolve()
+        xfmr = [b for b in result["xfmr_out"].branches if b.id == "BR2"][0]
+        assert xfmr.status == 0
+        # The other branch is untouched
+        line = [b for b in result["xfmr_out"].branches if b.id == "BR1"][0]
+        assert line.status == 1
 
     def test_resolve_independent_deep_copies(self, simple_system: System) -> None:
         """resolve() returns independent deep copies for each scenario."""
@@ -243,7 +270,7 @@ class TestScenarioSet:
                     modifications=[
                         Modification(
                             target="branches",
-                            match={"from_bus": 1, "to_bus": 2},
+                            match={"id": "BR1"},
                             set_values={"status": 0},
                         ),
                     ],
@@ -309,12 +336,17 @@ class TestScenarioSetJson:
     """Tests for ScenarioSet JSON I/O."""
 
     def test_from_json_loads_fixture(self) -> None:
-        """from_json() loads the ieee14_contingencies fixture."""
-        ss = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies.psfg.json")
+        """from_json() loads the ieee14_contingencies_v2 fixture."""
+        ss = ScenarioSet.from_json(FIXTURE_DIR / "ieee14_contingencies_v2.psfg.json")
         assert ss.num_scenarios == 3
         assert ss.scenario_names == ["N-1_Line_1-5", "N-1_Line_2-3", "heavy_load_bus14"]
         assert ss.base_case_path == "ieee14.psfg.json"
         assert len(ss.base.buses) == 14
+        # Match criteria in the fixture use the unified (v2) field names
+        assert ss.scenarios[0].modifications[0].match == {
+            "from_bus_id": "B1",
+            "to_bus_id": "B5",
+        }
 
     def test_to_json_writes_valid_file(self, simple_system: System, tmp_path: Path) -> None:
         """to_json() writes a valid scenario file."""
@@ -331,7 +363,7 @@ class TestScenarioSetJson:
                     modifications=[
                         Modification(
                             target="branches",
-                            match={"from_bus": 1, "to_bus": 2},
+                            match={"id": "BR1"},
                             set_values={"status": 0},
                         ),
                     ],
@@ -349,6 +381,7 @@ class TestScenarioSetJson:
         assert data["base_case"] == "base.psfg.json"
         assert len(data["scenarios"]) == 1
         assert data["scenarios"][0]["name"] == "test"
+        assert data["scenarios"][0]["modifications"][0]["match"] == {"id": "BR1"}
         assert data["scenarios"][0]["modifications"][0]["set"] == {"status": 0}
 
     def test_round_trip(self, simple_system: System, tmp_path: Path) -> None:
@@ -365,7 +398,7 @@ class TestScenarioSetJson:
                     modifications=[
                         Modification(
                             target="branches",
-                            match={"from_bus": 1, "to_bus": 2},
+                            match={"from_bus_id": "B1", "to_bus_id": "B2"},
                             set_values={"status": 0},
                         ),
                     ],
@@ -375,7 +408,7 @@ class TestScenarioSetJson:
                     modifications=[
                         Modification(
                             target="loads",
-                            match={"bus_id": 3},
+                            match={"bus_id": "B3"},
                             set_values={"p_load": 3.0, "q_load": 0.6},
                         ),
                     ],
@@ -391,11 +424,16 @@ class TestScenarioSetJson:
         assert reloaded.num_scenarios == 2
         assert reloaded.scenario_names == ["outage", "heavy"]
         assert reloaded.scenarios[0].description == "Line outage"
+        assert reloaded.scenarios[0].modifications[0].match == {
+            "from_bus_id": "B1",
+            "to_bus_id": "B2",
+        }
         assert reloaded.scenarios[0].modifications[0].set_values == {"status": 0}
 
         # Resolve and verify results match
         orig_systems = original.resolve()
         reload_systems = reloaded.resolve()
+        assert orig_systems["outage"].branches[0].status == 0
         assert (
             orig_systems["outage"].branches[0].status == reload_systems["outage"].branches[0].status
         )

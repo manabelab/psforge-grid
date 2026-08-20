@@ -14,8 +14,8 @@ Data integration requires cross-referencing three XML files:
 
 Example:
     >>> from psforge_grid.io.pop_parser import parse_pop
-    >>> system = parse_pop("WEST10peak.pop")
-    >>> print(f"Loaded {system.num_buses} buses")
+    >>> system = parse_pop("WEST10peak.pop")  # doctest: +SKIP
+    >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
 See Also:
     - PopParser: Class implementing IParser for .pop format
@@ -43,6 +43,7 @@ from psforge_grid.models.diagram import (
     normalize_coordinates,
 )
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.identity import make_unique
 from psforge_grid.models.load import Load
 from psforge_grid.models.system import System
 
@@ -102,8 +103,8 @@ def parse_pop(filepath: str | Path) -> System:
         ValueError: If the file format is invalid.
 
     Example:
-        >>> system = parse_pop("WEST10peak.pop")
-        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
+        >>> system = parse_pop("WEST10peak.pop")  # doctest: +SKIP
+        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")  # doctest: +SKIP
     """
     return _parse_pop_impl(filepath)
 
@@ -121,6 +122,14 @@ def _parse_pop_impl(filepath: str | Path) -> System:
         7. Build generators from topology + pnsd machine data + case dispatch
         8. Build loads from case data P/Q values
 
+    Element ids are generated deterministically: ``B{number}`` from the CPAT
+    bus number, and per-type sequence numbers in file occurrence order for
+    everything else (``BR{n}``, ``G{n}``, ``LD{n}``, matching the integer
+    part of ``order``). A shared ``used`` id set with
+    :func:`~psforge_grid.models.identity.make_unique` acts as a safety net
+    against collisions. CPAT circuit/machine identifiers are kept as data
+    (``circuit_id``, ``machine_id``), not encoded into ids.
+
     Args:
         filepath: Path to the .pop file.
 
@@ -133,11 +142,14 @@ def _parse_pop_impl(filepath: str | Path) -> System:
     topology = parse_topology(archive.pnsw_root)
     case = parse_case_data(archive.pnsj_root)
 
-    buses = _build_buses(topology, control, case, archive.pnsd_root)
-    branches = _build_branches(topology, archive, control, case)
-    generators = _build_generators(topology, archive, control, case)
-    loads = _build_loads(case)
-    diagram = _build_diagram(topology)
+    used: set[str] = set()
+    buses, bus_id_by_code = _build_buses(topology, control, case, archive.pnsd_root, used)
+    branches, branch_ids_by_cluster = _build_branches(
+        topology, archive, control, case, bus_id_by_code, used
+    )
+    generators = _build_generators(topology, archive, control, case, bus_id_by_code, used)
+    loads = _build_loads(case, bus_id_by_code, used)
+    diagram = _build_diagram(topology, bus_id_by_code, branch_ids_by_cluster)
 
     system = System(
         buses=buses,
@@ -166,7 +178,8 @@ def _build_buses(
     control: PopControlData,
     case: PopCaseData,
     pnsd_root: Element,
-) -> list[Bus]:
+    used: set[str],
+) -> tuple[list[Bus], dict[int, str]]:
     """Build Bus objects from topology nodes, case data, and pnsd NumVol.
 
     Bus type determination:
@@ -179,14 +192,18 @@ def _build_buses(
         control: Control data with voltage class table.
         case: Case data with operating point.
         pnsd_root: Root element of data.pnsd for NumVol lookup.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
-        List of Bus objects sorted by bus_id.
+        Tuple of (buses sorted by CPAT bus number, CodeNumber → ``Bus.id``
+        mapping for reference fields).
     """
     # Build ClusterIndex → NumVol mapping from data.pnsd
     numvol_map = _build_numvol_map(pnsd_root)
 
     buses: list[Bus] = []
+    bus_id_by_code: dict[int, str] = {}
+    order = 0.0
 
     for cluster_idx, node in topology.nodes.items():
         code = node.code_number
@@ -212,20 +229,27 @@ def _build_buses(
             elif node_case.generator_name and node_case.generator_name != "（発電機データなし）":
                 bus_type = 2  # PV
 
+        bus_id = make_unique(f"B{code}", used)
+        used.add(bus_id)
+        bus_id_by_code.setdefault(code, bus_id)
+        order += 1.0
+
         bus = Bus(
-            bus_id=code,
+            bus_id,
             bus_type=bus_type,
             v_magnitude=v_mag,
             v_angle=0.0,
             base_kv=base_kv,
             v_max=1.1,
             v_min=0.9,
+            number=code,
+            order=order,
             name=node.name,
         )
         buses.append(bus)
 
-    buses.sort(key=lambda b: b.bus_id)
-    return buses
+    buses.sort(key=lambda b: b.number if b.number is not None else 0)
+    return buses, bus_id_by_code
 
 
 def _build_numvol_map(pnsd_root: Element) -> dict[int, int]:
@@ -257,21 +281,35 @@ def _build_branches(
     archive: PopArchive,
     _control: PopControlData,
     case: PopCaseData,
-) -> list[Branch]:
+    bus_id_by_code: dict[int, str],
+    used: set[str],
+) -> tuple[list[Branch], dict[int, list[str]]]:
     """Build Branch objects from topology and data.pnsd impedance data.
 
     Transmission lines and transformers are both mapped to Branch objects.
+    Branch ids are ``BR{n}`` (file occurrence order, matching the integer
+    part of ``order``). The CPAT CodeNumber is kept in ``circuit_id`` (with
+    a per-circuit suffix such as ``"130_2"`` when NL > 1).
 
     Args:
         topology: Parsed topology from .pnsw.
         archive: Parsed .pop archive with XML roots.
         _control: Control data (reserved for future base conversion).
         case: Case data with transformer tap settings.
+        bus_id_by_code: CodeNumber → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
-        List of Branch objects.
+        Tuple of (branches, ClusterIndex → list of generated ``Branch.id``
+        values, used to key diagram branch routes).
     """
     branches: list[Branch] = []
+    branch_ids_by_cluster: dict[int, list[str]] = {}
+    order = 0.0
+
+    def _bus_ref(code: int) -> str:
+        """Resolve a CodeNumber to a Bus.id reference (lenient fallback)."""
+        return bus_id_by_code.get(code, f"B{code}")
 
     # Transmission lines
     tline_dict = _build_pnsd_dict(
@@ -308,14 +346,22 @@ def _build_branches(
             nl = 1
 
         for cct in range(1, nl + 1):
+            ckt = f"{cluster.code_number}_{cct}" if nl > 1 else str(cluster.code_number)
+            branch_id = make_unique(f"BR{int(order) + 1}", used)
+            used.add(branch_id)
+            branch_ids_by_cluster.setdefault(ci, []).append(branch_id)
+            order += 1.0
+
             branch = Branch(
-                from_bus=from_bus,
-                to_bus=to_bus,
+                branch_id,
+                from_bus_id=_bus_ref(from_bus),
+                to_bus_id=_bus_ref(to_bus),
                 r_pu=r_pu,
                 x_pu=x_pu,
                 b_pu=b_pu,
+                order=order,
                 name=cluster.name,
-                circuit_id=f"{cluster.code_number}_{cct}" if nl > 1 else str(cluster.code_number),
+                circuit_id=ckt,
             )
             if r0 != 0.0:
                 branch.r0_pu = r0
@@ -376,17 +422,25 @@ def _build_branches(
         elif vn_raw in ("P", "VF"):
             reg_mode = "primary"
 
+        ckt = str(cluster.code_number)
+        branch_id = make_unique(f"BR{int(order) + 1}", used)
+        used.add(branch_id)
+        branch_ids_by_cluster.setdefault(ci, []).append(branch_id)
+        order += 1.0
+
         branch = Branch(
-            from_bus=from_bus,
-            to_bus=to_bus,
+            branch_id,
+            from_bus_id=_bus_ref(from_bus),
+            to_bus_id=_bus_ref(to_bus),
             r_pu=r_pu,
             x_pu=x_pu,
             tap_ratio=tap if tap != 0.0 else 1.0,
             shift_angle=shift_angle,
             is_xfmr=True,
             winding_connection=winding_conn,
+            order=order,
             name=cluster.name,
-            circuit_id=str(cluster.code_number),
+            circuit_id=ckt,
         )
         if r0 != 0.0:
             branch.r0_pu = r0
@@ -404,7 +458,7 @@ def _build_branches(
 
         branches.append(branch)
 
-    return branches
+    return branches, branch_ids_by_cluster
 
 
 def _build_generators(
@@ -412,6 +466,8 @@ def _build_generators(
     archive: PopArchive,
     control: PopControlData,
     case: PopCaseData,
+    bus_id_by_code: dict[int, str],
+    used: set[str],
 ) -> list[Generator]:
     """Build Generator objects from topology, data.pnsd, and case data.
 
@@ -425,16 +481,23 @@ def _build_generators(
 
     Machine parameters (Xd, Xdd, etc.) are on machine base (Gmva).
 
+    Generator ids are ``G{n}`` (file occurrence order). The CPAT cluster
+    name (the field the parser has always used as the generator identifier)
+    is kept in ``machine_id``, falling back to ``"1"``.
+
     Args:
         topology: Parsed topology from .pnsw.
         archive: Parsed .pop archive with XML roots.
         control: Control data with base MVA.
         case: Case data with P/Q dispatch.
+        bus_id_by_code: CodeNumber → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
         List of Generator objects.
     """
     generators: list[Generator] = []
+    order = 0.0
 
     gen_dict = _build_pnsd_dict(archive.pnsd_root, "DictDataGenerator", "DataGenerator")
 
@@ -496,8 +559,14 @@ def _build_generators(
         q_max = get_float(gen_data, "QgMax") or None
         q_min = get_float(gen_data, "QgMin") or None
 
+        machine_id = cluster.name or "1"
+        gen_id = make_unique(f"G{int(order) + 1}", used)
+        used.add(gen_id)
+        order += 1.0
+
         gen = Generator(
-            bus_id=bus_code,
+            gen_id,
+            bus_id=bus_id_by_code.get(bus_code, f"B{bus_code}"),
             p_gen=p_gen_pu,
             q_gen=0.0,
             v_setpoint=v_setpoint,
@@ -513,7 +582,8 @@ def _build_generators(
             x2_pu=x2,
             ta_s=ta,
             ra_pu=ra,
-            gen_id=cluster.name or "1",
+            machine_id=machine_id,
+            order=order,
             name=cluster.name,
         )
         generators.append(gen)
@@ -544,19 +614,28 @@ def _find_generator_bus(
     return None
 
 
-def _build_loads(case: PopCaseData) -> list[Load]:
+def _build_loads(
+    case: PopCaseData,
+    bus_id_by_code: dict[int, str],
+    used: set[str],
+) -> list[Load]:
     """Build Load objects from case data P/Q values.
 
     Load P/Q is stored per-bus in the .pnsj file (Plo, Qlo fields).
-    Only buses with nonzero load are included.
+    Only buses with nonzero load are included. Load ids are ``LD{n}``
+    (file occurrence order). The .pop format has no per-load identifier,
+    so ``load_id`` stays ``None`` (source not provided).
 
     Args:
         case: Case data with per-bus P/Q.
+        bus_id_by_code: CodeNumber → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
-        List of Load objects sorted by bus_id.
+        List of Load objects sorted by CPAT bus number.
     """
-    loads: list[Load] = []
+    entries: list[tuple[int, Load]] = []
+    order = 0.0
 
     for code, node_case in case.nodes.items():
         if node_case.p_load_pu == 0.0 and node_case.q_load_pu == 0.0:
@@ -564,15 +643,21 @@ def _build_loads(case: PopCaseData) -> list[Load]:
         if not node_case.is_active:
             continue
 
+        load_id = make_unique(f"LD{int(order) + 1}", used)
+        used.add(load_id)
+        order += 1.0
+
         load = Load(
-            bus_id=code,
+            load_id,
+            bus_id=bus_id_by_code.get(code, f"B{code}"),
             p_load=node_case.p_load_pu,
             q_load=node_case.q_load_pu,
+            order=order,
         )
-        loads.append(load)
+        entries.append((code, load))
 
-    loads.sort(key=lambda ld: ld.bus_id)
-    return loads
+    entries.sort(key=lambda e: e[0])
+    return [load for _code, load in entries]
 
 
 def _build_pnsd_dict(
@@ -606,16 +691,22 @@ def _build_pnsd_dict(
 
 def _build_diagram(
     topology: PopTopology,
+    bus_id_by_code: dict[int, str],
+    branch_ids_by_cluster: dict[int, list[str]],
     normalization_ref: int = 1920,
 ) -> DiagramData | None:
     """Build DiagramData from topology diagram points.
 
     Collects all raw coordinates from ClusterInfo.diagram_points,
     normalizes them (Y-flip + short-edge scaling), and builds
-    BusPosition and BranchRoute objects.
+    BusPosition and BranchRoute objects. Bus positions are keyed by
+    ``Bus.id`` and branch routes by ``Branch.id``; when a cluster expands
+    to multiple parallel branches (NL > 1) every branch gets the route.
 
     Args:
         topology: Parsed topology with diagram_points populated.
+        bus_id_by_code: CodeNumber → ``Bus.id`` mapping.
+        branch_ids_by_cluster: ClusterIndex → generated ``Branch.id`` values.
         normalization_ref: Short-edge reference size (default: 1920).
 
     Returns:
@@ -650,35 +741,36 @@ def _build_diagram(
     def _normalize(pts: list[tuple[int, int]]) -> list[tuple[int, int]]:
         return [point_map[(float(p[0]), float(p[1]))] for p in pts]
 
-    # Build bus positions
-    bus_positions: dict[int, BusPosition] = {}
+    # Build bus positions (keyed by Bus.id)
+    bus_positions: dict[str, BusPosition] = {}
     for node in topology.nodes.values():
         if not node.diagram_points or node.code_number <= 0:
+            continue
+        bus_id = bus_id_by_code.get(node.code_number)
+        if bus_id is None:
             continue
         norm_pts = _normalize(node.diagram_points)
         # Use midpoint as the bus position
         mid_x = sum(p[0] for p in norm_pts) // len(norm_pts)
         mid_y = sum(p[1] for p in norm_pts) // len(norm_pts)
-        bus_positions[node.code_number] = BusPosition(
+        bus_positions[bus_id] = BusPosition(
             x=mid_x,
             y=mid_y,
             points=norm_pts if len(norm_pts) > 1 else None,
         )
 
-    # Build branch routes
-    branch_routes: dict[tuple[int, int, str], BranchRoute] = {}
+    # Build branch routes (keyed by Branch.id)
+    branch_routes: dict[str, BranchRoute] = {}
     for branches_dict in (topology.transmission_lines, topology.transformers):
-        for cluster in branches_dict.values():
+        for ci, cluster in branches_dict.items():
             if not cluster.diagram_points:
                 continue
-            try:
-                from_bus, to_bus = topology.get_branch_from_to(cluster)
-            except (ValueError, KeyError):
+            branch_ids = branch_ids_by_cluster.get(ci)
+            if not branch_ids:
                 continue
             norm_pts = _normalize(cluster.diagram_points)
-            ckt = str(cluster.code_number)
-            key = (from_bus, to_bus, ckt)
-            branch_routes[key] = BranchRoute(waypoints=norm_pts)
+            for branch_id in branch_ids:
+                branch_routes[branch_id] = BranchRoute(waypoints=norm_pts)
 
     return DiagramData(
         coordinate_system="schematic",

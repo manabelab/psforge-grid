@@ -11,9 +11,9 @@ The factory pattern enables:
 Example:
     >>> from psforge_grid.io.factories import ParserFactory, WriterFactory
     >>> parser = ParserFactory.create("raw")  # PSS/E format
-    >>> system = parser.parse("ieee14.raw")
+    >>> system = parser.parse("ieee14.raw")  # doctest: +SKIP
     >>> writer = WriterFactory.create("matpower")
-    >>> writer.write(system, "output.m")
+    >>> writer.write(system, tmp_path / "output.m")
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ class ParserFactory:
 
         Example:
             >>> parser = ParserFactory.create("raw")
-            >>> system = parser.parse("ieee14.raw")
+            >>> system = parser.parse("ieee14.raw")  # doctest: +SKIP
         """
         if format_type == "raw":
             # Lazy import to avoid circular dependency
@@ -190,7 +190,8 @@ class ParserFactory:
 
         Example:
             >>> formats = ParserFactory.available_formats()
-            >>> print(formats)  # ['raw']
+            >>> print(formats)
+            ['raw', 'matpower', 'pop', 'dyna', 'dss', 'json']
         """
         return ["raw", "matpower", "pop", "dyna", "dss", "json"]
 
@@ -203,7 +204,8 @@ class ParserFactory:
 
         Example:
             >>> extensions = ParserFactory.supported_extensions()
-            >>> print(extensions)  # ['raw', 'RAW', 'psfg.json']
+            >>> "raw" in extensions and "psfg.json" in extensions
+            True
         """
         return list(ParserFactory._EXTENSION_MAP.keys())
 
@@ -222,11 +224,10 @@ class WriterFactory:
 
     Example:
         >>> writer = WriterFactory.create("raw")
-        >>> writer.write(system, "output.raw")
-        >>>
+        >>> writer.write(system, tmp_path / "output.raw")
         >>> # Auto-detect from extension
         >>> writer = WriterFactory.from_extension(".m")
-        >>> writer.write(system, "output.m")
+        >>> writer.write(system, tmp_path / "output.m")
     """
 
     # Extension to format mapping (same as ParserFactory)
@@ -260,7 +261,7 @@ class WriterFactory:
 
         Example:
             >>> writer = WriterFactory.create("raw")
-            >>> writer.write(system, "output.raw")
+            >>> writer.write(system, tmp_path / "output.raw")
         """
         if format_type == "raw":
             from psforge_grid.io.raw_writer import RawWriter

@@ -6,7 +6,9 @@ This module defines the Bus class representing electrical buses in a power syste
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from psforge_grid.models.identity import validate_id
 
 
 @dataclass
@@ -17,7 +19,11 @@ class Bus:
     Used as the fundamental node component in power system network analysis.
 
     Attributes:
-        bus_id: Bus ID (integer starting from 1)
+        id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
+            whole system, all element types combined. Parsers generate it
+            deterministically as ``B{number}`` (e.g. ``B1`` from PSS/E bus
+            number 1); formats without bus numbers use the 1-based position
+            in the source file.
         bus_type: Bus type code:
             - 1: PQ bus (load bus) - P and Q are specified
             - 2: PV bus (generator bus) - P and V magnitude are specified
@@ -30,7 +36,16 @@ class Bus:
         zone: Zone number for administrative grouping (default: 1)
         v_max: Maximum voltage limit [p.u.] (default: 1.1)
         v_min: Minimum voltage limit [p.u.] (default: 0.9)
-        name: Bus name (optional)
+        number: Bus number in the source format (default: None).
+            PSS/E RAW, MATPOWER, CPAT provide this; None means the source
+            format did not provide one. Writers that require an integer
+            bus number (RAW, MATPOWER) assign one when this is None.
+        order: Sort/display order (default: None). Parsers assign the
+            position within the source file (1.0, 2.0, ...); a float so a
+            new element can be inserted between two existing ones (e.g. 1.5).
+        name: Bus name (optional, free text)
+        tags: Attribute/grouping tags. Hierarchies use the ``"key:value"``
+            convention, e.g. ``["area:kansai", "voltage:500kV"]``.
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
 
@@ -42,12 +57,12 @@ class Bus:
 
     Example:
         >>> # Create a PV (generator) bus at 230 kV
-        >>> gen_bus = Bus(bus_id=1, bus_type=2, base_kv=230.0, v_magnitude=1.02)
+        >>> gen_bus = Bus("B1", bus_type=2, base_kv=230.0, v_magnitude=1.02)
         >>> # Create a PQ (load) bus
-        >>> load_bus = Bus(bus_id=2, bus_type=1, base_kv=230.0)
+        >>> load_bus = Bus("B2", bus_type=1, base_kv=230.0)
     """
 
-    bus_id: int
+    id: str
     bus_type: int  # 1: PQ, 2: PV, 3: Slack, 4: Isolated
     v_magnitude: float = 1.0
     v_angle: float = 0.0
@@ -56,15 +71,20 @@ class Bus:
     zone: int = 1
     v_max: float = 1.1
     v_min: float = 0.9
+    number: int | None = None
+    order: float | None = None
     name: str | None = None
+    tags: list[str] = field(default_factory=list)
     description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate bus data after initialization.
 
         Raises:
-            ValueError: If bus_type is not 1, 2, 3, or 4.
+            ValueError: If id violates the identifier character set, or if
+                bus_type is not 1, 2, 3, or 4.
         """
+        validate_id(self.id, "Bus")
         if self.bus_type not in [1, 2, 3, 4]:
             raise ValueError(
                 f"Invalid bus_type: {self.bus_type}. "
@@ -77,9 +97,9 @@ class Bus:
 
         Example:
             >>> from psforge_grid.models import Bus
-            >>> Bus(bus_id=2, bus_type=1).is_pq
+            >>> Bus("B2", bus_type=1).is_pq
             True
-            >>> Bus(bus_id=1, bus_type=3).is_pq
+            >>> Bus("B1", bus_type=3).is_pq
             False
         """
         return self.bus_type == 1
@@ -90,9 +110,9 @@ class Bus:
 
         Example:
             >>> from psforge_grid.models import Bus
-            >>> Bus(bus_id=1, bus_type=2).is_pv
+            >>> Bus("B1", bus_type=2).is_pv
             True
-            >>> Bus(bus_id=2, bus_type=1).is_pv
+            >>> Bus("B2", bus_type=1).is_pv
             False
         """
         return self.bus_type == 2
@@ -103,9 +123,9 @@ class Bus:
 
         Example:
             >>> from psforge_grid.models import Bus
-            >>> Bus(bus_id=1, bus_type=3).is_slack
+            >>> Bus("B1", bus_type=3).is_slack
             True
-            >>> Bus(bus_id=2, bus_type=1).is_slack
+            >>> Bus("B2", bus_type=1).is_slack
             False
         """
         return self.bus_type == 3
@@ -116,9 +136,9 @@ class Bus:
 
         Example:
             >>> from psforge_grid.models import Bus
-            >>> Bus(bus_id=9, bus_type=4).is_isolated
+            >>> Bus("B9", bus_type=4).is_isolated
             True
-            >>> Bus(bus_id=2, bus_type=1).is_isolated
+            >>> Bus("B2", bus_type=1).is_isolated
             False
         """
         return self.bus_type == 4
@@ -129,9 +149,9 @@ class Bus:
 
         Example:
             >>> from psforge_grid.models import Bus
-            >>> Bus(bus_id=1, bus_type=3).bus_type_name
+            >>> Bus("B1", bus_type=3).bus_type_name
             'Slack'
-            >>> Bus(bus_id=2, bus_type=1).bus_type_name
+            >>> Bus("B2", bus_type=1).bus_type_name
             'PQ (Load)'
         """
         type_names = {1: "PQ (Load)", 2: "PV (Generator)", 3: "Slack", 4: "Isolated"}
@@ -144,20 +164,24 @@ class Bus:
             Multi-line string describing the bus for LLM context.
 
         Example:
-            >>> bus = Bus(bus_id=1, bus_type=3, base_kv=500.0, name="Main")
+            >>> bus = Bus("B1", bus_type=3, base_kv=500.0, number=1, name="Main")
             >>> print(bus.to_description())
-            Bus 1 (Main): Slack at 500.0 kV
+            Bus B1 [#1] (Main): Slack at 500.0 kV
               Voltage: 1.0000 pu @ 0.00°
               Limits: 0.90 - 1.10 pu
         """
+        number_str = f" [#{self.number}]" if self.number is not None else ""
         name_str = f" ({self.name})" if self.name else ""
         v_angle_deg = math.degrees(self.v_angle)
 
         lines = [
-            f"Bus {self.bus_id}{name_str}: {self.bus_type_name} at {self.base_kv:.1f} kV",
+            f"Bus {self.id}{number_str}{name_str}: {self.bus_type_name} at {self.base_kv:.1f} kV",
             f"  Voltage: {self.v_magnitude:.4f} pu @ {v_angle_deg:.2f}°",
             f"  Limits: {self.v_min:.2f} - {self.v_max:.2f} pu",
         ]
+
+        if self.tags:
+            lines.append(f"  Tags: {', '.join(self.tags)}")
 
         if self.description:
             lines.append(f"  Note: {self.description}")

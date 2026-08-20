@@ -19,15 +19,15 @@ Main Components:
 
 Example:
     >>> from psforge_grid.io import parse_raw, write_matpower
-    >>> system = parse_raw("ieee14.raw")
-    >>> write_matpower(system, "ieee14.m")
+    >>> system = parse_raw("ieee14.raw")  # doctest: +SKIP
+    >>> write_matpower(system, tmp_path / "ieee14.m")
 
 Advanced Usage:
     >>> from psforge_grid.io import ParserFactory, WriterFactory
     >>> parser = ParserFactory.create("raw")
-    >>> system = parser.parse("ieee14.raw")
+    >>> system = parser.parse("ieee14.raw")  # doctest: +SKIP
     >>> writer = WriterFactory.create("matpower")
-    >>> writer.write(system, "ieee14.m")
+    >>> writer.write(system, tmp_path / "ieee14.m")
 """
 
 from psforge_grid.io.dss_parser import DSSParser, parse_dss

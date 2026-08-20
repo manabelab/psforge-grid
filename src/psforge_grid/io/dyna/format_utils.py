@@ -4,7 +4,7 @@ CPAT card format uses 80-character lines with fields at fixed column positions.
 Column indices in this module are 1-based (matching CPAT manual convention).
 
 Example:
-    >>> line = "T  500050 Z    1040      1050"
+    >>> line = "T   500050 Z    1040      1050"
     >>> read_int(line, 4, 10)  # columns 4-10
     500050
     >>> read_str(line, 12, 12)  # column 12

@@ -6,7 +6,9 @@ This module defines the Generator class representing power generation units.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from psforge_grid.models.identity import validate_id
 
 
 @dataclass
@@ -17,7 +19,12 @@ class Generator:
     output limits and voltage control capabilities.
 
     Attributes:
-        bus_id: Bus ID where generator is connected
+        id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
+            whole system, all element types combined. Parsers generate it
+            deterministically as ``G{n}`` (type prefix + 1-based position
+            in the source file); the bus and machine ID live in ``bus_id``
+            and ``machine_id``, not in the id.
+        bus_id: ``Bus.id`` of the bus where the generator is connected
         p_gen: Active power output [p.u.] on system base
         q_gen: Reactive power output [p.u.] on system base (default: 0.0)
         v_setpoint: Voltage setpoint [p.u.] (default: 1.0)
@@ -29,7 +36,10 @@ class Generator:
         mbase: Machine base MVA (default: 100.0)
             Used for converting machine-specific parameters
         status: Operating status (1: in-service, 0: out-of-service)
-        gen_id: Generator identifier for multiple generators on same bus
+        machine_id: Machine identifier in the source format (default: None).
+            PSS/E RAW provides this (e.g. "1"); None means the source format
+            did not provide one. Kept for lossless round-trip; the generator
+            itself is identified by ``id``.
         xd_pu: Synchronous reactance Xd [p.u. on mbase] (default: None)
         xdp_pu: Transient reactance Xd' [p.u. on mbase] (default: None)
         xdpp_pu: Sub-transient reactance Xd'' [p.u. on mbase] (default: None)
@@ -53,7 +63,11 @@ class Generator:
             None means the source format did not provide this information.
         xneut: Grounding reactance [ohm] (default: None).
             None means the source format did not provide this information.
-        name: Generator name (optional)
+        order: Sort/display order (default: None). Parsers assign the
+            position within the source file (1.0, 2.0, ...).
+        name: Generator name (optional, free text)
+        tags: Attribute/grouping tags. Hierarchies use the ``"key:value"``
+            convention, e.g. ``["facility:shin_osaka"]``.
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
 
@@ -61,13 +75,13 @@ class Generator:
         - All power values are in per-unit on system base MVA
         - v_setpoint is used for PV (generator) buses to control voltage magnitude
         - During power flow, if Q limits are violated, the bus may switch from PV to PQ
-        - gen_id distinguishes multiple generators connected to the same bus
         - mbase is the machine's own MVA rating (for impedance conversion)
 
     Example:
         >>> # 100 MW generator with Q limits
         >>> gen = Generator(
-        ...     bus_id=1,
+        ...     "G1",
+        ...     bus_id="B1",
         ...     p_gen=1.0,  # 100 MW on 100 MVA base
         ...     v_setpoint=1.02,
         ...     q_max=0.5,  # 50 MVAr
@@ -75,7 +89,8 @@ class Generator:
         ... )
     """
 
-    bus_id: int
+    id: str
+    bus_id: str
     p_gen: float
     q_gen: float = 0.0
     v_setpoint: float = 1.0
@@ -85,7 +100,7 @@ class Generator:
     q_min: float | None = None
     mbase: float = 100.0
     status: int = 1
-    gen_id: str = "1"
+    machine_id: str | None = None
     xd_pu: float | None = None
     xdp_pu: float | None = None
     xdpp_pu: float | None = None
@@ -99,15 +114,19 @@ class Generator:
     model_type: int | None = None
     rneut: float | None = None
     xneut: float | None = None
+    order: float | None = None
     name: str | None = None
+    tags: list[str] = field(default_factory=list)
     description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate generator data after initialization.
 
         Raises:
-            ValueError: If status is not 0 or 1.
+            ValueError: If id violates the identifier character set, or if
+                status is not 0 or 1.
         """
+        validate_id(self.id, "Generator")
         if self.status not in [0, 1]:
             raise ValueError(
                 f"Invalid status: {self.status}. Must be 0 (out-of-service) or 1 (in-service)."
@@ -119,9 +138,9 @@ class Generator:
 
         Example:
             >>> from psforge_grid.models import Generator
-            >>> Generator(bus_id=1, p_gen=1.0).is_in_service
+            >>> Generator("G1", bus_id="B1", p_gen=1.0).is_in_service
             True
-            >>> Generator(bus_id=1, p_gen=1.0, status=0).is_in_service
+            >>> Generator("G1", bus_id="B1", p_gen=1.0, status=0).is_in_service
             False
         """
         return self.status == 1
@@ -139,7 +158,7 @@ class Generator:
 
         Example:
             >>> from psforge_grid.models import Generator
-            >>> gen = Generator(bus_id=1, p_gen=1.0, q_max=0.5, q_min=-0.3)
+            >>> gen = Generator("G1", bus_id="B1", p_gen=1.0, q_max=0.5, q_min=-0.3)
             >>> gen.check_q_limits(0.4)  # within limits
             (True, 0.4)
             >>> gen.check_q_limits(0.8)  # clamped to q_max
@@ -175,7 +194,7 @@ class Generator:
 
         Example:
             >>> from psforge_grid.models import Generator
-            >>> gen = Generator(bus_id=1, p_gen=1.0, xdpp_pu=0.2, xqpp_pu=0.3)
+            >>> gen = Generator("G1", bus_id="B1", p_gen=1.0, xdpp_pu=0.2, xqpp_pu=0.3)
             >>> gen.get_fault_reactance()  # (Xd'' + Xq'') / 2
             0.25
             >>> gen.get_fault_reactance("xdpp")
@@ -207,9 +226,9 @@ class Generator:
 
         Example:
             >>> from psforge_grid.models import Generator
-            >>> Generator(bus_id=1, p_gen=1.0, ra_pu=0.003).get_armature_resistance()
+            >>> Generator("G1", bus_id="B1", p_gen=1.0, ra_pu=0.003).get_armature_resistance()
             0.003
-            >>> Generator(bus_id=2, p_gen=0.5).get_armature_resistance() is None
+            >>> Generator("G2", bus_id="B2", p_gen=0.5).get_armature_resistance() is None
             True
         """
         if self.ra_pu is not None:
@@ -226,18 +245,18 @@ class Generator:
             Multi-line string describing the generator for LLM context.
 
         Example:
-            >>> gen = Generator(bus_id=1, p_gen=1.0, v_setpoint=1.02, name="Gen1")
+            >>> gen = Generator("G1", bus_id="B1", p_gen=1.0, v_setpoint=1.02, name="Gen1")
             >>> print(gen.to_description())
-            Generator Gen1 at Bus 1
+            Generator G1 (Gen1) at Bus B1
               Output: P = 1.0000 pu, Q = 0.0000 pu
               Voltage setpoint: 1.02 pu
               Status: In-service
         """
-        name_str = f"{self.name}" if self.name else f"G{self.gen_id}"
+        name_str = f" ({self.name})" if self.name else ""
         status_str = "In-service" if self.is_in_service else "Out-of-service"
 
         lines = [
-            f"Generator {name_str} at Bus {self.bus_id}",
+            f"Generator {self.id}{name_str} at Bus {self.bus_id}",
             f"  Output: P = {self.p_gen:.4f} pu, Q = {self.q_gen:.4f} pu",
             f"  Voltage setpoint: {self.v_setpoint:.2f} pu",
         ]
@@ -255,6 +274,9 @@ class Generator:
             lines.append(f"  Q limits: [{q_min_str}, {q_max_str}] pu")
 
         lines.append(f"  Status: {status_str}")
+
+        if self.tags:
+            lines.append(f"  Tags: {', '.join(self.tags)}")
 
         if self.description:
             lines.append(f"  Note: {self.description}")

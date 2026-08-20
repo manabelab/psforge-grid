@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-20
+
+### Changed (BREAKING)
+
+Every element is now identified by a unified string `id` (`^[A-Za-z0-9_]+$`,
+unique across the whole system, all element types combined) and carries a
+common identity layer: `id` / `order` (sort order, `float | None`) / `name` /
+`tags` (`"key:value"` convention for region/voltage/facility grouping).
+Identifier roles moved to `id`; the source-format keys remain as optional
+round-trip data. Parsers generate ids deterministically: `B{number}` for
+buses (file position where the format has no bus numbers) and type prefix +
+1-based file position for everything else (`BR1`, `G1`, `LD1`, `SH1`,
+`GC1`). Connection and source-key information deliberately stay out of the
+id — an id that embeds `from`/`to` starts lying the moment the branch is
+rewired — and `order` carries the same file position as a float.
+
+| Element | Before | After |
+|---------|--------|-------|
+| Bus | `bus_id: int` | `id: str` + `number: int \| None` (source bus number) |
+| Branch | `from_bus: int` / `to_bus: int` | `from_bus_id: str` / `to_bus_id: str` (Bus.id refs) |
+| Branch | `circuit_id: str = "1"` | `circuit_id: str \| None = None` (source data) |
+| Generator | `bus_id: int` / `gen_id: str = "1"` | `bus_id: str` / `machine_id: str \| None` |
+| Load | `bus_id: int` / `load_id: str = "1"` | `bus_id: str` / `load_id: str \| None` |
+| Shunt | `bus_id: int` / `shunt_id: str = "1"` | `bus_id: str` / `shunt_id: str \| None` |
+| GeneratorCost | `gen_index: int` (list position) | `generator_id: str` (survives reordering) |
+| DiagramData | `dict[int, ...]` / `dict[tuple, ...]` keys | keyed by element `id` strings |
+
+- `System.get_bus()` / `get_bus_index()` / `get_bus_ids()` /
+  `get_bus_generators()` and friends take/return string ids.
+- psforge-grid JSON format version is now **2.0**. Version 1.x files are
+  still read: elements are migrated to the identity schema on load
+  (ids generated, `gen_index` resolved to `generator_id`), and writing the
+  System back produces a 2.0 file.
+- Writers that need integer bus numbers (RAW, MATPOWER, CPAT) use
+  `Bus.number` and assign unused numbers in list order when it is absent.
+
+### Added
+
+- `System.id` / `System.order` / `System.tags`, and `System.case_time` —
+  the point in time the network data represents, as ISO-8601 with partial
+  precision (`"2026"`, `"2026-08"`, `"2026-08-20T15:00"`), so a monthly
+  snapshot does not need a fabricated day.
+- `System.get_element(id)` — cross-type lookup by unified id.
+- `System.used_ids()` — every element id in the system.
+- `System.assign_ids()` — opt-in regeneration of all ids by the standard
+  rules, updating references and diagram keys consistently.
+- `System.validate()` now checks id syntax, system-wide id uniqueness,
+  GeneratorCost generator references and `case_time` format.
+- Docstring examples run in CI (`pytest --doctest-modules src/`, #15) with a
+  root `conftest.py` injecting a small `system` into the doctest namespace.
+
+### Migration notes
+
+- Spokes: psforge-flow pins `<0.10.0` and is unaffected until it migrates;
+  psforge-fault must cap its pin below 0.10 before this release reaches
+  PyPI.
+- Renames are deliberately loud: code using `branch.from_bus` or
+  `Bus(bus_id=1, ...)` fails with `AttributeError`/`TypeError` instead of
+  silently comparing an int to a string.
+
 ## [0.9.1] - 2026-07-16
 
 ### Fixed

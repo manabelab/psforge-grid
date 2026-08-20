@@ -35,7 +35,7 @@ system.to_file("output.m")                           # Auto-detect
 
 # Explore the system
 print(f"Buses: {len(system.buses)}, Branches: {len(system.branches)}")
-print(system.to_summary())
+print(system.to_description())
 ```
 
 ```bash
@@ -184,7 +184,7 @@ Supports [OpenDSS](https://opendss.epri.com/) `.dss` script files via [opendssdi
 Human/LLM-friendly native format with explicit metadata, distinct from pglib-uc JSON.
 
 - **Extension**: `.psfg.json`
-- **Metadata**: `"format": "psforge-grid"`, `"version": "1.0"`
+- **Metadata**: `"format": "psforge-grid"`, `"version": "2.0"` (1.x files are read and migrated on load)
 - **Field names**: snake_case with unit suffixes (`_pu`, `_mw`, `_kv`)
 - **Compact output**: `None` fields omitted by default
 
@@ -212,7 +212,7 @@ write_scenario(
         {
             "name": "N-1_Line_1-5",
             "modifications": [
-                {"target": "branches", "match": {"from_bus": 1, "to_bus": 5},
+                {"target": "branches", "match": {"from_bus_id": "B1", "to_bus_id": "B5"},
                  "set": {"status": 0}}
             ]
         },

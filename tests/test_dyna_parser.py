@@ -201,28 +201,35 @@ class TestDynaParserIntegration:
         """Swing node is 1100."""
         slack_buses = system.get_slack_buses()
         assert len(slack_buses) == 1
-        assert slack_buses[0].bus_id == 1100
+        assert slack_buses[0].id == "B1100"
+        assert slack_buses[0].number == 1100
 
     def test_pv_buses(self, system: System) -> None:
         """Generator buses 1010, 1020, 1030 should be PV."""
         pv_buses = system.get_pv_buses()
-        pv_ids = {b.bus_id for b in pv_buses}
-        assert 1010 in pv_ids
-        assert 1020 in pv_ids
-        assert 1030 in pv_ids
+        pv_ids = {b.id for b in pv_buses}
+        assert "B1010" in pv_ids
+        assert "B1020" in pv_ids
+        assert "B1030" in pv_ids
 
     def test_transmission_line_impedance(self, system: System) -> None:
         """Check 500KV 1-A line (1040→1050): Z1R=0.00351, Z1X=0.06686."""
-        branches = [b for b in system.branches if b.from_bus == 1040 and b.to_bus == 1050]
+        branches = [
+            b for b in system.branches if b.from_bus_id == "B1040" and b.to_bus_id == "B1050"
+        ]
         assert len(branches) >= 1
         b = branches[0]
+        assert b.id == "BR1"  # first T card in the file
+        assert b.circuit_id == "500050"
         assert b.r_pu == pytest.approx(0.00351, abs=1e-5)
         assert b.x_pu == pytest.approx(0.06686, abs=1e-5)
         assert b.b_pu == pytest.approx(0.02994, abs=1e-5)
 
     def test_transformer_tap(self, system: System) -> None:
         """Check 22/500 TR (1010→1040): Z1X=0.0232, tap=1.07."""
-        branches = [b for b in system.branches if b.from_bus == 1010 and b.to_bus == 1040]
+        branches = [
+            b for b in system.branches if b.from_bus_id == "B1010" and b.to_bus_id == "B1040"
+        ]
         assert len(branches) == 1
         b = branches[0]
         assert b.x_pu == pytest.approx(0.02320, abs=1e-5)
@@ -230,9 +237,12 @@ class TestDynaParserIntegration:
 
     def test_generator_machine_data(self, system: System) -> None:
         """Check G-1 (1010) machine parameters."""
-        gens = system.get_bus_generators(1010)
+        gens = system.get_bus_generators("B1010")
         assert len(gens) == 1
         g = gens[0]
+        assert g.id == "G1"  # first G card in the file
+        assert g.bus_id == "B1010"
+        assert g.machine_id == "G-1"
         assert g.mbase == pytest.approx(5000.0)
         assert g.xd_pu == pytest.approx(1.70)
         assert g.xdp_pu == pytest.approx(0.35)
@@ -240,7 +250,7 @@ class TestDynaParserIntegration:
 
     def test_generator_sequence_reactance(self, system: System) -> None:
         """Check G-1 (1010) sequence reactances from G5 card."""
-        gens = system.get_bus_generators(1010)
+        gens = system.get_bus_generators("B1010")
         assert len(gens) == 1
         g = gens[0]
         assert g.x0_pu == pytest.approx(0.25)
@@ -250,6 +260,78 @@ class TestDynaParserIntegration:
         """System should pass validation (no missing bus refs, etc.)."""
         errors = system.validate()
         assert errors == [], f"Validation errors: {errors}"
+
+
+# =============================================================================
+# Unified identifier scheme tests (grid 0.10.0)
+# =============================================================================
+
+
+class TestDynaUnifiedIds:
+    """Tests for the unified string identifier scheme."""
+
+    @pytest.fixture()
+    def system(self) -> System:
+        """Parse the test fixture file."""
+        return parse_dyna(DYNA_FILE)
+
+    def test_bus_ids_derived_from_node_numbers(self, system: System) -> None:
+        """Every bus id should be B{number} with the CPAT node number kept."""
+        assert len(system.buses) == 10
+        for bus in system.buses:
+            assert bus.number is not None
+            assert bus.id == f"B{bus.number}"
+        assert {b.number for b in system.buses} == set(range(1010, 1101, 10))
+
+    def test_load_ids_and_references(self, system: System) -> None:
+        """Loads should get sequential LD{n} ids and reference Bus.id."""
+        load_map = {ld.bus_id: ld for ld in system.loads}
+        assert load_map["B1090"].id == "LD1"  # first load-carrying N card
+        assert load_map["B1090"].p_load == pytest.approx(6.0)
+        assert load_map["B1090"].load_id is None  # .dyna has no load identifier
+
+    def test_sequence_ids_match_order(self, system: System) -> None:
+        """BR/G/LD ids carry the per-type sequence number (= int(order))."""
+        for br in system.branches:
+            assert br.order is not None
+            assert br.id == f"BR{int(br.order)}"
+        for gen in system.generators:
+            assert gen.order is not None
+            assert gen.id == f"G{int(gen.order)}"
+        for load in system.loads:
+            assert load.order is not None
+            assert load.id == f"LD{int(load.order)}"
+
+    def test_ids_unique_across_all_element_types(self, system: System) -> None:
+        """All element ids must be unique across the whole system."""
+        all_ids = (
+            [b.id for b in system.buses]
+            + [b.id for b in system.branches]
+            + [g.id for g in system.generators]
+            + [ld.id for ld in system.loads]
+        )
+        assert len(all_ids) == 10 + 14 + 4 + 2
+        assert len(set(all_ids)) == len(all_ids)
+
+    def test_ids_deterministic_across_parses(self) -> None:
+        """Parsing the same file twice must generate identical ids."""
+        first = parse_dyna(DYNA_FILE)
+        second = parse_dyna(DYNA_FILE)
+        assert [b.id for b in first.buses] == [b.id for b in second.buses]
+        assert [b.id for b in first.branches] == [b.id for b in second.branches]
+        assert [g.id for g in first.generators] == [g.id for g in second.generators]
+        assert [ld.id for ld in first.loads] == [ld.id for ld in second.loads]
+
+    def test_orders_are_sequential_per_element_type(self, system: System) -> None:
+        """Order values should be 1.0, 2.0, ... per element type."""
+        bus_orders = sorted(b.order for b in system.buses if b.order is not None)
+        assert bus_orders == [float(i) for i in range(1, 11)]
+        branch_orders = sorted(b.order for b in system.branches if b.order is not None)
+        assert branch_orders == [float(i) for i in range(1, 15)]
+        gen_orders = sorted(g.order for g in system.generators if g.order is not None)
+        assert gen_orders == [float(i) for i in range(1, 5)]
+        load_orders = sorted(ld.order for ld in system.loads if ld.order is not None)
+        assert load_orders == [1.0, 2.0]
 
 
 # =============================================================================

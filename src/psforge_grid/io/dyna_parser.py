@@ -15,8 +15,8 @@ Supported cards:
 
 Example:
     >>> from psforge_grid.io.dyna_parser import parse_dyna
-    >>> system = parse_dyna("cpat_model.dyna")
-    >>> print(f"Loaded {system.num_buses} buses")
+    >>> system = parse_dyna("cpat_model.dyna")  # doctest: +SKIP
+    >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
 See Also:
     - DynaParser: Class implementing IParser for .dyna format
@@ -40,6 +40,7 @@ from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.identity import make_unique
 from psforge_grid.models.load import Load
 from psforge_grid.models.system import System
 
@@ -99,8 +100,8 @@ def parse_dyna(filepath: str | Path) -> System:
         ValueError: If the file format is invalid.
 
     Example:
-        >>> system = parse_dyna("cpat_model.dyna")
-        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
+        >>> system = parse_dyna("cpat_model.dyna")  # doctest: +SKIP
+        >>> print(f"{system.num_buses} buses, {system.num_branches} branches")  # doctest: +SKIP
     """
     return _parse_dyna_impl(filepath)
 
@@ -117,6 +118,14 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
         6. Build loads from N card P_load/Q_load
         7. Determine bus types (swing detection from N card data)
 
+    Element ids are generated deterministically: ``B{number}`` from the CPAT
+    node number, and per-type sequence numbers in file occurrence order for
+    everything else (``BR{n}``, ``G{n}``, ``LD{n}``, matching the integer
+    part of ``order``). A shared ``used`` id set with
+    :func:`~psforge_grid.models.identity.make_unique` acts as a safety net
+    against collisions. CPAT branch/generator identifiers are kept as data
+    (``circuit_id``, ``machine_id``), not encoded into ids.
+
     Args:
         filepath: Path to the .dyna file.
 
@@ -130,10 +139,11 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
     lines = path.read_text(encoding="utf-8").splitlines()
     parsed = parse_all_cards(lines)
 
-    buses = _build_buses(parsed)
-    branches = _build_branches(parsed)
-    generators = _build_generators(parsed)
-    loads = _build_loads(parsed)
+    used: set[str] = set()
+    buses, bus_id_by_no = _build_buses(parsed, used)
+    branches = _build_branches(parsed, bus_id_by_no, used)
+    generators = _build_generators(parsed, bus_id_by_no, used)
+    loads = _build_loads(parsed, bus_id_by_no, used)
 
     system = System(
         buses=buses,
@@ -156,7 +166,7 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
     return system
 
 
-def _build_buses(parsed: DynaParsedData) -> list[Bus]:
+def _build_buses(parsed: DynaParsedData, used: set[str]) -> tuple[list[Bus], dict[int, str]]:
     """Build Bus objects from parsed N cards.
 
     Bus type determination:
@@ -167,14 +177,19 @@ def _build_buses(parsed: DynaParsedData) -> list[Bus]:
 
     Args:
         parsed: Parsed dyna data.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
-        List of Bus objects sorted by bus_id.
+        Tuple of (buses sorted by CPAT node number, node number →
+        ``Bus.id`` mapping for reference fields).
     """
     # Collect generator bus nodes for PV/Slack detection
     gen_nodes = {g.node_no for g in parsed.generators}
 
     buses: list[Bus] = []
+    bus_id_by_no: dict[int, str] = {}
+    order = 0.0
+
     for node in parsed.nodes:
         if node.node_no <= 0:
             continue
@@ -184,17 +199,24 @@ def _build_buses(parsed: DynaParsedData) -> list[Bus]:
         # Voltage magnitude: prefer v0 if set, else 1.0
         v_mag = node.v0 if node.v0 > 0 else 1.0
 
+        bus_id = make_unique(f"B{node.node_no}", used)
+        used.add(bus_id)
+        bus_id_by_no.setdefault(node.node_no, bus_id)
+        order += 1.0
+
         bus = Bus(
-            bus_id=node.node_no,
+            bus_id,
             bus_type=bus_type,
             v_magnitude=v_mag,
             v_angle=0.0,
+            number=node.node_no,
+            order=order,
             name=node.name,
         )
         buses.append(bus)
 
-    buses.sort(key=lambda b: b.bus_id)
-    return buses
+    buses.sort(key=lambda b: b.number if b.number is not None else 0)
+    return buses, bus_id_by_no
 
 
 def _determine_bus_type(node: DynaNode, gen_nodes: set[int]) -> int:
@@ -234,31 +256,59 @@ def _determine_bus_type(node: DynaNode, gen_nodes: set[int]) -> int:
     return 1
 
 
-def _build_branches(parsed: DynaParsedData) -> list[Branch]:
+def _build_branches(
+    parsed: DynaParsedData,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+) -> list[Branch]:
     """Build Branch objects from parsed T and X cards.
+
+    Branch ids are ``BR{n}`` (file occurrence order, matching the integer
+    part of ``order``). The CPAT branch number (NO field) is kept in
+    ``circuit_id``.
 
     Args:
         parsed: Parsed dyna data.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
         List of Branch objects.
     """
     branches: list[Branch] = []
+    order = 0.0
 
     # Transmission lines
     for tl in parsed.transmission_lines:
-        branch = _tline_to_branch(tl)
+        order += 1.0
+        branch = _tline_to_branch(tl, bus_id_by_no, used, order)
         branches.append(branch)
 
     # Transformers
     for xfmr in parsed.transformers:
-        branch = _xfmr_to_branch(xfmr)
+        order += 1.0
+        branch = _xfmr_to_branch(xfmr, bus_id_by_no, used, order)
         branches.append(branch)
 
     return branches
 
 
-def _tline_to_branch(tl: DynaTransmissionLine) -> Branch:
+def _bus_ref(node_no: int, bus_id_by_no: dict[int, str]) -> str:
+    """Resolve a node number to a Bus.id reference (lenient fallback).
+
+    A dangling reference (node number without an N card) falls back to
+    ``B{number}`` so that :meth:`System.validate` can report it, matching
+    the pre-0.10.0 leniency of the parser.
+    """
+    return bus_id_by_no.get(node_no, f"B{node_no}")
+
+
+def _tline_to_branch(
+    tl: DynaTransmissionLine,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+    order: float,
+) -> Branch:
     """Convert a parsed transmission line to a Branch.
 
     Note:
@@ -268,18 +318,27 @@ def _tline_to_branch(tl: DynaTransmissionLine) -> Branch:
 
     Args:
         tl: Parsed transmission line data.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
+        order: Sort/display order within the file.
 
     Returns:
         Branch object.
     """
+    ckt = str(tl.branch_no)
+    branch_id = make_unique(f"BR{int(order)}", used)
+    used.add(branch_id)
+
     branch = Branch(
-        from_bus=tl.from_node,
-        to_bus=tl.to_node,
+        branch_id,
+        from_bus_id=_bus_ref(tl.from_node, bus_id_by_no),
+        to_bus_id=_bus_ref(tl.to_node, bus_id_by_no),
         r_pu=tl.z1r,
         x_pu=tl.z1x,
         b_pu=tl.y1c,
+        order=order,
         name=tl.name,
-        circuit_id=str(tl.branch_no),
+        circuit_id=ckt,
     )
     if tl.z0r != 0.0:
         branch.r0_pu = tl.z0r
@@ -288,35 +347,59 @@ def _tline_to_branch(tl: DynaTransmissionLine) -> Branch:
     return branch
 
 
-def _xfmr_to_branch(xfmr: DynaTransformer) -> Branch:
+def _xfmr_to_branch(
+    xfmr: DynaTransformer,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+    order: float,
+) -> Branch:
     """Convert a parsed transformer to a Branch.
 
     Args:
         xfmr: Parsed transformer data.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
+        order: Sort/display order within the file.
 
     Returns:
         Branch object with tap_ratio and shift_angle set.
     """
+    ckt = str(xfmr.branch_no)
+    branch_id = make_unique(f"BR{int(order)}", used)
+    used.add(branch_id)
+
     return Branch(
-        from_bus=xfmr.from_node,
-        to_bus=xfmr.to_node,
+        branch_id,
+        from_bus_id=_bus_ref(xfmr.from_node, bus_id_by_no),
+        to_bus_id=_bus_ref(xfmr.to_node, bus_id_by_no),
         r_pu=xfmr.z1r,
         x_pu=xfmr.z1x,
         tap_ratio=xfmr.tap_ratio if xfmr.tap_ratio != 0.0 else 1.0,
         shift_angle=xfmr.shift_angle,
+        order=order,
         name=xfmr.name,
-        circuit_id=str(xfmr.branch_no),
+        circuit_id=ckt,
     )
 
 
-def _build_generators(parsed: DynaParsedData) -> list[Generator]:
+def _build_generators(
+    parsed: DynaParsedData,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+) -> list[Generator]:
     """Build Generator objects from parsed G cards and N card data.
 
     Generator P/Q comes from N cards (PGO/QGO fields).
     Machine parameters come from G3-G5 cards (on machine base GMVA).
 
+    Generator ids are ``G{n}`` (file occurrence order). The G card name
+    (GNAME, the field the parser has always used as the generator
+    identifier) is kept in ``machine_id``, falling back to ``"1"``.
+
     Args:
         parsed: Parsed dyna data.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
         List of Generator objects.
@@ -325,8 +408,12 @@ def _build_generators(parsed: DynaParsedData) -> list[Generator]:
     node_map = {n.node_no: n for n in parsed.nodes}
 
     generators: list[Generator] = []
+    order = 0.0
     for dg in parsed.generators:
-        gen = _dyna_gen_to_generator(dg, node_map, parsed.control.base_mva)
+        order += 1.0
+        gen = _dyna_gen_to_generator(
+            dg, node_map, parsed.control.base_mva, bus_id_by_no, used, order
+        )
         generators.append(gen)
 
     return generators
@@ -336,6 +423,9 @@ def _dyna_gen_to_generator(
     dg: DynaGenerator,
     node_map: dict[int, DynaNode],
     base_mva: float,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+    order: float,
 ) -> Generator:
     """Convert a parsed DynaGenerator to a Generator.
 
@@ -343,6 +433,10 @@ def _dyna_gen_to_generator(
         dg: Parsed generator data.
         node_map: Node number to DynaNode mapping.
         base_mva: System base MVA.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
+        order: Sort/display order within the file (its integer part is the
+            id sequence number).
 
     Returns:
         Generator object with machine parameters on machine base.
@@ -373,8 +467,13 @@ def _dyna_gen_to_generator(
     # Operating limits
     p_max = dg.gmw / base_mva if base_mva > 0 else None
 
+    machine_id = dg.name or "1"
+    gen_id = make_unique(f"G{int(order)}", used)
+    used.add(gen_id)
+
     return Generator(
-        bus_id=dg.node_no,
+        gen_id,
+        bus_id=_bus_ref(dg.node_no, bus_id_by_no),
         p_gen=p_gen,
         q_gen=0.0,
         v_setpoint=v_setpoint,
@@ -388,33 +487,50 @@ def _dyna_gen_to_generator(
         x2_pu=x2,
         ra_pu=ra,
         ta_s=ta,
-        gen_id=dg.name or "1",
+        machine_id=machine_id,
+        order=order,
         name=dg.name,
     )
 
 
-def _build_loads(parsed: DynaParsedData) -> list[Load]:
+def _build_loads(
+    parsed: DynaParsedData,
+    bus_id_by_no: dict[int, str],
+    used: set[str],
+) -> list[Load]:
     """Build Load objects from N card P_load/Q_load data.
 
-    Only buses with nonzero load are included.
+    Only buses with nonzero load are included. Load ids are ``LD{n}``
+    (file occurrence order). The .dyna format has no per-load identifier,
+    so ``load_id`` stays ``None`` (source not provided).
 
     Args:
         parsed: Parsed dyna data.
+        bus_id_by_no: Node number → ``Bus.id`` mapping.
+        used: Ids already generated for this system; extended in place.
 
     Returns:
-        List of Load objects sorted by bus_id.
+        List of Load objects sorted by CPAT node number.
     """
-    loads: list[Load] = []
+    entries: list[tuple[int, Load]] = []
+    order = 0.0
 
     for node in parsed.nodes:
         if node.p_load == 0.0 and node.q_load == 0.0:
             continue
+
+        load_id = make_unique(f"LD{int(order) + 1}", used)
+        used.add(load_id)
+        order += 1.0
+
         load = Load(
-            bus_id=node.node_no,
+            load_id,
+            bus_id=_bus_ref(node.node_no, bus_id_by_no),
             p_load=node.p_load,
             q_load=node.q_load,
+            order=order,
         )
-        loads.append(load)
+        entries.append((node.node_no, load))
 
-    loads.sort(key=lambda ld: ld.bus_id)
-    return loads
+    entries.sort(key=lambda e: e[0])
+    return [load for _no, load in entries]

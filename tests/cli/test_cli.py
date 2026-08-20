@@ -97,7 +97,10 @@ class TestShowCommand:
         """Test show buses command."""
         result = runner.invoke(app, ["show", str(IEEE14_RAW), "buses"])
         assert result.exit_code == 0
-        assert "Bus" in result.stdout or "bus_id" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Bus" in output
+        # Table lists buses by unified string id
+        assert "B1" in output
 
     def test_show_buses_json(self) -> None:
         """Test show buses command with JSON output."""
@@ -107,7 +110,8 @@ class TestShowCommand:
         data = json.loads(result.stdout)
         assert "buses" in data
         assert len(data["buses"]) == 14
-        assert data["buses"][0]["bus_id"] == 1
+        assert data["buses"][0]["id"] == "B1"
+        assert data["buses"][0]["number"] == 1
 
     def test_show_branches(self) -> None:
         """Test show branches command."""
@@ -122,7 +126,11 @@ class TestShowCommand:
 
         data = json.loads(result.stdout)
         assert "branches" in data
-        assert len(data["branches"]) > 0
+        assert len(data["branches"]) == 20
+        first = data["branches"][0]
+        assert first["id"] == "BR1"
+        assert first["from_bus_id"] == "B1"
+        assert first["to_bus_id"] == "B2"
 
     def test_show_generators(self) -> None:
         """Test show generators command."""
@@ -136,6 +144,8 @@ class TestShowCommand:
 
         data = json.loads(result.stdout)
         assert "generators" in data
+        assert data["generators"][0]["id"] == "G1"
+        assert data["generators"][0]["bus_id"] == "B1"
 
     def test_show_loads(self) -> None:
         """Test show loads command."""
@@ -148,10 +158,47 @@ class TestShowCommand:
         assert result.exit_code == 0
 
     def test_show_csv_format(self) -> None:
-        """Test show command with CSV output."""
+        """Test show command with CSV output uses unified id header."""
         result = runner.invoke(app, ["show", str(IEEE14_RAW), "buses", "-f", "csv"])
         assert result.exit_code == 0
-        assert "bus_id," in result.stdout
+        lines = result.stdout.strip().split("\n")
+        assert lines[0] == "id,number,name,type,v_pu,angle_deg,base_kv,status"
+        assert lines[1].startswith("B1,1,")
+
+    def test_show_csv_branches_header(self) -> None:
+        """Branch CSV output uses id and string bus references."""
+        result = runner.invoke(app, ["show", str(IEEE14_RAW), "branches", "-f", "csv"])
+        assert result.exit_code == 0
+        lines = result.stdout.strip().split("\n")
+        assert lines[0] == "id,from_bus_id,to_bus_id,r_pu,x_pu,b_pu,rate_a,in_service"
+        assert lines[1].startswith("BR1,B1,B2,")
+
+    def test_show_element_id_bus(self) -> None:
+        """The element_id argument selects a single bus by unified id."""
+        result = runner.invoke(app, ["show", str(IEEE14_RAW), "buses", "B1", "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["buses"]) == 1
+        assert data["buses"][0]["id"] == "B1"
+
+    def test_show_element_id_branch(self) -> None:
+        """The element_id argument selects a single branch by unified id."""
+        # BR2 is the second branch in ieee14.raw: line 1-5
+        result = runner.invoke(app, ["show", str(IEEE14_RAW), "branches", "BR2", "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["branches"]) == 1
+        assert data["branches"][0]["from_bus_id"] == "B1"
+        assert data["branches"][0]["to_bus_id"] == "B5"
+
+    def test_show_element_id_generator_by_bus(self) -> None:
+        """Generators also match on the id of their connected bus."""
+        result = runner.invoke(app, ["show", str(IEEE14_RAW), "generators", "B1", "-f", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert len(data["generators"]) == 1
+        assert data["generators"][0]["id"] == "G1"
+        assert data["generators"][0]["bus_id"] == "B1"
 
     def test_show_summary_format(self) -> None:
         """Test show command with summary output."""
@@ -434,6 +481,7 @@ class TestShowWhereFilter:
         assert len(data["buses"]) == 1
         # JSON formatter uses "type" key (integer value)
         assert data["buses"][0]["type"] == 3
+        assert data["buses"][0]["id"] == "B1"
 
     def test_filter_buses_low_voltage(self) -> None:
         """Filter buses with v_magnitude < 1.0."""
@@ -456,15 +504,15 @@ class TestShowWhereFilter:
         assert len(data["branches"]) > 0
 
     def test_filter_generators(self) -> None:
-        """Filter generators by bus_id."""
+        """Filter generators by string bus_id reference."""
         result = runner.invoke(
             app,
-            ["show", str(IEEE14_RAW), "generators", "-f", "json", "--where", "bus_id==1"],
+            ["show", str(IEEE14_RAW), "generators", "-f", "json", "--where", "bus_id==B1"],
         )
         assert result.exit_code == 0
         data = json.loads(result.stdout)
-        for gen in data["generators"]:
-            assert gen["bus_id"] == 1
+        assert len(data["generators"]) == 1
+        assert data["generators"][0]["bus_id"] == "B1"
 
     def test_filter_invalid_expression(self) -> None:
         """Invalid filter expression shows error."""
@@ -475,7 +523,7 @@ class TestShowWhereFilter:
         """Filter that matches nothing returns empty."""
         result = runner.invoke(
             app,
-            ["show", str(IEEE14_RAW), "buses", "-f", "json", "--where", "bus_id==999"],
+            ["show", str(IEEE14_RAW), "buses", "-f", "json", "--where", "id==B999"],
         )
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -509,7 +557,9 @@ class TestDiffCommand:
         """Diff base vs scenario-modified system."""
         from psforge_grid.models.scenario import ScenarioSet
 
-        scenarios = ScenarioSet.from_json(FIXTURES_DIR / "ieee14_contingencies.psfg.json").resolve()
+        scenarios = ScenarioSet.from_json(
+            FIXTURES_DIR / "ieee14_contingencies_v2.psfg.json"
+        ).resolve()
         n1_path = tmp_path / "n1.psfg.json"
         scenarios["N-1_Line_1-5"].to_json(n1_path)
 
@@ -532,7 +582,7 @@ class TestDiffCommand:
 # Scenario Command Tests
 # =========================================================================
 
-IEEE14_CONTINGENCIES = FIXTURES_DIR / "ieee14_contingencies.psfg.json"
+IEEE14_CONTINGENCIES = FIXTURES_DIR / "ieee14_contingencies_v2.psfg.json"
 
 
 class TestScenarioCommand:
@@ -543,7 +593,7 @@ class TestScenarioCommand:
         result = runner.invoke(app, ["scenario", "list", str(IEEE14_CONTINGENCIES)])
         assert result.exit_code == 0
         output = strip_ansi(result.stdout)
-        assert "ieee14_contingencies.psfg.json" in output
+        assert "ieee14_contingencies_v2.psfg.json" in output
         assert "N-1_Line_1-5" in output
         assert "N-1_Line_2-3" in output
         assert "heavy_load_bus14" in output

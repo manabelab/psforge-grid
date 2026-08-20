@@ -12,8 +12,7 @@ file extension.
 
 Example:
     >>> from psforge_grid.io.json_writer import write_json
-    >>> system = System.from_raw("ieee14.raw")
-    >>> write_json(system, "ieee14.psfg.json")
+    >>> write_json(system, tmp_path / "demo.psfg.json")
 """
 
 from __future__ import annotations
@@ -29,11 +28,15 @@ from psforge_grid.models.system import System
 
 # Format metadata constants
 FORMAT_NAME = "psforge-grid"
-FORMAT_VERSION = "1.0"
+FORMAT_VERSION = "2.0"
 
 
 def _dataclass_to_dict(obj: Any, *, omit_none: bool = True) -> dict[str, Any]:
     """Convert a dataclass instance to a dict, optionally omitting None values.
+
+    Empty ``tags`` lists are omitted alongside None values: they carry no
+    information and would add a line to every element (compact
+    representation, LLM affinity principle #2).
 
     Args:
         obj: Dataclass instance to convert
@@ -46,6 +49,8 @@ def _dataclass_to_dict(obj: Any, *, omit_none: bool = True) -> dict[str, Any]:
     for f in fields(obj):
         value = getattr(obj, f.name)
         if omit_none and value is None:
+            continue
+        if omit_none and f.name == "tags" and value == []:
             continue
         result[f.name] = value
     return result
@@ -65,22 +70,21 @@ def _diagram_to_dict(diagram: Any) -> dict[str, Any]:
     if diagram.crs is not None:
         result["crs"] = diagram.crs
 
-    # Bus positions: {bus_id: {x, y, points?}}
+    # Bus positions: {Bus.id: {x, y, points?}}
     if diagram.bus_positions:
         bp_dict: dict[str, Any] = {}
         for bus_id, pos in diagram.bus_positions.items():
             entry: dict[str, Any] = {"x": pos.x, "y": pos.y}
             if pos.points is not None:
                 entry["points"] = [list(p) for p in pos.points]
-            bp_dict[str(bus_id)] = entry
+            bp_dict[bus_id] = entry
         result["bus_positions"] = bp_dict
 
-    # Branch routes: {"from_to_ckt": {waypoints: [[x,y], ...]}}
+    # Branch routes: {Branch.id: {waypoints: [[x,y], ...]}}
     if diagram.branch_routes:
         br_dict: dict[str, Any] = {}
-        for (from_bus, to_bus, ckt), route in diagram.branch_routes.items():
-            key = f"{from_bus}_{to_bus}_{ckt}"
-            br_dict[key] = {"waypoints": [list(p) for p in route.waypoints]}
+        for branch_id, route in diagram.branch_routes.items():
+            br_dict[branch_id] = {"waypoints": [list(p) for p in route.waypoints]}
         result["branch_routes"] = br_dict
 
     # Labels (stored as list of dicts)
@@ -88,9 +92,7 @@ def _diagram_to_dict(diagram: Any) -> dict[str, Any]:
         result["labels"] = [
             {
                 "element_type": lbl.element_type,
-                "element_id": lbl.element_id
-                if isinstance(lbl.element_id, int)
-                else list(lbl.element_id),
+                "element_id": lbl.element_id,
                 "text_type": lbl.text_type,
                 "offset_x": lbl.offset_x,
                 "offset_y": lbl.offset_y,
@@ -157,6 +159,14 @@ def _system_to_dict(
         data["system"]["frequency_hz"] = system.frequency_hz
     if system.description is not None:
         data["system"]["description"] = system.description
+    if system.id is not None:
+        data["system"]["id"] = system.id
+    if system.order is not None:
+        data["system"]["order"] = system.order
+    if system.tags:
+        data["system"]["tags"] = system.tags
+    if system.case_time is not None:
+        data["system"]["case_time"] = system.case_time
 
     # Generator costs (only if present)
     if system.generator_costs:
@@ -185,11 +195,10 @@ class JsonWriter(IWriter):
 
     Example:
         >>> writer = JsonWriter()
-        >>> writer.write(system, "output.psfg.json")
-        >>>
+        >>> writer.write(system, tmp_path / "output.psfg.json")
         >>> # Include all fields (with null values)
         >>> writer = JsonWriter(omit_none=False)
-        >>> writer.write(system, "output.psfg.json")
+        >>> writer.write(system, tmp_path / "output.psfg.json")
     """
 
     def __init__(
@@ -244,7 +253,7 @@ def write_json(
         indent: JSON indentation level (default: 2)
 
     Example:
-        >>> write_json(system, "ieee14.psfg.json")
+        >>> write_json(system, tmp_path / "ieee14.psfg.json")
     """
     writer = JsonWriter(omit_none=omit_none, indent=indent)
     writer.write(system, filepath)

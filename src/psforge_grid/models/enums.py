@@ -12,8 +12,10 @@ Design Philosophy:
 Example:
     >>> from psforge_grid.models.enums import VoltageStatus
     >>> status = VoltageStatus.from_value(0.943, v_min=0.95, v_max=1.05)
-    >>> print(status)  # VoltageStatus.LOW
-    >>> print(status.value)  # "LOW"
+    >>> print(status)  # str-mixin enum: prints the value itself
+    LOW
+    >>> print(status.value)
+    LOW
 """
 
 from enum import Enum
@@ -70,7 +72,8 @@ class VoltageStatus(Enum):
 
     Example:
         >>> status = VoltageStatus.from_value(0.943, v_min=0.95, v_max=1.05)
-        >>> print(f"Voltage is {status.value}")  # "Voltage is LOW"
+        >>> print(f"Voltage is {status.value}")
+        Voltage is LOW
     """
 
     NOT_CLASSIFIED = "NOT_CLASSIFIED"
@@ -192,7 +195,8 @@ class LoadingStatus(Enum):
 
     Example:
         >>> status = LoadingStatus.from_percent(85.0, heavy_threshold=80.0)
-        >>> print(f"Branch loading: {status.value}")  # "Branch loading: HEAVY"
+        >>> print(f"Branch loading: {status.value}")
+        Branch loading: HEAVY
     """
 
     NOT_CLASSIFIED = "NOT_CLASSIFIED"
@@ -340,12 +344,16 @@ class SystemHealthStatus(Enum):
 
     Example:
         >>> # Determine system health from diagnostic findings
-        >>> if any(f.severity == Severity.CRITICAL for f in findings):
+        >>> findings = []  # e.g. results of validate_detailed()
+        >>> severities = {f["level"] for f in findings}
+        >>> if "error" in severities:
         ...     health = SystemHealthStatus.CRITICAL
-        >>> elif any(f.severity == Severity.WARNING for f in findings):
+        ... elif "warning" in severities:
         ...     health = SystemHealthStatus.WARNING
-        >>> else:
+        ... else:
         ...     health = SystemHealthStatus.HEALTHY
+        >>> health.value
+        'HEALTHY'
     """
 
     HEALTHY = "HEALTHY"

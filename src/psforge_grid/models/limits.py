@@ -14,7 +14,7 @@ Example:
     >>> # Use default limits
     >>> limits = LimitsConfig()
     >>> print(f"Voltage range: {limits.voltage_min_pu} - {limits.voltage_max_pu} pu")
-    >>>
+    Voltage range: 0.95 - 1.05 pu
     >>> # Custom limits for emergency operation
     >>> emergency_limits = LimitsConfig(
     ...     voltage_min_pu=0.90,
@@ -66,6 +66,7 @@ class LimitsConfig:
         >>> v_pu = 0.943
         >>> if v_pu < limits.voltage_min_pu:
         ...     print(f"Voltage {v_pu} pu is below minimum {limits.voltage_min_pu} pu")
+        Voltage 0.943 pu is below minimum 0.95 pu
     """
 
     # Voltage limits

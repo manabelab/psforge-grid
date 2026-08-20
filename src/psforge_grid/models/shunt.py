@@ -6,7 +6,9 @@ capacitors and reactors in a power system.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from psforge_grid.models.identity import validate_id
 
 
 @dataclass
@@ -18,12 +20,20 @@ class Shunt:
     compensation and voltage control in power flow analysis.
 
     Attributes:
-        bus_id: Bus ID where shunt is connected
+        id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
+            whole system, all element types combined. Parsers generate it
+            deterministically as ``SH{n}`` (type prefix + 1-based position
+            in the source file); the bus and source shunt ID live in
+            ``bus_id`` and ``shunt_id``, not in the id.
+        bus_id: ``Bus.id`` of the bus where the shunt is connected
         g_pu: Shunt conductance [p.u.] on system base (default: 0.0)
         b_pu: Shunt susceptance [p.u.] on system base (default: 0.0)
             Positive for capacitors, negative for reactors
         status: Operating status (1: in-service, 0: out-of-service)
-        shunt_id: Shunt identifier for multiple shunts on same bus
+        shunt_id: Shunt identifier in the source format (default: None).
+            PSS/E RAW provides this (e.g. "1"); None means the source format
+            did not provide one. Kept for lossless round-trip; the shunt
+            itself is identified by ``id``.
         kv: Rated voltage [kV] (default: None).
             None means the source format did not provide this information.
             Writers may infer from the connected bus base_kv if None.
@@ -33,7 +43,11 @@ class Shunt:
         num_steps: Number of switchable steps (default: None).
             None means the source format did not provide this information
             or the shunt is a fixed (non-switched) device.
-        name: Shunt name (optional)
+        order: Sort/display order (default: None). Parsers assign the
+            position within the source file (1.0, 2.0, ...).
+        name: Shunt name (optional, free text)
+        tags: Attribute/grouping tags. Hierarchies use the ``"key:value"``
+            convention, e.g. ``["voltage:275kV"]``.
         description: Free-text description providing context not captured
             in numerical parameters. For LLM-friendly output.
 
@@ -46,28 +60,33 @@ class Shunt:
 
     Example:
         >>> # 50 MVAr capacitor on 100 MVA base
-        >>> cap = Shunt(bus_id=1, b_pu=0.5)  # B = 50/100 = 0.5 p.u.
+        >>> cap = Shunt("SH1", bus_id="B1", b_pu=0.5)  # B = 50/100 = 0.5 p.u.
         >>> # 30 MVAr reactor on 100 MVA base
-        >>> reactor = Shunt(bus_id=2, b_pu=-0.3)  # B = -30/100 = -0.3 p.u.
+        >>> reactor = Shunt("SH2", bus_id="B2", b_pu=-0.3)  # B = -30/100 = -0.3 p.u.
     """
 
-    bus_id: int
+    id: str
+    bus_id: str
     g_pu: float = 0.0
     b_pu: float = 0.0
     status: int = 1
-    shunt_id: str = "1"
+    shunt_id: str | None = None
     kv: float | None = None
     connection: str | None = None
     num_steps: int | None = None
+    order: float | None = None
     name: str | None = None
+    tags: list[str] = field(default_factory=list)
     description: str | None = None
 
     def __post_init__(self) -> None:
         """Validate shunt data after initialization.
 
         Raises:
-            ValueError: If status is not 0 or 1.
+            ValueError: If id violates the identifier character set, or if
+                status is not 0 or 1.
         """
+        validate_id(self.id, "Shunt")
         if self.status not in [0, 1]:
             raise ValueError(
                 f"Invalid status: {self.status}. Must be 0 (out-of-service) or 1 (in-service)."
@@ -79,9 +98,9 @@ class Shunt:
 
         Example:
             >>> from psforge_grid.models import Shunt
-            >>> Shunt(bus_id=3, b_pu=0.19).is_in_service
+            >>> Shunt("SH1", bus_id="B3", b_pu=0.19).is_in_service
             True
-            >>> Shunt(bus_id=3, b_pu=0.19, status=0).is_in_service
+            >>> Shunt("SH1", bus_id="B3", b_pu=0.19, status=0).is_in_service
             False
         """
         return self.status == 1
@@ -92,9 +111,9 @@ class Shunt:
 
         Example:
             >>> from psforge_grid.models import Shunt
-            >>> Shunt(bus_id=3, b_pu=0.19).is_capacitor
+            >>> Shunt("SH1", bus_id="B3", b_pu=0.19).is_capacitor
             True
-            >>> Shunt(bus_id=3, b_pu=-0.2).is_capacitor
+            >>> Shunt("SH1", bus_id="B3", b_pu=-0.2).is_capacitor
             False
         """
         return self.b_pu > 0
@@ -105,9 +124,9 @@ class Shunt:
 
         Example:
             >>> from psforge_grid.models import Shunt
-            >>> Shunt(bus_id=3, b_pu=-0.2).is_reactor
+            >>> Shunt("SH1", bus_id="B3", b_pu=-0.2).is_reactor
             True
-            >>> Shunt(bus_id=3, b_pu=0.19).is_reactor
+            >>> Shunt("SH1", bus_id="B3", b_pu=0.19).is_reactor
             False
         """
         return self.b_pu < 0
@@ -118,9 +137,9 @@ class Shunt:
 
         Example:
             >>> from psforge_grid.models import Shunt
-            >>> Shunt(bus_id=3, b_pu=0.19).shunt_type_name
+            >>> Shunt("SH1", bus_id="B3", b_pu=0.19).shunt_type_name
             'Capacitor'
-            >>> Shunt(bus_id=3, b_pu=-0.2).shunt_type_name
+            >>> Shunt("SH1", bus_id="B3", b_pu=-0.2).shunt_type_name
             'Reactor'
         """
         if self.b_pu > 0:
@@ -137,20 +156,23 @@ class Shunt:
             Multi-line string describing the shunt for LLM context.
 
         Example:
-            >>> cap = Shunt(bus_id=1, b_pu=0.5, name="Cap1")
+            >>> cap = Shunt("SH1", bus_id="B1", b_pu=0.5, name="Cap1")
             >>> print(cap.to_description())
-            Shunt Cap1 at Bus 1: Capacitor
+            Shunt SH1 (Cap1) at Bus B1: Capacitor
               Admittance: G = 0.0000 pu, B = 0.5000 pu
               Status: In-service
         """
-        name_str = f"{self.name}" if self.name else f"S{self.shunt_id}"
+        name_str = f" ({self.name})" if self.name else ""
         status_str = "In-service" if self.is_in_service else "Out-of-service"
 
         lines = [
-            f"Shunt {name_str} at Bus {self.bus_id}: {self.shunt_type_name}",
+            f"Shunt {self.id}{name_str} at Bus {self.bus_id}: {self.shunt_type_name}",
             f"  Admittance: G = {self.g_pu:.4f} pu, B = {self.b_pu:.4f} pu",
             f"  Status: {status_str}",
         ]
+
+        if self.tags:
+            lines.append(f"  Tags: {', '.join(self.tags)}")
 
         if self.description:
             lines.append(f"  Note: {self.description}")
