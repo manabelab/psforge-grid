@@ -21,8 +21,9 @@ class Generator:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the source data (e.g. ``G1_1`` from bus
-            number 1, machine ID "1").
+            deterministically as ``G{n}`` (type prefix + 1-based position
+            in the source file); the bus and machine ID live in ``bus_id``
+            and ``machine_id``, not in the id.
         bus_id: ``Bus.id`` of the bus where the generator is connected
         p_gen: Active power output [p.u.] on system base
         q_gen: Reactive power output [p.u.] on system base (default: 0.0)
@@ -79,7 +80,7 @@ class Generator:
     Example:
         >>> # 100 MW generator with Q limits
         >>> gen = Generator(
-        ...     "G1_1",
+        ...     "G1",
         ...     bus_id="B1",
         ...     p_gen=1.0,  # 100 MW on 100 MVA base
         ...     v_setpoint=1.02,
@@ -244,9 +245,9 @@ class Generator:
             Multi-line string describing the generator for LLM context.
 
         Example:
-            >>> gen = Generator("G1_1", bus_id="B1", p_gen=1.0, v_setpoint=1.02, name="Gen1")
+            >>> gen = Generator("G1", bus_id="B1", p_gen=1.0, v_setpoint=1.02, name="Gen1")
             >>> print(gen.to_description())
-            Generator G1_1 (Gen1) at Bus B1
+            Generator G1 (Gen1) at Bus B1
               Output: P = 1.0000 pu, Q = 0.0000 pu
               Voltage setpoint: 1.02 pu
               Status: In-service

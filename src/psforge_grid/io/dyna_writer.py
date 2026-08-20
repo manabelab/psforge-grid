@@ -9,7 +9,7 @@ The .dyna format uses 80-character lines with sections:
 
 Example:
     >>> from psforge_grid.io.dyna_writer import write_dyna
-    >>> write_dyna(system, "output.dyna")
+    >>> write_dyna(system, tmp_path / "output.dyna")
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from psforge_grid.io.numbering import bus_number_map
 from psforge_grid.io.protocols import IWriter
 
 if TYPE_CHECKING:
@@ -83,6 +84,17 @@ class DynaWriter(IWriter):
         - Generator machine parameters are written on machine base (mbase)
         - Y1C (charging susceptance) is written as-is from Branch.b_pu
 
+    Round-trip fidelity (write → re-parse):
+        - Element list order is preserved per type, so the sequential ids
+          (``BR{n}``, ``G{n}``, ``LD{n}``) regenerate identically. The one
+          format-imposed exception: .dyna stores T and X cards in separate
+          sections, so a branch list that interleaves lines and
+          transformers is re-read as "all lines, then all transformers".
+        - ``circuit_id`` is written to the card NO field and survives only
+          if it is plain digits (NO is a Fortran integer field). A
+          non-numeric ``circuit_id`` **cannot be represented** in .dyna
+          and is written as NO ``1``.
+
     See Also:
         - DynaParser: The symmetric read implementation
         - WriterFactory: Factory for creating writer instances
@@ -107,6 +119,9 @@ class DynaWriter(IWriter):
         """
         lines: list[str] = []
 
+        # Integer bus numbers for CPAT (source-provided numbers kept as-is)
+        num_map = bus_number_map(system)
+
         # DATA card
         lines.append("DATA")
         name = (system.name or "PSFORGE")[:8]
@@ -124,7 +139,7 @@ class DynaWriter(IWriter):
         # T cards (transmission lines)
         tlines = [br for br in system.branches if not br.is_transformer]
         for br in tlines:
-            lines.append(_write_t_card(br))
+            lines.append(_write_t_card(br, num_map))
             if br.has_zero_sequence_data:
                 lines.append(_write_t_zero_seq(br))
         lines.append("TEND")
@@ -132,12 +147,12 @@ class DynaWriter(IWriter):
         # X cards (transformers)
         xfmrs = [br for br in system.branches if br.is_transformer]
         for br in xfmrs:
-            lines.append(_write_x_card(br))
+            lines.append(_write_x_card(br, num_map))
         lines.append("XEND")
 
         # N cards (nodes)
-        # Build generator bus lookup for P_gen
-        gen_bus_data: dict[int, tuple[float, float]] = {}
+        # Build generator bus lookup for P_gen (keyed by Bus.id)
+        gen_bus_data: dict[str, tuple[float, float]] = {}
         for gen in system.generators:
             if gen.status == 1:
                 bus_id = gen.bus_id
@@ -145,7 +160,7 @@ class DynaWriter(IWriter):
                 gen_bus_data[bus_id] = (p + gen.p_gen, v)
 
         # Build load bus lookup
-        load_bus_data: dict[int, tuple[float, float]] = {}
+        load_bus_data: dict[str, tuple[float, float]] = {}
         for load in system.loads:
             if load.status == 1:
                 bus_id = load.bus_id
@@ -153,15 +168,15 @@ class DynaWriter(IWriter):
                 load_bus_data[bus_id] = (p + load.p_load, q + load.q_load)
 
         # Build shunt bus lookup
-        shunt_bus_data: dict[int, float] = {}
+        shunt_bus_data: dict[str, float] = {}
         for shunt in system.shunts:
             if shunt.status == 1:
                 shunt_bus_data[shunt.bus_id] = shunt_bus_data.get(shunt.bus_id, 0.0) + shunt.b_pu
 
         for bus in system.buses:
-            p_gen, v_set = gen_bus_data.get(bus.bus_id, (0.0, 0.0))
-            p_load, q_load = load_bus_data.get(bus.bus_id, (0.0, 0.0))
-            shunt_b = shunt_bus_data.get(bus.bus_id, 0.0)
+            p_gen, v_set = gen_bus_data.get(bus.id, (0.0, 0.0))
+            p_load, q_load = load_bus_data.get(bus.id, (0.0, 0.0))
+            shunt_b = shunt_bus_data.get(bus.id, 0.0)
 
             # N card line (1-based columns)
             # Col 1: N, Col 2: zone flag (blank)
@@ -174,7 +189,7 @@ class DynaWriter(IWriter):
             # Col 69-80: NNAME
             line = (
                 "N  "
-                + _fmt_int(bus.bus_id, 7)
+                + _fmt_int(num_map[bus.id], 7)
                 + _fmt_float(bus.v_magnitude, 10)
                 + _fmt_float(p_gen, 10)
                 + _fmt_float(0.0, 10)  # QGO
@@ -188,7 +203,7 @@ class DynaWriter(IWriter):
 
         # G cards (generators)
         for gen in system.generators:
-            lines.extend(_write_g_cards(gen, system.base_mva))
+            lines.extend(_write_g_cards(gen, system.base_mva, num_map))
         lines.append("GEND")
 
         lines.append("STOP")
@@ -197,29 +212,31 @@ class DynaWriter(IWriter):
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _write_t_card(br: Branch) -> str:
+def _write_t_card(br: Branch, num_map: dict[str, int]) -> str:
     """Write T card primary line for a transmission line.
 
     Args:
         br: Branch object (non-transformer).
+        num_map: ``Bus.id`` → integer bus number mapping.
 
     Returns:
         Formatted T card string.
     """
     z_flag = "Z" if br.has_zero_sequence_data else " "
-    circuit_id = int(br.circuit_id) if br.circuit_id.isdigit() else 1
+    ckt = br.circuit_id or "1"
+    circuit_no = int(ckt) if ckt.isdigit() else 1
     # Col 1: T, Col 4-10: NO, Col 12: Z, Col 14-20: NFO
     # Col 24-30: NTO, Col 33: L, Col 36-45: Z1R, Col 46-55: Z1X
     # Col 56-65: Y1C, Col 69-80: TNAME
     line = (
         "T  "
-        + _fmt_int(circuit_id, 7)
+        + _fmt_int(circuit_no, 7)
         + " "
         + z_flag
         + " "
-        + _fmt_int(br.from_bus, 7)
+        + _fmt_int(num_map[br.from_bus_id], 7)
         + "   "
-        + _fmt_int(br.to_bus, 7)
+        + _fmt_int(num_map[br.to_bus_id], 7)
         + "  1"
         + "  "
         + _fmt_float(br.r_pu, 10)
@@ -256,27 +273,29 @@ def _write_t_zero_seq(br: Branch) -> str:
     return line
 
 
-def _write_x_card(br: Branch) -> str:
+def _write_x_card(br: Branch, num_map: dict[str, int]) -> str:
     """Write X card primary line for a transformer.
 
     Args:
         br: Branch object (transformer).
+        num_map: ``Bus.id`` → integer bus number mapping.
 
     Returns:
         Formatted X card string.
     """
-    circuit_id = int(br.circuit_id) if br.circuit_id.isdigit() else 1
+    ckt = br.circuit_id or "1"
+    circuit_no = int(ckt) if ckt.isdigit() else 1
     # Col 1: X, Col 2: R (blank), Col 4-10: NO, Col 12: Z (blank)
     # Col 14-20: NFO, Col 24-30: NTO, Col 33: L (1)
     # Col 36-45: Z1X, Col 46-55: TAPR, Col 56-65: TAPI
     # Col 69-80: XNAME
     line = (
         "X  "
-        + _fmt_int(circuit_id, 7)
+        + _fmt_int(circuit_no, 7)
         + "  "
-        + _fmt_int(br.from_bus, 7)
+        + _fmt_int(num_map[br.from_bus_id], 7)
         + "   "
-        + _fmt_int(br.to_bus, 7)
+        + _fmt_int(num_map[br.to_bus_id], 7)
         + "  1"
         + "  "
         + _fmt_float(br.x_pu, 10)
@@ -288,12 +307,13 @@ def _write_x_card(br: Branch) -> str:
     return line
 
 
-def _write_g_cards(gen: Generator, base_mva: float) -> list[str]:
+def _write_g_cards(gen: Generator, base_mva: float, num_map: dict[str, int]) -> list[str]:
     """Write G1-G5 card set for a generator.
 
     Args:
         gen: Generator object.
         base_mva: System base MVA for P_max conversion.
+        num_map: ``Bus.id`` → integer bus number mapping.
 
     Returns:
         List of G card lines (G1, optionally G3, G4, G5).
@@ -311,7 +331,7 @@ def _write_g_cards(gen: Generator, base_mva: float) -> list[str]:
     # Col 61-72: GNAME
     g1 = (
         "G1 "  # col 1-3
-        + _fmt_int(gen.bus_id, 7)  # col 4-10
+        + _fmt_int(num_map[gen.bus_id], 7)  # col 4-10
         + "  "  # col 11-12
         + _fmt_int(2, 3)  # col 13-15 (LGT)
         + "  "  # col 16-17
@@ -385,7 +405,7 @@ def write_dyna(system: System, filepath: str | Path) -> None:
 
     Example:
         >>> from psforge_grid.io.dyna_writer import write_dyna
-        >>> write_dyna(system, "output.dyna")
+        >>> write_dyna(system, tmp_path / "output.dyna")
     """
     writer = DynaWriter()
     writer.write(system, filepath)

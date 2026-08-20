@@ -21,7 +21,9 @@ class GeneratorCost:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the linked generator (e.g. ``GC_G1_1``).
+            deterministically as ``GC{n}`` (type prefix + 1-based position
+            in the source file); the linked generator lives in
+            ``generator_id``, not in the id.
         generator_id: ``Generator.id`` of the generator this cost belongs to.
             This is a stable reference — unlike a list index, it survives
             reordering of ``System.generators``.
@@ -50,7 +52,7 @@ class GeneratorCost:
     Example:
         >>> # Quadratic cost: 0.04*P^2 + 20*P + 100 $/hr
         >>> cost = GeneratorCost(
-        ...     "GC_G1_1", generator_id="G1_1", model=2,
+        ...     "GC1", generator_id="G1", model=2,
         ...     coefficients=[0.04, 20.0, 100.0]
         ... )
         >>> cost.evaluate(50.0)  # Cost at 50 MW
@@ -166,10 +168,10 @@ class GeneratorCost:
             Multi-line string describing the cost function for LLM context.
 
         Example:
-            >>> cost = GeneratorCost("GC_G1_1", generator_id="G1_1", model=2,
+            >>> cost = GeneratorCost("GC1", generator_id="G1", model=2,
             ...     coefficients=[0.04, 20.0, 100.0])
             >>> print(cost.to_description())
-            Generator Cost GC_G1_1 for generator G1_1: Polynomial
+            Generator Cost GC1 for generator G1: Polynomial
               Coefficients: [0.04, 20.0, 100.0]
               Cost function: 0.0400*P^2 + 20.0000*P + 100.0000
               Startup: $0.00, Shutdown: $0.00

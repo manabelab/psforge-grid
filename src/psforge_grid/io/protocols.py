@@ -44,7 +44,7 @@ class IParser(ABC):
     Example:
         >>> from psforge_grid.io.factories import ParserFactory
         >>> parser = ParserFactory.create("raw")
-        >>> system = parser.parse("ieee14.raw")
+        >>> system = parser.parse("ieee14.raw")  # doctest: +SKIP
     """
 
     @abstractmethod
@@ -131,7 +131,7 @@ class IWriter(ABC):
     Example:
         >>> from psforge_grid.io.factories import WriterFactory
         >>> writer = WriterFactory.create("raw")
-        >>> writer.write(system, "output.raw")
+        >>> writer.write(system, tmp_path / "output.raw")
     """
 
     @abstractmethod

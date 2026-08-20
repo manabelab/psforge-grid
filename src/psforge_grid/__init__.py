@@ -7,9 +7,10 @@ This package provides:
 
 Example:
     >>> from psforge_grid import System
-    >>> system = System.from_raw("ieee14.raw")
+    >>> system = System.from_raw("ieee14.raw")  # doctest: +SKIP
     >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
-    >>> print(system.to_description())
+    2 buses, 1 branches
+    >>> print(system.to_description())  # doctest: +SKIP
 """
 
 from importlib import metadata as _metadata

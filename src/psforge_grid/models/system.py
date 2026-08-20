@@ -82,9 +82,9 @@ class System:
         >>> from psforge_grid.models import System, Bus, Branch, Generator, Load
         >>> system = System(
         ...     buses=[Bus("B1", bus_type=3), Bus("B2", bus_type=1)],
-        ...     branches=[Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
-        ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
-        ...     loads=[Load("LD2_1", bus_id="B2", p_load=0.8, q_load=0.2)],
+        ...     branches=[Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
+        ...     generators=[Generator("G1", bus_id="B1", p_gen=1.0)],
+        ...     loads=[Load("LD1", bus_id="B2", p_load=0.8, q_load=0.2)],
         ...     case_time="2026-08",
         ... )
     """
@@ -156,8 +156,8 @@ class System:
             ValueError: If the file format is invalid or cannot be parsed
 
         Example:
-            >>> system = System.from_raw("ieee14.raw")
-            >>> print(f"Loaded {system.num_buses} buses")
+            >>> system = System.from_raw("ieee14.raw")  # doctest: +SKIP
+            >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
         See Also:
             - from_file(): Auto-detect format from extension
@@ -187,8 +187,8 @@ class System:
             ValueError: If the file format is invalid or cannot be parsed
 
         Example:
-            >>> system = System.from_matpower("case14.m")
-            >>> print(f"Loaded {system.num_buses} buses")
+            >>> system = System.from_matpower("case14.m")  # doctest: +SKIP
+            >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
         See Also:
             - from_raw(): Load PSS/E RAW format
@@ -218,8 +218,8 @@ class System:
             ValueError: If the file format is invalid or cannot be parsed
 
         Example:
-            >>> system = System.from_pop("WEST10peak.pop")
-            >>> print(f"Loaded {system.num_buses} buses")
+            >>> system = System.from_pop("WEST10peak.pop")  # doctest: +SKIP
+            >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
         See Also:
             - from_raw(): Load PSS/E RAW format
@@ -249,8 +249,8 @@ class System:
             ValueError: If the file cannot be compiled by OpenDSS
 
         Example:
-            >>> system = System.from_dss("network.dss")
-            >>> print(f"Loaded {system.num_buses} buses")
+            >>> system = System.from_dss("network.dss")  # doctest: +SKIP
+            >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
         See Also:
             - from_file(): Auto-detect format from extension
@@ -278,8 +278,8 @@ class System:
             ValueError: If the file format is invalid or cannot be parsed
 
         Example:
-            >>> system = System.from_dyna("cpat_model.dyna")
-            >>> print(f"Loaded {system.num_buses} buses")
+            >>> system = System.from_dyna("cpat_model.dyna")  # doctest: +SKIP
+            >>> print(f"Loaded {system.num_buses} buses")  # doctest: +SKIP
 
         See Also:
             - from_pop(): Load CPAT .pop (ZIP+XML) format
@@ -310,7 +310,7 @@ class System:
             ValueError: If the file is not a valid psforge-grid JSON file
 
         Example:
-            >>> system = System.from_json("ieee14.psfg.json")
+            >>> system = System.from_json("ieee14.psfg.json")  # doctest: +SKIP
 
         See Also:
             - from_file(): Auto-detect format from extension
@@ -331,7 +331,7 @@ class System:
             filepath: Output file path (.raw)
 
         Example:
-            >>> system.to_raw("output.raw")
+            >>> system.to_raw(tmp_path / "output.raw")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -348,7 +348,7 @@ class System:
             filepath: Output file path (.m)
 
         Example:
-            >>> system.to_matpower("output.m")
+            >>> system.to_matpower(tmp_path / "output.m")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -365,7 +365,7 @@ class System:
             filepath: Output file path (.pop)
 
         Example:
-            >>> system.to_pop("output.pop")
+            >>> system.to_pop(tmp_path / "output.pop")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -382,7 +382,7 @@ class System:
             filepath: Output file path (.dss)
 
         Example:
-            >>> system.to_dss("output.dss")
+            >>> system.to_dss(tmp_path / "output.dss")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -399,7 +399,7 @@ class System:
             filepath: Output file path (.dyna)
 
         Example:
-            >>> system.to_dyna("output.dyna")
+            >>> system.to_dyna(tmp_path / "output.dyna")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -422,7 +422,7 @@ class System:
             omit_none: If True, omit fields with None values (default: True)
 
         Example:
-            >>> system.to_json("output.psfg.json")
+            >>> system.to_json(tmp_path / "output.psfg.json")
 
         See Also:
             - to_file(): Auto-detect format from extension
@@ -442,10 +442,10 @@ class System:
             ValueError: If the file extension is not recognized
 
         Example:
-            >>> system.to_file("output.raw")   # PSS/E format
-            >>> system.to_file("output.m")     # MATPOWER format
-            >>> system.to_file("output.pop")   # CPAT Pop format
-            >>> system.to_file("output.dyna")  # CPAT Dyna format
+            >>> system.to_file(tmp_path / "output.raw")   # PSS/E format
+            >>> system.to_file(tmp_path / "output.m")     # MATPOWER format
+            >>> system.to_file(tmp_path / "output.pop")   # CPAT Pop format
+            >>> system.to_file(tmp_path / "output.dyna")  # CPAT Dyna format
 
         See Also:
             - to_raw(), to_matpower(), to_pop(), to_dyna(): Explicit format
@@ -478,8 +478,8 @@ class System:
             ValueError: If the file format is not recognized or invalid
 
         Example:
-            >>> system = System.from_file("ieee14.raw")  # PSS/E format
-            >>> system = System.from_file("case9.m")    # MATPOWER (future)
+            >>> system = System.from_file("ieee14.raw")  # doctest: +SKIP
+            >>> system = System.from_file("case9.m")    # doctest: +SKIP
 
         See Also:
             - from_raw(): Explicit PSS/E format loading
@@ -540,7 +540,7 @@ class System:
                 to_bus_id is not found in the system.
 
         Example:
-            >>> system.add_branch(Branch("BR14_15_1", "B14", "B15", r_pu=0.01, x_pu=0.05))
+            >>> system.add_branch(Branch("BR9", "B1", "B2", r_pu=0.01, x_pu=0.05))
         """
         self._check_new_id(branch.id)
         bus_ids = {b.id for b in self.buses}
@@ -570,7 +570,7 @@ class System:
                 found in the system.
 
         Example:
-            >>> system.add_generator(Generator("G15_PV1", bus_id="B15", p_gen=0.5))
+            >>> system.add_generator(Generator("G9", bus_id="B2", p_gen=0.5))
         """
         self._check_new_id(generator.id)
         if not any(b.id == generator.bus_id for b in self.buses):
@@ -593,7 +593,7 @@ class System:
                 found in the system.
 
         Example:
-            >>> system.add_shunt(Shunt("SH15_1", bus_id="B15", b_pu=0.05))
+            >>> system.add_shunt(Shunt("SH9", bus_id="B2", b_pu=0.05))
         """
         self._check_new_id(shunt.id)
         if not any(b.id == shunt.bus_id for b in self.buses):
@@ -616,7 +616,7 @@ class System:
                 found in the system.
 
         Example:
-            >>> system.add_load(Load("LD15_1", bus_id="B15", p_load=0.3, q_load=0.1))
+            >>> system.add_load(Load("LD9", bus_id="B2", p_load=0.3, q_load=0.1))
         """
         self._check_new_id(load.id)
         if not any(b.id == load.bus_id for b in self.buses):
@@ -655,6 +655,7 @@ class System:
             ...         print(f"ERROR: {e}")
             ... else:
             ...     print("System is valid")
+            System is valid
         """
         errors: list[str] = []
         bus_ids = {b.id for b in self.buses}
@@ -753,6 +754,7 @@ class System:
             >>> warnings = [i for i in issues if i["level"] == "warning"]
             >>> if not errors:
             ...     print("System is ready for analysis")
+            System is ready for analysis
         """
         issues: list[dict[str, str]] = []
 
@@ -969,7 +971,7 @@ class System:
             ...         Bus("B1", bus_type=3, base_kv=345.0),
             ...         Bus("B2", bus_type=1, base_kv=345.0),
             ...     ],
-            ...     branches=[Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
+            ...     branches=[Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1)],
             ... )
             >>> system.assign_default_ratings()
             1
@@ -1264,10 +1266,10 @@ class System:
             >>> from psforge_grid.models import System, Bus, Generator
             >>> system = System(
             ...     buses=[Bus("B1", bus_type=3)],
-            ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
+            ...     generators=[Generator("G1", bus_id="B1", p_gen=1.0)],
             ... )
             >>> sorted(system.used_ids())
-            ['B1', 'G1_1']
+            ['B1', 'G1']
         """
         ids: set[str] = set()
         for group in (
@@ -1299,9 +1301,9 @@ class System:
             >>> from psforge_grid.models import System, Bus, Generator
             >>> system = System(
             ...     buses=[Bus("B1", bus_type=3)],
-            ...     generators=[Generator("G1_1", bus_id="B1", p_gen=1.0)],
+            ...     generators=[Generator("G1", bus_id="B1", p_gen=1.0)],
             ... )
-            >>> system.get_element("G1_1").p_gen
+            >>> system.get_element("G1").p_gen
             1.0
             >>> system.get_element("X99") is None
             True
@@ -1322,15 +1324,13 @@ class System:
     def assign_ids(self) -> dict[str, str]:
         """Regenerate every element id using the standard deterministic rules.
 
-        Rewrites all element ids from format-provided keys (``Bus.number``,
-        ``circuit_id``, ``machine_id``, ...) with the same rules the parsers
-        use (``B1``, ``BR1_2_1``, ``G1_1``, ...), and updates every reference
+        Rewrites all element ids with the same rules the parsers use —
+        ``B{number}`` for buses (list position when ``number`` is None) and
+        type prefix + 1-based list position for everything else (``BR1``,
+        ``G1``, ``LD1``, ``SH1``, ``GC1``) — and updates every reference
         (``from_bus_id``/``to_bus_id``/``bus_id``/``generator_id`` and
         diagram keys) consistently. Opt-in, like assign_default_ratings():
         renaming identifiers is a decision, not a side effect.
-
-        Elements without a format-provided key fall back to their 1-based
-        list position.
 
         Returns:
             Mapping from old id to new id for every renamed element
@@ -1344,7 +1344,7 @@ class System:
             >>> system.buses[0].id
             'B1'
         """
-        from psforge_grid.models.identity import make_unique, sanitize_id
+        from psforge_grid.models.identity import make_unique
 
         mapping: dict[str, str] = {}
         used: set[str] = set()
@@ -1357,55 +1357,24 @@ class System:
             return new
 
         # Buses first: everything else references them.
-        bus_key: dict[str, str] = {}  # old bus id -> key used in dependent ids
         for i, bus in enumerate(self.buses):
-            key = str(bus.number) if bus.number is not None else str(i + 1)
-            bus_key[bus.id] = key
+            key = bus.number if bus.number is not None else i + 1
             bus.id = rename(bus.id, f"B{key}")
 
-        per_bus_count: dict[tuple[str, str], int] = {}
+        for i, branch in enumerate(self.branches):
+            branch.id = rename(branch.id, f"BR{i + 1}")
 
-        def seq(kind: str, old_bus_id: str) -> str:
-            per_bus_count[(kind, old_bus_id)] = per_bus_count.get((kind, old_bus_id), 0) + 1
-            return str(per_bus_count[(kind, old_bus_id)])
+        for i, gen in enumerate(self.generators):
+            gen.id = rename(gen.id, f"G{i + 1}")
 
-        for branch in self.branches:
-            fk = bus_key.get(branch.from_bus_id, branch.from_bus_id)
-            tk = bus_key.get(branch.to_bus_id, branch.to_bus_id)
-            ckt = sanitize_id(branch.circuit_id) if branch.circuit_id is not None else "1"
-            branch.id = rename(branch.id, f"BR{fk}_{tk}_{ckt}")
+        for i, load in enumerate(self.loads):
+            load.id = rename(load.id, f"LD{i + 1}")
 
-        gen_new_id: dict[str, str] = {}  # old generator id -> new id
-        for gen in self.generators:
-            bk = bus_key.get(gen.bus_id, gen.bus_id)
-            sub = (
-                sanitize_id(gen.machine_id)
-                if gen.machine_id is not None
-                else seq("gen", gen.bus_id)
-            )
-            old = gen.id
-            gen.id = rename(old, f"G{bk}_{sub}")
-            gen_new_id[old] = gen.id
+        for i, shunt in enumerate(self.shunts):
+            shunt.id = rename(shunt.id, f"SH{i + 1}")
 
-        for load in self.loads:
-            bk = bus_key.get(load.bus_id, load.bus_id)
-            sub = (
-                sanitize_id(load.load_id) if load.load_id is not None else seq("load", load.bus_id)
-            )
-            load.id = rename(load.id, f"LD{bk}_{sub}")
-
-        for shunt in self.shunts:
-            bk = bus_key.get(shunt.bus_id, shunt.bus_id)
-            sub = (
-                sanitize_id(shunt.shunt_id)
-                if shunt.shunt_id is not None
-                else seq("shunt", shunt.bus_id)
-            )
-            shunt.id = rename(shunt.id, f"SH{bk}_{sub}")
-
-        for cost in self.generator_costs:
-            new_gen = gen_new_id.get(cost.generator_id, cost.generator_id)
-            cost.id = rename(cost.id, f"GC_{new_gen}")
+        for i, cost in enumerate(self.generator_costs):
+            cost.id = rename(cost.id, f"GC{i + 1}")
 
         # Rewrite references and diagram keys.
         for branch in self.branches:
@@ -1446,8 +1415,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Generator
             >>> system = System(generators=[
-            ...     Generator("G1_1", bus_id="B1", p_gen=1.0),
-            ...     Generator("G1_2", bus_id="B1", p_gen=0.5, status=0),  # out of service
+            ...     Generator("G1", bus_id="B1", p_gen=1.0),
+            ...     Generator("G2", bus_id="B1", p_gen=0.5, status=0),  # out of service
             ... ])
             >>> len(system.get_bus_generators("B1"))
             1
@@ -1471,7 +1440,7 @@ class System:
 
         Example:
             >>> from psforge_grid.models import System, Load
-            >>> system = System(loads=[Load("LD2_1", bus_id="B2", p_load=0.8, q_load=0.2)])
+            >>> system = System(loads=[Load("LD1", bus_id="B2", p_load=0.8, q_load=0.2)])
             >>> system.get_bus_loads("B2")[0].p_load
             0.8
             >>> system.get_bus_loads("B3")  # no loads at bus B3
@@ -1495,8 +1464,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Shunt
             >>> system = System(shunts=[
-            ...     Shunt("SH3_1", bus_id="B3", b_pu=0.19),
-            ...     Shunt("SH3_2", bus_id="B3", b_pu=-0.2, status=0),  # out of service
+            ...     Shunt("SH1", bus_id="B3", b_pu=0.19),
+            ...     Shunt("SH2", bus_id="B3", b_pu=-0.2, status=0),  # out of service
             ... ])
             >>> len(system.get_bus_shunts("B3"))
             1
@@ -1521,8 +1490,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Branch
             >>> system = System(branches=[
-            ...     Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1),
-            ...     Branch("BR2_3_1", "B2", "B3", r_pu=0.02, x_pu=0.2),
+            ...     Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1),
+            ...     Branch("BR2", "B2", "B3", r_pu=0.02, x_pu=0.2),
             ... ])
             >>> len(system.get_branches_at_bus("B2"))  # matches either terminal
             2
@@ -1605,8 +1574,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Shunt
             >>> system = System(shunts=[
-            ...     Shunt("SH3_1", bus_id="B3", g_pu=0.5, b_pu=0.25),
-            ...     Shunt("SH3_2", bus_id="B3", b_pu=0.25),
+            ...     Shunt("SH1", bus_id="B3", g_pu=0.5, b_pu=0.25),
+            ...     Shunt("SH2", bus_id="B3", b_pu=0.25),
             ... ])
             >>> system.get_bus_shunt_admittance("B3")  # summed over both shunts
             (0.5, 0.5)
@@ -1676,8 +1645,8 @@ class System:
         Example:
             >>> from psforge_grid.models import System, Branch
             >>> system = System(branches=[
-            ...     Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1),
-            ...     Branch("BR2_3_1", "B2", "B3", r_pu=0.02, x_pu=0.2, status=0),  # out of service
+            ...     Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1),
+            ...     Branch("BR2", "B2", "B3", r_pu=0.02, x_pu=0.2, status=0),  # out of service
             ... ])
             >>> len(system.get_in_service_branches())
             1
@@ -1749,13 +1718,12 @@ class System:
             Multi-line string describing the system for LLM context.
 
         Example:
-            >>> system = System.from_raw("ieee14.raw")
             >>> print(system.to_description())
-            Power System: IEEE 14-Bus Test System
+            Power System: Doctest
               Base MVA: 100.0
-              Components: 14 buses, 20 branches, 5 generators, 11 loads, 1 shunts
-              Total Generation: 2.72 pu P, 0.00 pu Q
-              Total Load: 2.59 pu P, 0.74 pu Q
+              Components: 2 buses, 1 branches, 1 generators, 1 loads, 0 shunts
+              Total Generation: 1.00 pu P, 0.00 pu Q
+              Total Load: 0.80 pu P, 0.20 pu Q
         """
         name_str = self.name if self.name else "Unnamed System"
         p_gen, q_gen = self.total_generation()
@@ -1811,7 +1779,9 @@ class System:
 
         Example:
             >>> context = system.to_llm_context(max_buses=10)
-            >>> response = llm.ask(f"Analyze this system: {context}")
+            >>> context.startswith("## Power System: Doctest")
+            True
+            >>> response = llm.ask(f"Analyze this system: {context}")  # doctest: +SKIP
         """
         p_gen, q_gen = self.total_generation()
         p_load, q_load = self.total_load()

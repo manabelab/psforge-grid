@@ -7,9 +7,25 @@ file is compiled by the OpenDSS engine, and element data is extracted via API.
 This approach handles all OpenDSS scripting features (variables, redirects,
 master scripts) transparently.
 
+Identifier generation:
+    Unified ids are a type prefix plus the 1-based appearance order within
+    that element type (matching the integer part of ``order``):
+
+    - Bus: ``B{n}`` (appearance order after internal-bus filtering)
+    - Branch: ``BR{n}`` (Lines first, then Transformers)
+    - Generator: ``G{n}`` (the Vsource swing generator is first),
+      Load: ``LD{n}``, Shunt: ``SH{n}`` (Capacitors first, then Reactors)
+
+    Every candidate still passes through
+    :func:`~psforge_grid.models.identity.make_unique` against a single
+    ``used`` set shared by all element types, as a safety net.
+    ``Bus.number`` stays ``None`` because OpenDSS does not provide bus
+    numbers ("Optional + None = Source Not Provided"); the original DSS
+    name is kept in ``name``.
+
 Example:
     >>> from psforge_grid.io.dss_parser import parse_dss
-    >>> system = parse_dss("network.dss")
+    >>> system = parse_dss("network.dss")  # doctest: +SKIP
 """
 
 from __future__ import annotations
@@ -24,12 +40,19 @@ from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.identity import make_unique
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
 
 if TYPE_CHECKING:
-    pass
+    from collections.abc import Sequence
+
+
+def _assign_order(elements: Sequence[Bus | Branch | Generator | Load | Shunt]) -> None:
+    """Assign sort order 1.0, 2.0, ... in appearance order (one element type)."""
+    for seq, element in enumerate(elements, start=1):
+        element.order = float(seq)
 
 
 class DSSParser(IParser):
@@ -95,10 +118,12 @@ class DSSParser(IParser):
         # OpenDSS doesn't have a single "base MVA" concept like PSS/E
         base_mva = 100.0
 
-        # Extract ALL buses (including OpenDSS internal buses)
+        # Extract ALL buses (including OpenDSS internal buses) with
+        # provisional ids; final ids are assigned after internal-bus
+        # filtering so numbering reflects the final appearance order.
         all_buses = self._extract_buses()
-        bus_name_to_id = {bus.name: bus.bus_id for bus in all_buses if bus.name}
-        bus_kv = {bus.bus_id: bus.base_kv for bus in all_buses}
+        bus_name_to_id = {bus.name: bus.id for bus in all_buses if bus.name}
+        bus_kv = {bus.id: bus.base_kv for bus in all_buses}
 
         # Extract elements
         branches = self._extract_lines(bus_name_to_id, bus_kv, base_mva)
@@ -115,10 +140,10 @@ class DSSParser(IParser):
             generators.insert(0, swing_gen)
 
         # Issue 1: Filter internal buses (keep only those referenced by elements)
-        referenced_ids: set[int] = set()
+        referenced_ids: set[str] = set()
         for br in branches:
-            referenced_ids.add(br.from_bus)
-            referenced_ids.add(br.to_bus)
+            referenced_ids.add(br.from_bus_id)
+            referenced_ids.add(br.to_bus_id)
         for g in generators:
             referenced_ids.add(g.bus_id)
         for lo in loads:
@@ -126,17 +151,53 @@ class DSSParser(IParser):
         for sh in shunts:
             referenced_ids.add(sh.bus_id)
 
-        buses = [b for b in all_buses if b.bus_id in referenced_ids]
+        buses = [b for b in all_buses if b.id in referenced_ids]
 
         # Set bus types: swing (3), PV (2), PQ (1)
         gen_bus_ids = {g.bus_id for g in generators}
         for bus in buses:
-            if bus.bus_id == swing_bus_id:
+            if bus.id == swing_bus_id:
                 bus.bus_type = 3
-            elif bus.bus_id in gen_bus_ids:
+            elif bus.id in gen_bus_ids:
                 bus.bus_type = 2
             else:
                 bus.bus_type = 1
+
+        # Assign final unified ids: type prefix + 1-based appearance order
+        # within the type (B{n}, BR{n}, G{n}, LD{n}, SH{n}). One `used` set
+        # per parse; make_unique is kept as a safety net.
+        used: set[str] = set()
+
+        def finalize(candidate: str) -> str:
+            new_id = make_unique(candidate, used)
+            used.add(new_id)
+            return new_id
+
+        bus_id_map: dict[str, str] = {}
+        for n, bus in enumerate(buses, start=1):
+            new_id = finalize(f"B{n}")
+            bus_id_map[bus.id] = new_id
+            bus.id = new_id
+        for n, br in enumerate(branches, start=1):
+            br.id = finalize(f"BR{n}")
+            br.from_bus_id = bus_id_map[br.from_bus_id]
+            br.to_bus_id = bus_id_map[br.to_bus_id]
+        for n, g in enumerate(generators, start=1):
+            g.id = finalize(f"G{n}")
+            g.bus_id = bus_id_map[g.bus_id]
+        for n, lo in enumerate(loads, start=1):
+            lo.id = finalize(f"LD{n}")
+            lo.bus_id = bus_id_map[lo.bus_id]
+        for n, sh in enumerate(shunts, start=1):
+            sh.id = finalize(f"SH{n}")
+            sh.bus_id = bus_id_map[sh.bus_id]
+
+        # Assign sort order per element type: 1.0, 2.0, ... in appearance order
+        _assign_order(buses)
+        _assign_order(branches)
+        _assign_order(generators)
+        _assign_order(loads)
+        _assign_order(shunts)
 
         return System(
             buses=buses,
@@ -150,11 +211,18 @@ class DSSParser(IParser):
         )
 
     def _extract_buses(self) -> list[Bus]:
-        """Extract bus data from the compiled OpenDSS circuit."""
+        """Extract bus data from the compiled OpenDSS circuit.
+
+        Buses receive provisional ids; the final ``B{n}`` ids are assigned
+        in :meth:`parse` after internal-bus filtering. ``Bus.number`` is
+        left ``None``: OpenDSS has no bus number concept, and inventing one
+        from the iteration index would violate the "Optional + None =
+        Source Not Provided" principle.
+        """
         buses: list[Bus] = []
         bus_names = dss.Circuit.AllBusNames()
 
-        for i, name in enumerate(bus_names):
+        for i, name in enumerate(bus_names, start=1):
             dss.Circuit.SetActiveBus(name)
             kv_base = dss.Bus.kVBase()
             # Voltage magnitude in per-unit (use phase A for balanced)
@@ -172,7 +240,7 @@ class DSSParser(IParser):
 
             buses.append(
                 Bus(
-                    bus_id=i + 1,
+                    f"TMPB{i}",  # provisional; finalized in parse()
                     bus_type=bus_type,
                     v_magnitude=v_mag,
                     v_angle=v_ang,
@@ -183,8 +251,8 @@ class DSSParser(IParser):
 
         return buses
 
-    def _get_bus_id(self, bus_name: str, bus_name_to_id: dict[str, int]) -> int | None:
-        """Resolve OpenDSS bus name to bus ID.
+    def _get_bus_id(self, bus_name: str, bus_name_to_id: dict[str, str]) -> str | None:
+        """Resolve OpenDSS bus name to unified Bus.id.
 
         OpenDSS bus names may include node suffixes like 'bus1.1.2.3'.
         Strip the node part to match.
@@ -198,11 +266,11 @@ class DSSParser(IParser):
 
     def _extract_lines(
         self,
-        bus_name_to_id: dict[str, int],
-        bus_kv: dict[int, float],
+        bus_name_to_id: dict[str, str],
+        bus_kv: dict[str, float],
         base_mva: float,
     ) -> list[Branch]:
-        """Extract Line elements as Branch objects."""
+        """Extract Line elements as Branch objects (provisional ids)."""
         branches: list[Branch] = []
 
         flag = dss.Lines.First()
@@ -242,8 +310,9 @@ class DSSParser(IParser):
 
                 branches.append(
                     Branch(
-                        from_bus=from_id,
-                        to_bus=to_id,
+                        f"TMPLN{len(branches) + 1}",  # provisional; finalized in parse()
+                        from_bus_id=from_id,
+                        to_bus_id=to_id,
                         r_pu=r_pu,
                         x_pu=x_pu,
                         b_pu=b_pu,
@@ -258,10 +327,10 @@ class DSSParser(IParser):
 
     def _extract_transformers(
         self,
-        bus_name_to_id: dict[str, int],
+        bus_name_to_id: dict[str, str],
         base_mva: float,
     ) -> list[Branch]:
-        """Extract Transformer elements as Branch objects."""
+        """Extract Transformer elements as Branch objects (provisional ids)."""
         branches: list[Branch] = []
 
         flag = dss.Transformers.First()
@@ -321,8 +390,9 @@ class DSSParser(IParser):
 
                     branches.append(
                         Branch(
-                            from_bus=from_id,
-                            to_bus=to_id,
+                            f"TMPXF{len(branches) + 1}",  # provisional; finalized in parse()
+                            from_bus_id=from_id,
+                            to_bus_id=to_id,
                             r_pu=r_pu,
                             x_pu=x_pu,
                             b_pu=0.0,
@@ -341,9 +411,9 @@ class DSSParser(IParser):
         return branches
 
     def _extract_generators(
-        self, bus_name_to_id: dict[str, int], base_mva: float
+        self, bus_name_to_id: dict[str, str], base_mva: float
     ) -> list[Generator]:
-        """Extract Generator elements."""
+        """Extract Generator elements (provisional ids)."""
         generators: list[Generator] = []
 
         flag = dss.Generators.First()
@@ -367,6 +437,7 @@ class DSSParser(IParser):
 
                 generators.append(
                     Generator(
+                        f"TMPG{len(generators) + 1}",  # provisional; finalized in parse()
                         bus_id=bus_id,
                         p_gen=p_pu,
                         q_gen=q_pu,
@@ -381,8 +452,8 @@ class DSSParser(IParser):
 
         return generators
 
-    def _extract_loads(self, bus_name_to_id: dict[str, int], base_mva: float) -> list[Load]:
-        """Extract Load elements."""
+    def _extract_loads(self, bus_name_to_id: dict[str, str], base_mva: float) -> list[Load]:
+        """Extract Load elements (provisional ids)."""
         loads: list[Load] = []
 
         flag = dss.Loads.First()
@@ -405,6 +476,7 @@ class DSSParser(IParser):
 
                 loads.append(
                     Load(
+                        f"TMPLD{len(loads) + 1}",  # provisional; finalized in parse()
                         bus_id=bus_id,
                         p_load=p_pu,
                         q_load=q_pu,
@@ -419,8 +491,8 @@ class DSSParser(IParser):
 
         return loads
 
-    def _extract_shunts(self, bus_name_to_id: dict[str, int], base_mva: float) -> list[Shunt]:
-        """Extract Capacitor and Reactor elements as Shunt objects."""
+    def _extract_shunts(self, bus_name_to_id: dict[str, str], base_mva: float) -> list[Shunt]:
+        """Extract Capacitor and Reactor elements as Shunt objects (provisional ids)."""
         shunts: list[Shunt] = []
 
         # Capacitors
@@ -441,6 +513,7 @@ class DSSParser(IParser):
 
                 shunts.append(
                     Shunt(
+                        f"TMPSH{len(shunts) + 1}",  # provisional; finalized in parse()
                         bus_id=bus_id,
                         g_pu=0.0,
                         b_pu=b_pu,
@@ -470,6 +543,7 @@ class DSSParser(IParser):
 
                 shunts.append(
                     Shunt(
+                        f"TMPSH{len(shunts) + 1}",  # provisional; finalized in parse()
                         bus_id=bus_id,
                         g_pu=0.0,
                         b_pu=b_pu,
@@ -484,8 +558,8 @@ class DSSParser(IParser):
         return shunts
 
     def _extract_vsource_generator(
-        self, bus_name_to_id: dict[str, int], base_mva: float
-    ) -> tuple[Generator | None, int | None]:
+        self, bus_name_to_id: dict[str, str], base_mva: float
+    ) -> tuple[Generator | None, str | None]:
         """Extract the Circuit source (Vsource) as a swing Generator.
 
         OpenDSS represents the Circuit source as a Vsource element, which
@@ -493,7 +567,7 @@ class DSSParser(IParser):
         the swing bus generator from the first Vsource.
 
         Returns:
-            Tuple of (Generator or None, swing_bus_id or None)
+            Tuple of (Generator or None, swing Bus.id or None)
         """
         flag = dss.Vsources.First()
         if flag == 0:
@@ -524,6 +598,7 @@ class DSSParser(IParser):
         q_pu = q_kvar / (base_mva * 1000.0) if base_mva > 0 else 0.0
 
         gen = Generator(
+            "TMPVS1",  # provisional; finalized in parse()
             bus_id=bus_id,
             p_gen=p_pu,
             q_gen=q_pu,
@@ -546,6 +621,6 @@ def parse_dss(filepath: str | Path) -> System:
 
     Example:
         >>> from psforge_grid.io.dss_parser import parse_dss
-        >>> system = parse_dss("network.dss")
+        >>> system = parse_dss("network.dss")  # doctest: +SKIP
     """
     return DSSParser().parse(filepath)

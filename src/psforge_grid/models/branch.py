@@ -22,8 +22,9 @@ class Branch:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the source data (e.g. ``BR1_2_1`` from
-            bus numbers 1-2, circuit "1").
+            deterministically as ``BR{n}`` (type prefix + 1-based position
+            in the source file); connection and circuit information live in
+            ``from_bus_id``/``to_bus_id``/``circuit_id``, not in the id.
         from_bus_id: ``Bus.id`` of the sending end
         to_bus_id: ``Bus.id`` of the receiving end
         r_pu: Series resistance [p.u.] on system base (positive sequence)
@@ -103,9 +104,9 @@ class Branch:
 
     Example:
         >>> # Transmission line: 0.01 + j0.1 p.u., B = 0.02 p.u.
-        >>> line = Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1, b_pu=0.02)
+        >>> line = Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1, b_pu=0.02)
         >>> # Transformer with 1.05 tap ratio
-        >>> xfmr = Branch("BR1_3_1", "B1", "B3", r_pu=0.0, x_pu=0.05, tap_ratio=1.05)
+        >>> xfmr = Branch("BR2", "B1", "B3", r_pu=0.0, x_pu=0.05, tap_ratio=1.05)
     """
 
     id: str
@@ -258,9 +259,9 @@ class Branch:
             Multi-line string describing the branch for LLM context.
 
         Example:
-            >>> branch = Branch("BR1_2_1", "B1", "B2", r_pu=0.01, x_pu=0.1, rate_a=100)
+            >>> branch = Branch("BR1", "B1", "B2", r_pu=0.01, x_pu=0.1, rate_a=100)
             >>> print(branch.to_description())
-            Branch BR1_2_1 (B1-B2): Transmission Line
+            Branch BR1 (B1-B2): Transmission Line
               Impedance: 0.0100 + j0.1000 pu
               Rating: 100.0 MVA
               Status: In-service

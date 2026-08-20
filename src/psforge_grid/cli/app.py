@@ -235,9 +235,13 @@ def show(
         ),
     ],
     element_id: Annotated[
-        int | None,
+        str | None,
         typer.Argument(
-            help="Specific element ID to filter by. For buses/generators/loads: bus_id. For branches: list index.",
+            help=(
+                "Specific element to show, by unified element id "
+                "(e.g. B1, BR3, G1). Buses also match on their id; "
+                "generators/loads also match on their bus_id."
+            ),
         ),
     ] = None,
     where: Annotated[
@@ -621,8 +625,8 @@ def describe(
             # Append voltage range and notable elements
             voltages = [b.v_magnitude for b in system.buses]
             result += "\n\n### Voltage Range\n"
-            result += f"- Min: {min(voltages):.4f} pu (Bus {system.buses[voltages.index(min(voltages))].bus_id})\n"
-            result += f"- Max: {max(voltages):.4f} pu (Bus {system.buses[voltages.index(max(voltages))].bus_id})\n"
+            result += f"- Min: {min(voltages):.4f} pu (Bus {system.buses[voltages.index(min(voltages))].id})\n"
+            result += f"- Max: {max(voltages):.4f} pu (Bus {system.buses[voltages.index(max(voltages))].id})\n"
 
             # Transformers
             xfmrs = [b for b in system.branches if b.is_transformer]
@@ -712,8 +716,8 @@ def _diff_buses(
         List of change dicts with keys: type, id, action, and optionally fields.
     """
     changes: list[dict[str, Any]] = []
-    map_a = {b.bus_id: b for b in buses_a}
-    map_b = {b.bus_id: b for b in buses_b}
+    map_a = {b.id: b for b in buses_a}
+    map_b = {b.id: b for b in buses_b}
 
     for bus_id in sorted(set(map_a) | set(map_b)):
         if bus_id not in map_a:
@@ -752,11 +756,11 @@ def _diff_branches(
         List of change dicts with keys: type, id, action, and optionally fields.
     """
     changes: list[dict[str, Any]] = []
-    map_a = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_a}
-    map_b = {(b.from_bus, b.to_bus, b.circuit_id): b for b in branches_b}
+    map_a = {b.id: b for b in branches_a}
+    map_b = {b.id: b for b in branches_b}
 
     for br_key in sorted(set(map_a) | set(map_b)):
-        label = f"{br_key[0]}-{br_key[1]}({br_key[2]})"
+        label = br_key
         if br_key not in map_a:
             changes.append({"type": "branch", "id": label, "action": "added"})
         elif br_key not in map_b:
@@ -803,11 +807,11 @@ def _diff_loads(
         List of change dicts with keys: type, id, action, and optionally fields.
     """
     changes: list[dict[str, Any]] = []
-    map_a = {(ld.bus_id, ld.load_id): ld for ld in loads_a}
-    map_b = {(ld.bus_id, ld.load_id): ld for ld in loads_b}
+    map_a = {ld.id: ld for ld in loads_a}
+    map_b = {ld.id: ld for ld in loads_b}
 
     for ld_key in sorted(set(map_a) | set(map_b)):
-        label = f"Bus{ld_key[0]}({ld_key[1]})"
+        label = ld_key
         if ld_key not in map_a:
             changes.append({"type": "load", "id": label, "action": "added"})
         elif ld_key not in map_b:
@@ -980,17 +984,17 @@ def _matches_where(element: object, field: str, op_str: str, value_str: str) -> 
 def _apply_element_id_filter(
     system: System,
     element: ElementType,
-    element_id: int,
+    element_id: str,
 ) -> System:
-    """Filter a system by element ID, returning a filtered copy.
+    """Filter a system by element id, returning a filtered copy.
 
-    For buses, generators, and loads: filters by bus_id.
-    For branches: filters by list index (0-based position).
+    Matches the unified element id. For generators and loads the id of the
+    connected bus also matches, so "show gens at bus B1" stays a one-liner.
 
     Args:
         system: The power system to filter.
         element: Which element type to filter.
-        element_id: The ID value to filter by.
+        element_id: The unified element id to filter by (e.g. "B1").
 
     Returns:
         A deep copy of the system with only matching elements.
@@ -998,16 +1002,13 @@ def _apply_element_id_filter(
     filtered = copy.deepcopy(system)
 
     if element == ElementType.buses or element == ElementType.all:
-        filtered.buses = [b for b in system.buses if b.bus_id == element_id]
+        filtered.buses = [b for b in system.buses if b.id == element_id]
     if element == ElementType.branches or element == ElementType.all:
-        if 0 <= element_id < len(system.branches):
-            filtered.branches = [system.branches[element_id]]
-        else:
-            filtered.branches = []
+        filtered.branches = [b for b in system.branches if b.id == element_id]
     if element == ElementType.generators or element == ElementType.all:
-        filtered.generators = [g for g in system.generators if g.bus_id == element_id]
+        filtered.generators = [g for g in system.generators if element_id in (g.id, g.bus_id)]
     if element == ElementType.loads or element == ElementType.all:
-        filtered.loads = [ld for ld in system.loads if ld.bus_id == element_id]
+        filtered.loads = [ld for ld in system.loads if element_id in (ld.id, ld.bus_id)]
 
     return filtered
 

@@ -9,9 +9,9 @@ power system elements (buses, branches, generators, loads, shunts).
 
 Example:
     >>> from psforge_grid.models.scenario import ScenarioSet
-    >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")
-    >>> systems = scenario_set.resolve()
-    >>> for name, system in systems.items():
+    >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")  # doctest: +SKIP
+    >>> systems = scenario_set.resolve()  # doctest: +SKIP
+    >>> for name, system in systems.items():  # doctest: +SKIP
     ...     print(f"{name}: {len(system.branches)} branches")
 """
 
@@ -50,7 +50,7 @@ class Modification:
     Example:
         >>> mod = Modification(
         ...     target="branches",
-        ...     match={"id": "BR1_5_1"},
+        ...     match={"from_bus_id": "B1", "to_bus_id": "B5"},
         ...     set_values={"status": 0},
         ...     description="Take line 1-5 out of service",
         ... )
@@ -143,7 +143,7 @@ class ScenarioDefinition:
         ...     name="N-1_Line_1-5",
         ...     description="Line 1-5 outage contingency",
         ...     modifications=[
-        ...         Modification(target="branches", match={"id": "BR1_5_1"},
+        ...         Modification(target="branches", match={"from_bus_id": "B1", "to_bus_id": "B5"},
         ...                      set_values={"status": 0}),
         ...     ],
         ... )
@@ -213,10 +213,10 @@ class ScenarioSet:
         description: Optional description.
 
     Example:
-        >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")
-        >>> systems = scenario_set.resolve()
-        >>> base = systems["base"]
-        >>> n1 = systems["N-1_Line_1-5"]
+        >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")  # doctest: +SKIP
+        >>> systems = scenario_set.resolve()  # doctest: +SKIP
+        >>> base = systems["base"]  # doctest: +SKIP
+        >>> n1 = systems["N-1_Line_1-5"]  # doctest: +SKIP
     """
 
     base: System
@@ -305,8 +305,8 @@ class ScenarioSet:
             ValueError: If the file format is invalid.
 
         Example:
-            >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")
-            >>> print(scenario_set.num_scenarios)
+            >>> scenario_set = ScenarioSet.from_json("contingencies.psfg.json")  # doctest: +SKIP
+            >>> print(scenario_set.num_scenarios)  # doctest: +SKIP
             3
         """
         path = Path(filepath)
@@ -372,7 +372,9 @@ class ScenarioSet:
             ValueError: If no base_case_path is available.
 
         Example:
-            >>> scenario_set.to_json("output.psfg.json", base_case_path="ieee14.psfg.json")
+            >>> scenario_set.to_json(
+            ...     "output.psfg.json", base_case_path="ieee14.psfg.json"
+            ... )  # doctest: +SKIP
         """
         ref = base_case_path or self.base_case_path
         if not ref:

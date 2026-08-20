@@ -11,6 +11,29 @@ Supported Data Sections:
     - mpc.branch: Branch data (lines and transformers)
     - mpc.gencost: Generator cost functions
 
+Identifier Generation:
+    MATPOWER identifies elements by integer bus numbers and row positions.
+    The parser maps these onto the unified string ``id`` scheme
+    deterministically (same file, same ids). Ids are a type prefix plus a
+    sequence number and deliberately carry no connectivity information —
+    an id that encodes endpoints starts lying as soon as the topology is
+    edited:
+
+    - Bus: ``B{number}`` (e.g. ``B1`` from bus number 1)
+    - Branch: ``BR{n}`` with n = 1, 2, ... in file order. Parallel
+      circuits simply get distinct sequence numbers; ``circuit_id`` stays
+      ``None`` (MATPOWER has no circuit ID column).
+    - Generator: ``G{n}`` in file order. ``machine_id`` stays ``None``.
+    - Load: ``LD{n}``, Shunt: ``SH{n}`` in file order (MATPOWER embeds at
+      most one load and one shunt per bus row). ``load_id``/``shunt_id``
+      stay ``None``.
+    - GeneratorCost: ``GC{n}`` — gencost row i belongs to the i-th
+      generator row; the link is carried by ``generator_id``, not by the
+      id or list position.
+
+    The original bus number is kept in ``Bus.number`` and every element
+    gets ``order`` = 1.0, 2.0, ... in file order within its element type.
+
 Architecture:
     The module provides two interfaces:
     - MatpowerParser class: Implements IParser interface for factory pattern
@@ -31,7 +54,6 @@ from __future__ import annotations
 
 import math
 import re
-from collections import defaultdict
 from pathlib import Path
 
 from psforge_grid.io.protocols import IParser
@@ -39,6 +61,7 @@ from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
+from psforge_grid.models.identity import make_unique, sanitize_id
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
@@ -55,17 +78,18 @@ class MatpowerParser(IParser):
         - Bus, generator, branch, and gencost sections
         - Automatic extraction of loads and shunts from bus data
         - Per-unit conversion using system base MVA
+        - Deterministic unified id generation (see module docstring)
 
     See IParser.parse() for full documentation of the parse method.
 
     Example:
         >>> from psforge_grid.io.matpower_parser import MatpowerParser
         >>> parser = MatpowerParser()
-        >>> system = parser.parse("case14.m")
+        >>> system = parser.parse("case14.m")  # doctest: +SKIP
         >>>
         >>> # Or use the convenience function:
         >>> from psforge_grid.io import parse_matpower
-        >>> system = parse_matpower("case14.m")
+        >>> system = parse_matpower("case14.m")  # doctest: +SKIP
     """
 
     @property
@@ -111,6 +135,9 @@ def parse_matpower(filepath: str | Path) -> System:
         - Power values (MW, MVAr) are converted to per-unit on system base MVA
         - Voltage angles are converted from degrees to radians
         - MATPOWER ratio=0.0 is converted to tap_ratio=1.0 (transmission line)
+        - Element ids are generated deterministically from bus numbers and
+          row positions (see module docstring); the original bus number is
+          kept in ``Bus.number``
 
     See Also:
         - MatpowerParser: Class implementing IParser interface
@@ -141,27 +168,32 @@ def _parse_matpower_impl(filepath: str | Path) -> System:
     # Extract data sections
     sections = _extract_sections(content)
 
-    # Parse bus section (also produces loads and shunts)
+    # Single id pool for the whole parse: unified ids are unique across
+    # all element types combined.
+    used: set[str] = set()
+
+    # Parse bus section (also produces loads, shunts, and the number→id map)
     buses: list[Bus] = []
     loads: list[Load] = []
     shunts: list[Shunt] = []
+    bus_id_map: dict[int, str] = {}
     if "bus" in sections:
-        buses, loads, shunts = _parse_bus_section(sections["bus"], base_mva)
+        buses, loads, shunts, bus_id_map = _parse_bus_section(sections["bus"], base_mva, used)
 
     # Parse generator section
     generators: list[Generator] = []
     if "gen" in sections:
-        generators = _parse_gen_section(sections["gen"], base_mva)
+        generators = _parse_gen_section(sections["gen"], base_mva, bus_id_map, used)
 
     # Parse branch section
     branches: list[Branch] = []
     if "branch" in sections:
-        branches = _parse_branch_section(sections["branch"])
+        branches = _parse_branch_section(sections["branch"], bus_id_map, used)
 
     # Parse generator cost section
     generator_costs: list[GeneratorCost] = []
     if "gencost" in sections:
-        generator_costs = _parse_gencost_section(sections["gencost"])
+        generator_costs = _parse_gencost_section(sections["gencost"], generators, used)
 
     system = System(
         buses=buses,
@@ -253,9 +285,24 @@ def _extract_sections(content: str) -> dict[str, list[list[str]]]:
     return sections
 
 
+def _new_id(candidate: str, used: set[str]) -> str:
+    """Sanitize a candidate id, resolve collisions, and record it as taken.
+
+    Args:
+        candidate: Raw candidate id built from source data.
+        used: Ids already taken in this parse. Updated in place.
+
+    Returns:
+        The unique id actually assigned.
+    """
+    unique = make_unique(sanitize_id(candidate), used)
+    used.add(unique)
+    return unique
+
+
 def _parse_bus_section(
-    rows: list[list[str]], base_mva: float
-) -> tuple[list[Bus], list[Load], list[Shunt]]:
+    rows: list[list[str]], base_mva: float, used: set[str]
+) -> tuple[list[Bus], list[Load], list[Shunt], dict[int, str]]:
     """Parse MATPOWER bus data section.
 
     MATPOWER bus format columns (1-indexed):
@@ -276,19 +323,21 @@ def _parse_bus_section(
     Args:
         rows: List of field lists from bus section
         base_mva: System base MVA for per-unit conversion
+        used: Ids already taken in this parse. Updated in place.
 
     Returns:
-        Tuple of (buses, loads, shunts)
+        Tuple of (buses, loads, shunts, bus number → Bus.id map)
     """
     buses: list[Bus] = []
     loads: list[Load] = []
     shunts: list[Shunt] = []
+    bus_id_map: dict[int, str] = {}
 
     for row in rows:
         if len(row) < 13:
             continue
 
-        bus_id = int(row[0])
+        number = int(row[0])
         bus_type = int(row[1])
         pd_mw = float(row[2])
         qd_mvar = float(row[3])
@@ -302,8 +351,11 @@ def _parse_bus_section(
         v_max = float(row[11])
         v_min = float(row[12])
 
+        bus_id = _new_id(f"B{number}", used)
+        bus_id_map[number] = bus_id
+
         bus = Bus(
-            bus_id=bus_id,
+            bus_id,
             bus_type=bus_type,
             v_magnitude=vm,
             v_angle=math.radians(va_deg),
@@ -312,31 +364,44 @@ def _parse_bus_section(
             zone=zone,
             v_max=v_max,
             v_min=v_min,
+            number=number,
+            order=float(len(buses) + 1),
         )
         buses.append(bus)
 
-        # Create Load if Pd or Qd is non-zero
+        # Create Load if Pd or Qd is non-zero.
+        # load_id stays None: MATPOWER provides no load identifier.
         if pd_mw != 0.0 or qd_mvar != 0.0:
             load = Load(
+                _new_id(f"LD{len(loads) + 1}", used),
                 bus_id=bus_id,
                 p_load=pd_mw / base_mva,
                 q_load=qd_mvar / base_mva,
+                order=float(len(loads) + 1),
             )
             loads.append(load)
 
-        # Create Shunt if Gs or Bs is non-zero
+        # Create Shunt if Gs or Bs is non-zero.
+        # shunt_id stays None: MATPOWER provides no shunt identifier.
         if gs_mw != 0.0 or bs_mvar != 0.0:
             shunt = Shunt(
+                _new_id(f"SH{len(shunts) + 1}", used),
                 bus_id=bus_id,
                 g_pu=gs_mw / base_mva,
                 b_pu=bs_mvar / base_mva,
+                order=float(len(shunts) + 1),
             )
             shunts.append(shunt)
 
-    return buses, loads, shunts
+    return buses, loads, shunts, bus_id_map
 
 
-def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator]:
+def _parse_gen_section(
+    rows: list[list[str]],
+    base_mva: float,
+    bus_id_map: dict[int, str],
+    used: set[str],
+) -> list[Generator]:
     """Parse MATPOWER generator data section.
 
     MATPOWER gen format columns (1-indexed):
@@ -354,20 +419,23 @@ def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator
     Args:
         rows: List of field lists from gen section
         base_mva: System base MVA for per-unit conversion
+        bus_id_map: Bus number → Bus.id map from the bus section
+        used: Ids already taken in this parse. Updated in place.
 
     Returns:
         List of Generator objects
+
+    Raises:
+        ValueError: If a generator references a bus number not present in
+            the bus section.
     """
     generators: list[Generator] = []
-
-    # Track gen_id per bus for multiple generators on same bus
-    bus_gen_count: dict[int, int] = defaultdict(int)
 
     for row in rows:
         if len(row) < 10:
             continue
 
-        bus_id = int(row[0])
+        bus_num = int(row[0])
         pg_mw = float(row[1])
         qg_mvar = float(row[2])
         qmax_mvar = float(row[3])
@@ -378,15 +446,16 @@ def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator
         pmax_mw = float(row[8])
         pmin_mw = float(row[9])
 
+        if bus_num not in bus_id_map:
+            raise ValueError(f"Generator references unknown bus number {bus_num}")
+
         # MATPOWER status: >0 = in-service, <=0 = out-of-service
         status = 1 if status_raw > 0 else 0
 
-        # Assign gen_id for multiple generators on same bus
-        bus_gen_count[bus_id] += 1
-        gen_id = str(bus_gen_count[bus_id])
-
+        # machine_id stays None: MATPOWER provides no machine identifier.
         generator = Generator(
-            bus_id=bus_id,
+            _new_id(f"G{len(generators) + 1}", used),
+            bus_id=bus_id_map[bus_num],
             p_gen=pg_mw / base_mva,
             q_gen=qg_mvar / base_mva,
             v_setpoint=vg,
@@ -396,14 +465,18 @@ def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator
             q_min=qmin_mvar / base_mva,
             mbase=mbase,
             status=status,
-            gen_id=gen_id,
+            order=float(len(generators) + 1),
         )
         generators.append(generator)
 
     return generators
 
 
-def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
+def _parse_branch_section(
+    rows: list[list[str]],
+    bus_id_map: dict[int, str],
+    used: set[str],
+) -> list[Branch]:
     """Parse MATPOWER branch data section.
 
     MATPOWER branch format columns (1-indexed):
@@ -423,9 +496,15 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
 
     Args:
         rows: List of field lists from branch section
+        bus_id_map: Bus number → Bus.id map from the bus section
+        used: Ids already taken in this parse. Updated in place.
 
     Returns:
         List of Branch objects
+
+    Raises:
+        ValueError: If a branch references a bus number not present in
+            the bus section.
     """
     branches: list[Branch] = []
 
@@ -433,8 +512,8 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
         if len(row) < 13:
             continue
 
-        from_bus = int(row[0])
-        to_bus = int(row[1])
+        from_num = int(row[0])
+        to_num = int(row[1])
         r_pu = float(row[2])
         x_pu = float(row[3])
         b_pu = float(row[4])
@@ -446,6 +525,11 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
         status = int(row[10])
         angmin_deg = float(row[11])
         angmax_deg = float(row[12])
+
+        if from_num not in bus_id_map:
+            raise ValueError(f"Branch references unknown from-bus number {from_num}")
+        if to_num not in bus_id_map:
+            raise ValueError(f"Branch references unknown to-bus number {to_num}")
 
         # MATPOWER convention: ratio=0 means transmission line (tap=1.0)
         tap_ratio = ratio if ratio != 0.0 else 1.0
@@ -462,9 +546,13 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
         angmin = math.radians(angmin_deg)
         angmax = math.radians(angmax_deg)
 
+        # Ids carry no connectivity: parallel circuits simply get distinct
+        # sequence numbers. circuit_id stays None (MATPOWER has no circuit
+        # ID column — source not provided).
         branch = Branch(
-            from_bus=from_bus,
-            to_bus=to_bus,
+            _new_id(f"BR{len(branches) + 1}", used),
+            from_bus_id=bus_id_map[from_num],
+            to_bus_id=bus_id_map[to_num],
             r_pu=r_pu,
             x_pu=x_pu,
             b_pu=b_pu,
@@ -476,13 +564,18 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
             angmin=angmin,
             angmax=angmax,
             status=status,
+            order=float(len(branches) + 1),
         )
         branches.append(branch)
 
     return branches
 
 
-def _parse_gencost_section(rows: list[list[str]]) -> list[GeneratorCost]:
+def _parse_gencost_section(
+    rows: list[list[str]],
+    generators: list[Generator],
+    used: set[str],
+) -> list[GeneratorCost]:
     """Parse MATPOWER generator cost data section.
 
     MATPOWER gencost format columns (1-indexed):
@@ -495,17 +588,35 @@ def _parse_gencost_section(rows: list[list[str]]) -> list[GeneratorCost]:
     For polynomial (model=2): c_n, c_{n-1}, ..., c_1, c_0
     For piecewise linear (model=1): x_1, f_1, x_2, f_2, ...
 
+    Gencost rows correspond positionally to gen rows: row i describes the
+    i-th generator. The cost is linked by ``generator_id`` (a stable
+    reference), not by list position.
+
     Args:
         rows: List of field lists from gencost section
+        generators: Generators parsed from the gen section, in file order
+        used: Ids already taken in this parse. Updated in place.
 
     Returns:
-        List of GeneratorCost objects (one per generator, indexed by row order)
+        List of GeneratorCost objects linked to generators via generator_id
+
+    Raises:
+        ValueError: If the gencost section has more rows than there are
+            generators (reactive power cost rows are not supported).
     """
     costs: list[GeneratorCost] = []
 
-    for gen_index, row in enumerate(rows):
+    for row_index, row in enumerate(rows):
         if len(row) < 4:
             continue
+
+        if row_index >= len(generators):
+            raise ValueError(
+                f"gencost row {row_index + 1} has no matching generator "
+                f"({len(generators)} generators parsed). "
+                "Reactive power cost rows (2*ngen gencost format) are not supported."
+            )
+        generator = generators[row_index]
 
         model = int(row[0])
         startup = float(row[1])
@@ -516,11 +627,13 @@ def _parse_gencost_section(rows: list[list[str]]) -> list[GeneratorCost]:
         coefficients = [float(x) for x in row[4 : 4 + ncost]]
 
         cost = GeneratorCost(
-            gen_index=gen_index,
+            _new_id(f"GC{len(costs) + 1}", used),
+            generator_id=generator.id,
             model=model,
             startup=startup,
             shutdown=shutdown,
             coefficients=coefficients,
+            order=float(len(costs) + 1),
         )
         costs.append(cost)
 

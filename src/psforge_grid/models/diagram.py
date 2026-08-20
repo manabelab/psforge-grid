@@ -87,7 +87,7 @@ class DiagramLabel:
         element_type: Type of the parent element
             ("bus", "branch", "generator", "load").
         element_id: ``id`` of the parent element (unified string identifier,
-            e.g. ``"B1"`` for a bus, ``"BR1_2_1"`` for a branch).
+            e.g. ``"B1"`` for a bus, ``"BR1"`` for a branch).
         text_type: Kind of text displayed
             ("name", "code", "voltage", "result").
         offset_x: Horizontal offset from the parent element (right is positive).

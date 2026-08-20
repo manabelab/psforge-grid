@@ -204,7 +204,7 @@ class TableFormatter(IFormatter):
             angle_deg = math.degrees(bus.v_angle)
 
             table.add_row(
-                str(bus.bus_id),
+                bus.id,
                 bus.name or "-",
                 type_name,
                 f"{bus.v_magnitude:.4f}",
@@ -240,8 +240,8 @@ class TableFormatter(IFormatter):
                 f"{branch.rate_a:.1f}" if branch.rate_a is not None and branch.rate_a > 0 else "-"
             )
             table.add_row(
-                str(branch.from_bus),
-                str(branch.to_bus),
+                branch.from_bus_id,
+                branch.to_bus_id,
                 f"{branch.r_pu:.5f}",
                 f"{branch.x_pu:.5f}",
                 f"{branch.b_pu:.5f}",
@@ -275,8 +275,8 @@ class TableFormatter(IFormatter):
             p_max_str = f"{gen.p_max:.4f}" if gen.p_max is not None else "-"
             p_min_str = f"{gen.p_min:.4f}" if gen.p_min is not None else "-"
             table.add_row(
-                str(gen.bus_id),
-                gen.gen_id or "-",
+                gen.bus_id,
+                gen.id,
                 f"{gen.p_gen:.4f}",
                 f"{gen.q_gen:.4f}",
                 p_max_str,
@@ -306,8 +306,8 @@ class TableFormatter(IFormatter):
         for load in system.loads:
             status = "In-Service" if load.is_in_service else "Out-of-Service"
             table.add_row(
-                str(load.bus_id),
-                load.load_id or "-",
+                load.bus_id,
+                load.id,
                 f"{load.p_load:.4f}",
                 f"{load.q_load:.4f}",
                 status,
@@ -362,7 +362,8 @@ class JsonFormatter(IFormatter):
             status = VoltageStatus.from_value(bus.v_magnitude)
             buses.append(
                 {
-                    "bus_id": bus.bus_id,
+                    "id": bus.id,
+                    "number": bus.number,
                     "name": bus.name,
                     "type": bus.bus_type,
                     "type_name": {1: "PQ", 2: "PV", 3: "Slack", 4: "Isolated"}.get(bus.bus_type),
@@ -380,8 +381,9 @@ class JsonFormatter(IFormatter):
         for branch in system.branches:
             branches.append(
                 {
-                    "from_bus": branch.from_bus,
-                    "to_bus": branch.to_bus,
+                    "id": branch.id,
+                    "from_bus_id": branch.from_bus_id,
+                    "to_bus_id": branch.to_bus_id,
                     "r_pu": round(branch.r_pu, 6),
                     "x_pu": round(branch.x_pu, 6),
                     "b_pu": round(branch.b_pu, 6),
@@ -397,8 +399,8 @@ class JsonFormatter(IFormatter):
         for gen in system.generators:
             generators.append(
                 {
+                    "id": gen.id,
                     "bus_id": gen.bus_id,
-                    "gen_id": gen.gen_id,
                     "p_pu": round(gen.p_gen, 4),
                     "q_pu": round(gen.q_gen, 4),
                     "p_max_pu": round(gen.p_max, 4) if gen.p_max is not None else None,
@@ -414,6 +416,7 @@ class JsonFormatter(IFormatter):
         for load in system.loads:
             loads.append(
                 {
+                    "id": load.id,
                     "bus_id": load.bus_id,
                     "load_id": load.load_id,
                     "p_pu": round(load.p_load, 4),
@@ -456,7 +459,7 @@ class SummaryFormatter(IFormatter):
             angle_deg = math.degrees(bus.v_angle)
             name_part = f" {bus.name}" if bus.name else ""
             lines.append(
-                f"  {bus.bus_id}{name_part}: V={bus.v_magnitude:.3f}pu ({status.value}), "
+                f"  {bus.id}{name_part}: V={bus.v_magnitude:.3f}pu ({status.value}), "
                 f"θ={angle_deg:.1f}°, {type_name}"
             )
         return "\n".join(lines)
@@ -467,7 +470,7 @@ class SummaryFormatter(IFormatter):
         for branch in system.branches:
             status = "ON" if branch.is_in_service else "OFF"
             lines.append(
-                f"  {branch.from_bus}->{branch.to_bus}: "
+                f"  {branch.id} {branch.from_bus_id}->{branch.to_bus_id}: "
                 f"R={branch.r_pu:.4f}, X={branch.x_pu:.4f} pu [{status}]"
             )
         return "\n".join(lines)
@@ -519,24 +522,24 @@ class CsvFormatter(IFormatter):
         """Format buses as CSV."""
         import math
 
-        lines = ["bus_id,name,type,v_pu,angle_deg,base_kv,status"]
+        lines = ["id,number,name,type,v_pu,angle_deg,base_kv,status"]
         for bus in system.buses:
             status = VoltageStatus.from_value(bus.v_magnitude)
             angle_deg = math.degrees(bus.v_angle)
             name = bus.name or ""
             lines.append(
-                f"{bus.bus_id},{name},{bus.bus_type},"
+                f"{bus.id},{bus.number if bus.number is not None else ''},{name},{bus.bus_type},"
                 f"{bus.v_magnitude:.4f},{angle_deg:.2f},{bus.base_kv},{status.value}"
             )
         return "\n".join(lines)
 
     def format_branches(self, system: System) -> str:
         """Format branches as CSV."""
-        lines = ["from_bus,to_bus,r_pu,x_pu,b_pu,rate_a,in_service"]
+        lines = ["id,from_bus_id,to_bus_id,r_pu,x_pu,b_pu,rate_a,in_service"]
         for branch in system.branches:
             in_service = 1 if branch.is_in_service else 0
             lines.append(
-                f"{branch.from_bus},{branch.to_bus},"
+                f"{branch.id},{branch.from_bus_id},{branch.to_bus_id},"
                 f"{branch.r_pu:.6f},{branch.x_pu:.6f},{branch.b_pu:.6f},"
                 f"{branch.rate_a},{in_service}"
             )
@@ -544,14 +547,14 @@ class CsvFormatter(IFormatter):
 
     def format_generators(self, system: System) -> str:
         """Format generators as CSV."""
-        lines = ["bus_id,gen_id,p_pu,q_pu,p_max_pu,p_min_pu,in_service"]
+        lines = ["id,bus_id,machine_id,p_pu,q_pu,p_max_pu,p_min_pu,in_service"]
         for gen in system.generators:
             in_service = 1 if gen.is_in_service else 0
-            gen_id = gen.gen_id or ""
+            machine_id = gen.machine_id or ""
             p_max_str = f"{gen.p_max:.4f}" if gen.p_max is not None else ""
             p_min_str = f"{gen.p_min:.4f}" if gen.p_min is not None else ""
             lines.append(
-                f"{gen.bus_id},{gen_id},"
+                f"{gen.id},{gen.bus_id},{machine_id},"
                 f"{gen.p_gen:.4f},{gen.q_gen:.4f},{p_max_str},{p_min_str},"
                 f"{in_service}"
             )
@@ -559,12 +562,12 @@ class CsvFormatter(IFormatter):
 
     def format_loads(self, system: System) -> str:
         """Format loads as CSV."""
-        lines = ["bus_id,load_id,p_pu,q_pu,in_service"]
+        lines = ["id,bus_id,load_id,p_pu,q_pu,in_service"]
         for load in system.loads:
             in_service = 1 if load.is_in_service else 0
             load_id = load.load_id or ""
             lines.append(
-                f"{load.bus_id},{load_id},{load.p_load:.4f},{load.q_load:.4f},{in_service}"
+                f"{load.id},{load.bus_id},{load_id},{load.p_load:.4f},{load.q_load:.4f},{in_service}"
             )
         return "\n".join(lines)
 

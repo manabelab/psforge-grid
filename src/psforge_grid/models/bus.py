@@ -21,8 +21,9 @@ class Bus:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the source data (e.g. ``B1`` from PSS/E
-            bus number 1).
+            deterministically as ``B{number}`` (e.g. ``B1`` from PSS/E bus
+            number 1); formats without bus numbers use the 1-based position
+            in the source file.
         bus_type: Bus type code:
             - 1: PQ bus (load bus) - P and Q are specified
             - 2: PV bus (generator bus) - P and V magnitude are specified

@@ -22,8 +22,9 @@ class Shunt:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the source data (e.g. ``SH3_1`` from bus
-            number 3, shunt ID "1").
+            deterministically as ``SH{n}`` (type prefix + 1-based position
+            in the source file); the bus and source shunt ID live in
+            ``bus_id`` and ``shunt_id``, not in the id.
         bus_id: ``Bus.id`` of the bus where the shunt is connected
         g_pu: Shunt conductance [p.u.] on system base (default: 0.0)
         b_pu: Shunt susceptance [p.u.] on system base (default: 0.0)
@@ -59,9 +60,9 @@ class Shunt:
 
     Example:
         >>> # 50 MVAr capacitor on 100 MVA base
-        >>> cap = Shunt("SH1_1", bus_id="B1", b_pu=0.5)  # B = 50/100 = 0.5 p.u.
+        >>> cap = Shunt("SH1", bus_id="B1", b_pu=0.5)  # B = 50/100 = 0.5 p.u.
         >>> # 30 MVAr reactor on 100 MVA base
-        >>> reactor = Shunt("SH2_1", bus_id="B2", b_pu=-0.3)  # B = -30/100 = -0.3 p.u.
+        >>> reactor = Shunt("SH2", bus_id="B2", b_pu=-0.3)  # B = -30/100 = -0.3 p.u.
     """
 
     id: str
@@ -155,9 +156,9 @@ class Shunt:
             Multi-line string describing the shunt for LLM context.
 
         Example:
-            >>> cap = Shunt("SH1_1", bus_id="B1", b_pu=0.5, name="Cap1")
+            >>> cap = Shunt("SH1", bus_id="B1", b_pu=0.5, name="Cap1")
             >>> print(cap.to_description())
-            Shunt SH1_1 (Cap1) at Bus B1: Capacitor
+            Shunt SH1 (Cap1) at Bus B1: Capacitor
               Admittance: G = 0.0000 pu, B = 0.5000 pu
               Status: In-service
         """

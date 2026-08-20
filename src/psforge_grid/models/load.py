@@ -21,8 +21,9 @@ class Load:
     Attributes:
         id: Unique string identifier (``[A-Za-z0-9_]+``). Unique across the
             whole system, all element types combined. Parsers generate it
-            deterministically from the source data (e.g. ``LD2_1`` from bus
-            number 2, load ID "1").
+            deterministically as ``LD{n}`` (type prefix + 1-based position
+            in the source file); the bus and source load ID live in
+            ``bus_id`` and ``load_id``, not in the id.
         bus_id: ``Bus.id`` of the bus where the load is connected
         p_load: Active power demand [p.u.] on system base
         q_load: Reactive power demand [p.u.] on system base (default: 0.0)
@@ -56,10 +57,10 @@ class Load:
 
     Example:
         >>> # 50 MW + j20 MVAr load on 100 MVA base
-        >>> load = Load("LD2_1", bus_id="B2", p_load=0.5, q_load=0.2)
+        >>> load = Load("LD1", bus_id="B2", p_load=0.5, q_load=0.2)
         >>> # Multiple loads on same bus
-        >>> load_a = Load("LD3_A", bus_id="B3", p_load=0.3)
-        >>> load_b = Load("LD3_B", bus_id="B3", p_load=0.2)
+        >>> load_a = Load("LD2", bus_id="B3", p_load=0.3)
+        >>> load_b = Load("LD3", bus_id="B3", p_load=0.2)
     """
 
     id: str
@@ -142,9 +143,9 @@ class Load:
             Multi-line string describing the load for LLM context.
 
         Example:
-            >>> load = Load("LD2_1", bus_id="B2", p_load=0.5, q_load=0.2, name="Industrial")
+            >>> load = Load("LD1", bus_id="B2", p_load=0.5, q_load=0.2, name="Industrial")
             >>> print(load.to_description())
-            Load LD2_1 (Industrial) at Bus B2
+            Load LD1 (Industrial) at Bus B2
               Demand: P = 0.5000 pu, Q = 0.2000 pu
               Apparent power: 0.5385 pu
               Power factor: 0.93

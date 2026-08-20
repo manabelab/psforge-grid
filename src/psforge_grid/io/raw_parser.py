@@ -14,6 +14,23 @@ Architecture:
 
     Both use the same parsing logic internally.
 
+Identifier Generation (unified id scheme, grid 0.10.0):
+    Every parsed element receives a deterministic string ``id``: a type
+    prefix plus the 1-based appearance order within that element type
+    (same input file, same ids):
+
+    - Bus: ``B{number}`` (e.g. ``B1`` from PSS/E bus number 1)
+    - Branch: ``BR{n}`` (BRANCH DATA and TRANSFORMER DATA share one sequence)
+    - Generator: ``G{n}`` / Load: ``LD{n}`` / Shunt: ``SH{n}``
+
+    Connectivity is deliberately not encoded in the id (it would duplicate
+    ``from_bus_id``/``to_bus_id`` and go stale on reconnection). Collisions
+    are resolved with :func:`~psforge_grid.models.identity.make_unique`
+    (suffix ``_2`` onward) as a safety net. Original source identifiers are
+    preserved in ``Bus.number``, ``Branch.circuit_id``,
+    ``Generator.machine_id``, ``Load.load_id`` and ``Shunt.shunt_id`` for
+    lossless round-trip.
+
 Test Data Sources:
     - IEEE 9-bus (v34): https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
     - IEEE 14-bus (v33): https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/
@@ -37,6 +54,7 @@ from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
+from psforge_grid.models.identity import make_unique
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
@@ -57,11 +75,11 @@ class RawParser(IParser):
     Example:
         >>> from psforge_grid.io.raw_parser import RawParser
         >>> parser = RawParser()
-        >>> system = parser.parse("ieee14.raw")
+        >>> system = parser.parse("ieee14.raw")  # doctest: +SKIP
         >>>
         >>> # Or use the convenience function:
         >>> from psforge_grid.io import parse_raw
-        >>> system = parse_raw("ieee14.raw")
+        >>> system = parse_raw("ieee14.raw")  # doctest: +SKIP
     """
 
     @property
@@ -109,6 +127,10 @@ def parse_raw(filepath: str | Path) -> System:
         - Empty lines and whitespace are handled automatically
         - Section markers ('0 /' or 'Q') denote end of data sections
         - Power values (MW, MVAr) are converted to per-unit on system base MVA
+        - Element ids are generated deterministically: type prefix plus
+          appearance order within the type (``B1``, ``BR1``, ``G1``, ...);
+          source identifiers are kept in
+          ``number``/``circuit_id``/``machine_id``/``load_id``/``shunt_id``
 
     See Also:
         - RawParser: Class implementing IParser interface
@@ -149,29 +171,49 @@ def _parse_raw_impl(filepath: str | Path) -> System:
         if case_title:
             system.description = case_title
 
+    # One id pool per parse: generated ids must be unique across all
+    # element types (the unified id contract), so every element type
+    # records its ids in the same set.
+    used: set[str] = set()
+
+    # Maps source bus number -> generated Bus.id; built while parsing
+    # buses and used to wire up all element references as Bus.id strings.
+    bus_map: dict[int, str] = {}
+
     # Parse BUS DATA section
     if "BUS_DATA" in sections:
-        system.buses = _parse_bus_data(sections["BUS_DATA"])
+        system.buses, bus_map = _parse_bus_data(sections["BUS_DATA"], used)
 
     # Parse LOAD DATA section
     if "LOAD_DATA" in sections:
-        system.loads = _parse_load_data(sections["LOAD_DATA"], system.base_mva)
+        system.loads = _parse_load_data(sections["LOAD_DATA"], system.base_mva, used, bus_map)
 
     # Parse FIXED SHUNT DATA section
     if "FIXED_SHUNT_DATA" in sections:
-        system.shunts = _parse_fixed_shunt_data(sections["FIXED_SHUNT_DATA"], system.base_mva)
+        system.shunts = _parse_fixed_shunt_data(
+            sections["FIXED_SHUNT_DATA"], system.base_mva, used, bus_map
+        )
 
     # Parse GENERATOR DATA section
     if "GENERATOR_DATA" in sections:
-        system.generators = _parse_generator_data(sections["GENERATOR_DATA"], system.base_mva)
+        system.generators = _parse_generator_data(
+            sections["GENERATOR_DATA"], system.base_mva, used, bus_map
+        )
 
     # Parse BRANCH DATA section
     if "BRANCH_DATA" in sections:
-        system.branches = _parse_branch_data(sections["BRANCH_DATA"])
+        system.branches = _parse_branch_data(sections["BRANCH_DATA"], used, bus_map)
 
     # Parse TRANSFORMER DATA section (v34 format)
+    # Transformers continue the branch order sequence (branches and
+    # transformers are both Branch elements).
     if "TRANSFORMER_DATA" in sections:
-        transformer_branches = _parse_transformer_data(sections["TRANSFORMER_DATA"])
+        transformer_branches = _parse_transformer_data(
+            sections["TRANSFORMER_DATA"],
+            used,
+            bus_map,
+            start_order=float(len(system.branches)) + 1.0,
+        )
         system.branches.extend(transformer_branches)
 
     return system
@@ -311,16 +353,32 @@ def _parse_case_id(lines: list[str]) -> tuple[float, str]:
     return base_mva, case_title
 
 
-def _parse_bus_data(lines: list[str]) -> list[Bus]:
+def _clean_source_id(raw: str) -> str:
+    """Normalize a source identifier field (circuit/machine/load/shunt ID).
+
+    RAW files pad quoted identifier fields with spaces (e.g. ``'1 '``),
+    so the field is stripped of surrounding whitespace after quote removal.
+    An empty field falls back to ``"1"``, the PSS/E default identifier.
+    """
+    cleaned = raw.strip()
+    return cleaned if cleaned else "1"
+
+
+def _parse_bus_data(lines: list[str], used: set[str]) -> tuple[list[Bus], dict[int, str]]:
     """Parse BUS DATA section.
 
     Args:
         lines: Lines from BUS_DATA section
+        used: Ids already generated in this parse (updated in place)
 
     Returns:
-        List of Bus objects
+        Tuple of (buses, bus_map):
+            - buses: List of Bus objects with generated ids (``B{number}``)
+            - bus_map: Mapping from source bus number to generated Bus.id
     """
-    buses = []
+    buses: list[Bus] = []
+    bus_map: dict[int, str] = {}
+    order = 0.0
 
     for line in lines:
         if not line or line.startswith("0"):
@@ -342,7 +400,7 @@ def _parse_bus_data(lines: list[str]) -> list[Bus]:
             # NVHI, NVLO: Normal voltage limits
             # EVHI, EVLO: Emergency voltage limits
 
-            bus_id = int(fields[0])
+            number = int(fields[0])
             name = fields[1] if len(fields) > 1 else None
             base_kv = float(fields[2]) if len(fields) > 2 else 1.0
             bus_type = int(fields[3]) if len(fields) > 3 else 1
@@ -358,8 +416,13 @@ def _parse_bus_data(lines: list[str]) -> list[Bus]:
             v_max = float(fields[9]) if len(fields) > 9 else 1.1
             v_min = float(fields[10]) if len(fields) > 10 else 0.9
 
+            # Deterministic id from the source bus number
+            bus_id = make_unique(f"B{number}", used)
+            used.add(bus_id)
+            order += 1.0
+
             bus = Bus(
-                bus_id=bus_id,
+                bus_id,
                 bus_type=bus_type,
                 base_kv=base_kv,
                 v_magnitude=v_magnitude,
@@ -368,28 +431,37 @@ def _parse_bus_data(lines: list[str]) -> list[Bus]:
                 zone=zone,
                 v_max=v_max,
                 v_min=v_min,
+                number=number,
+                order=order,
                 name=name,
             )
             buses.append(bus)
+            # First occurrence wins if a bus number is (invalidly) duplicated
+            bus_map.setdefault(number, bus_id)
 
         except (IndexError, ValueError):
             # Skip malformed lines
             continue
 
-    return buses
+    return buses, bus_map
 
 
-def _parse_load_data(lines: list[str], base_mva: float) -> list[Load]:
+def _parse_load_data(
+    lines: list[str], base_mva: float, used: set[str], bus_map: dict[int, str]
+) -> list[Load]:
     """Parse LOAD DATA section.
 
     Args:
         lines: Lines from LOAD_DATA section
         base_mva: System base MVA for per-unit conversion
+        used: Ids already generated in this parse (updated in place)
+        bus_map: Mapping from source bus number to Bus.id
 
     Returns:
         List of Load objects
     """
-    loads = []
+    loads: list[Load] = []
+    order = 0.0
 
     for line in lines:
         if not line or line.startswith("0"):
@@ -406,8 +478,8 @@ def _parse_load_data(lines: list[str], base_mva: float) -> list[Load]:
             # PL: Active power (MW)
             # QL: Reactive power (MVAr)
 
-            bus_id = int(fields[0])
-            load_id = fields[1] if len(fields) > 1 else "1"
+            bus_num = int(fields[0])
+            load_id = _clean_source_id(fields[1]) if len(fields) > 1 else "1"
             status = int(fields[2]) if len(fields) > 2 else 1
 
             # Power values (in MW/MVAr, convert to p.u.)
@@ -417,12 +489,23 @@ def _parse_load_data(lines: list[str], base_mva: float) -> list[Load]:
             p_load = p_load_mw / base_mva
             q_load = q_load_mvar / base_mva
 
+            bus_ref = bus_map.get(bus_num)
+            if bus_ref is None:
+                # Reference to a bus that does not exist; skip
+                continue
+
+            order += 1.0
+            id_ = make_unique(f"LD{int(order)}", used)
+            used.add(id_)
+
             load = Load(
-                bus_id=bus_id,
+                id_,
+                bus_id=bus_ref,
                 p_load=p_load,
                 q_load=q_load,
                 status=status,
                 load_id=load_id,
+                order=order,
             )
             loads.append(load)
 
@@ -432,17 +515,22 @@ def _parse_load_data(lines: list[str], base_mva: float) -> list[Load]:
     return loads
 
 
-def _parse_fixed_shunt_data(lines: list[str], base_mva: float) -> list[Shunt]:
+def _parse_fixed_shunt_data(
+    lines: list[str], base_mva: float, used: set[str], bus_map: dict[int, str]
+) -> list[Shunt]:
     """Parse FIXED SHUNT DATA section.
 
     Args:
         lines: Lines from FIXED_SHUNT_DATA section
         base_mva: System base MVA for per-unit conversion
+        used: Ids already generated in this parse (updated in place)
+        bus_map: Mapping from source bus number to Bus.id
 
     Returns:
         List of Shunt objects
     """
-    shunts = []
+    shunts: list[Shunt] = []
+    order = 0.0
 
     for line in lines:
         if not line or line.startswith("0"):
@@ -459,8 +547,8 @@ def _parse_fixed_shunt_data(lines: list[str], base_mva: float) -> list[Shunt]:
             # GL: Shunt conductance (MW at 1.0 p.u. voltage)
             # BL: Shunt susceptance (MVAr at 1.0 p.u. voltage)
 
-            bus_id = int(fields[0])
-            shunt_id = fields[1] if len(fields) > 1 else "1"
+            bus_num = int(fields[0])
+            shunt_id = _clean_source_id(fields[1]) if len(fields) > 1 else "1"
             status = int(fields[2]) if len(fields) > 2 else 1
 
             # G, B values (in MW/MVAr, convert to p.u.)
@@ -470,12 +558,22 @@ def _parse_fixed_shunt_data(lines: list[str], base_mva: float) -> list[Shunt]:
             g_pu = g_mw / base_mva
             b_pu = b_mvar / base_mva
 
+            bus_ref = bus_map.get(bus_num)
+            if bus_ref is None:
+                continue
+
+            order += 1.0
+            id_ = make_unique(f"SH{int(order)}", used)
+            used.add(id_)
+
             shunt = Shunt(
-                bus_id=bus_id,
+                id_,
+                bus_id=bus_ref,
                 g_pu=g_pu,
                 b_pu=b_pu,
                 status=status,
                 shunt_id=shunt_id,
+                order=order,
             )
             shunts.append(shunt)
 
@@ -485,17 +583,22 @@ def _parse_fixed_shunt_data(lines: list[str], base_mva: float) -> list[Shunt]:
     return shunts
 
 
-def _parse_generator_data(lines: list[str], base_mva: float) -> list[Generator]:
+def _parse_generator_data(
+    lines: list[str], base_mva: float, used: set[str], bus_map: dict[int, str]
+) -> list[Generator]:
     """Parse GENERATOR DATA section.
 
     Args:
         lines: Lines from GENERATOR_DATA section
         base_mva: System base MVA for per-unit conversion
+        used: Ids already generated in this parse (updated in place)
+        bus_map: Mapping from source bus number to Bus.id
 
     Returns:
         List of Generator objects
     """
-    generators = []
+    generators: list[Generator] = []
+    order = 0.0
 
     for line in lines:
         if not line or line.startswith("0"):
@@ -516,8 +619,8 @@ def _parse_generator_data(lines: list[str], base_mva: float) -> list[Generator]:
             # MBASE: Machine base MVA
             # STAT: Status (1=in-service, 0=out-of-service)
 
-            bus_id = int(fields[0])
-            gen_id = fields[1] if len(fields) > 1 else "1"
+            bus_num = int(fields[0])
+            machine_id = _clean_source_id(fields[1]) if len(fields) > 1 else "1"
 
             # Power values (in MW/MVAr, convert to p.u.)
             p_gen_mw = float(fields[2]) if len(fields) > 2 else 0.0
@@ -536,8 +639,17 @@ def _parse_generator_data(lines: list[str], base_mva: float) -> list[Generator]:
             # Status is at position 14 (0-indexed)
             status = int(fields[14]) if len(fields) > 14 else 1
 
+            bus_ref = bus_map.get(bus_num)
+            if bus_ref is None:
+                continue
+
+            order += 1.0
+            id_ = make_unique(f"G{int(order)}", used)
+            used.add(id_)
+
             generator = Generator(
-                bus_id=bus_id,
+                id_,
+                bus_id=bus_ref,
                 p_gen=p_gen,
                 q_gen=q_gen,
                 v_setpoint=v_setpoint,
@@ -545,7 +657,8 @@ def _parse_generator_data(lines: list[str], base_mva: float) -> list[Generator]:
                 q_min=q_min,
                 mbase=mbase,
                 status=status,
-                gen_id=gen_id,
+                machine_id=machine_id,
+                order=order,
             )
             generators.append(generator)
 
@@ -555,18 +668,21 @@ def _parse_generator_data(lines: list[str], base_mva: float) -> list[Generator]:
     return generators
 
 
-def _parse_branch_data(lines: list[str]) -> list[Branch]:
+def _parse_branch_data(lines: list[str], used: set[str], bus_map: dict[int, str]) -> list[Branch]:
     """Parse BRANCH DATA section.
 
     Supports both v33 and v34 formats.
 
     Args:
         lines: Lines from BRANCH_DATA section
+        used: Ids already generated in this parse (updated in place)
+        bus_map: Mapping from source bus number to Bus.id
 
     Returns:
         List of Branch objects
     """
-    branches = []
+    branches: list[Branch] = []
+    order = 0.0
 
     for line in lines:
         if not line or line.startswith("0"):
@@ -576,9 +692,9 @@ def _parse_branch_data(lines: list[str]) -> list[Branch]:
             fields = [f.strip().strip("'\"") for f in line.split(",")]
 
             # Common fields for both v33 and v34
-            from_bus = int(fields[0])
-            to_bus = int(fields[1])
-            circuit_id = fields[2] if len(fields) > 2 else "1"
+            from_num = int(fields[0])
+            to_num = int(fields[1])
+            circuit_id = _clean_source_id(fields[2]) if len(fields) > 2 else "1"
             r_pu = float(fields[3]) if len(fields) > 3 else 0.0
             x_pu = float(fields[4]) if len(fields) > 4 else 0.0
             b_pu = float(fields[5]) if len(fields) > 5 else 0.0
@@ -633,9 +749,19 @@ def _parse_branch_data(lines: list[str]) -> list[Branch]:
                 if len(fields) > 13:
                     status = int(fields[13])
 
+            from_ref = bus_map.get(from_num)
+            to_ref = bus_map.get(to_num)
+            if from_ref is None or to_ref is None:
+                continue
+
+            order += 1.0
+            id_ = make_unique(f"BR{int(order)}", used)
+            used.add(id_)
+
             branch = Branch(
-                from_bus=from_bus,
-                to_bus=to_bus,
+                id_,
+                from_bus_id=from_ref,
+                to_bus_id=to_ref,
                 r_pu=r_pu,
                 x_pu=x_pu,
                 b_pu=b_pu,
@@ -644,6 +770,7 @@ def _parse_branch_data(lines: list[str]) -> list[Branch]:
                 rate_c=rate_c,
                 status=status,
                 circuit_id=circuit_id,
+                order=order,
             )
             branches.append(branch)
 
@@ -653,7 +780,12 @@ def _parse_branch_data(lines: list[str]) -> list[Branch]:
     return branches
 
 
-def _parse_transformer_data(lines: list[str]) -> list[Branch]:
+def _parse_transformer_data(
+    lines: list[str],
+    used: set[str],
+    bus_map: dict[int, str],
+    start_order: float = 1.0,
+) -> list[Branch]:
     """Parse TRANSFORMER DATA section (v34 format).
 
     In v34, transformer data spans multiple lines per transformer:
@@ -665,11 +797,16 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
 
     Args:
         lines: Lines from TRANSFORMER_DATA section
+        used: Ids already generated in this parse (updated in place)
+        bus_map: Mapping from source bus number to Bus.id
+        start_order: Order value for the first transformer; transformers
+            continue the branch order sequence
 
     Returns:
         List of Branch objects representing transformers
     """
-    branches = []
+    branches: list[Branch] = []
+    order = start_order - 1.0
     i = 0
 
     while i < len(lines):
@@ -682,10 +819,10 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
             # Line 1: Header with I, J, K, CKT, ...
             fields1 = [f.strip().strip("'\"") for f in line.split(",")]
 
-            from_bus = int(fields1[0])
-            to_bus = int(fields1[1])
+            from_num = int(fields1[0])
+            to_num = int(fields1[1])
             k_bus = int(fields1[2])  # 0 for 2-winding, non-zero for 3-winding
-            circuit_id = fields1[3] if len(fields1) > 3 else "1"
+            circuit_id = _clean_source_id(fields1[3]) if len(fields1) > 3 else "1"
 
             # MAG1 (magnetizing G) at position 7, MAG2 (magnetizing B) at position 8
             mag_g = None
@@ -797,9 +934,20 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
                 if line5.startswith("@"):
                     i += 1
 
+            from_ref = bus_map.get(from_num)
+            to_ref = bus_map.get(to_num)
+            if from_ref is None or to_ref is None:
+                i += 1
+                continue
+
+            order += 1.0
+            id_ = make_unique(f"BR{int(order)}", used)
+            used.add(id_)
+
             branch = Branch(
-                from_bus=from_bus,
-                to_bus=to_bus,
+                id_,
+                from_bus_id=from_ref,
+                to_bus_id=to_ref,
                 r_pu=r_pu,
                 x_pu=x_pu,
                 b_pu=0.0,  # Transformers have no line charging
@@ -815,6 +963,7 @@ def _parse_transformer_data(lines: list[str]) -> list[Branch]:
                 mag_g=mag_g,
                 mag_b=mag_b,
                 is_xfmr=True,
+                order=order,
             )
             branches.append(branch)
 

@@ -46,12 +46,12 @@ def validate_id(id_: str, owner: str) -> None:
         >>> validate_id("B-1", "Bus")
         Traceback (most recent call last):
         ...
-        ValueError: Invalid Bus id: 'B-1'. Identifiers must match [A-Za-z0-9_]+ (ASCII letters, digits, underscore; e.g. 'B1', 'BR1_2_1').
+        ValueError: Invalid Bus id: 'B-1'. Identifiers must match [A-Za-z0-9_]+ (ASCII letters, digits, underscore; e.g. 'B1', 'BR1').
     """
     if not isinstance(id_, str) or not ID_PATTERN.match(id_):
         raise ValueError(
             f"Invalid {owner} id: {id_!r}. Identifiers must match [A-Za-z0-9_]+ "
-            "(ASCII letters, digits, underscore; e.g. 'B1', 'BR1_2_1')."
+            "(ASCII letters, digits, underscore; e.g. 'B1', 'BR1')."
         )
 
 
