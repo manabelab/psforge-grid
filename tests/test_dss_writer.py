@@ -22,6 +22,7 @@ from psforge_grid.models.bus import Bus
 from psforge_grid.models.generator import Generator
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
+from tests.cpat_fixtures import WEST10_POP, requires_west10
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -279,12 +280,9 @@ class TestDSSCompilation:
         error = self._compile_system(system)
         assert error is None, f"case14_ieee compilation failed: {error}"
 
-    @pytest.mark.skipif(
-        not (FIXTURES / "WEST10peak.pop").exists(),
-        reason="WEST10peak.pop not available",
-    )
+    @requires_west10
     def test_compile_west10(self):
-        system = System.from_pop(FIXTURES / "WEST10peak.pop")
+        system = System.from_pop(WEST10_POP)
         error = self._compile_system(system)
         assert error is None, f"WEST10peak compilation failed: {error}"
 

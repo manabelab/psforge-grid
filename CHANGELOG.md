@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- CPAT-derived test fixtures are no longer distributed with the repository:
+  `tests/fixtures/WEST10peak.pop` (sample data bundled with CPATFree),
+  `tests/fixtures/WEST10peak.psfg.json` (converted from it) and
+  `tests/fixtures/cpat_model11.dyna` (the model system from the CPAT manual).
+  The tests that use them now look the files up via `PSFORGE_CPAT_DATA` or the
+  git-ignored `tests/fixtures/cpat_local/`, and are skipped when the files are
+  absent (see `tests/fixtures/README.md`). The WEST10 JSON tests convert the
+  `.pop` on the fly instead of reading a committed `.psfg.json`.
+
 ## [0.9.1] - 2026-07-16
 
 ### Fixed

@@ -13,6 +13,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from psforge_grid.cli.app import app
+from tests.cpat_fixtures import WEST10_POP, requires_west10
 
 runner = CliRunner()
 
@@ -29,7 +30,6 @@ IEEE14_RAW = FIXTURES_DIR / "ieee14.raw"
 IEEE9_RAW = FIXTURES_DIR / "ieee9.raw"
 IEEE14_MATPOWER = FIXTURES_DIR / "pglib_opf_case14_ieee.m"
 IEEE14_JSON = FIXTURES_DIR / "ieee14.psfg.json"
-WEST10_POP = FIXTURES_DIR / "WEST10peak.pop"
 
 
 class TestInfoCommand:
@@ -292,6 +292,7 @@ class TestMultiFormatInput:
         result = runner.invoke(app, ["info", str(IEEE14_JSON)])
         assert result.exit_code == 0
 
+    @requires_west10
     def test_info_pop_format(self) -> None:
         """Test info command with CPAT .pop file."""
         result = runner.invoke(app, ["info", str(WEST10_POP), "-f", "json"])
@@ -349,6 +350,7 @@ class TestConvertCommand:
         assert result.exit_code == 0
         assert output.exists()
 
+    @requires_west10
     def test_convert_pop_to_json(self, tmp_path: Path) -> None:
         """Test converting CPAT .pop to psforge JSON."""
         output = tmp_path / "west10.psfg.json"

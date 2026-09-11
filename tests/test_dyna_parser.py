@@ -6,8 +6,6 @@ using the model system from CPAT manual p.26.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from psforge_grid.io.dyna.card_parsers import (
@@ -23,9 +21,9 @@ from psforge_grid.io.dyna.format_utils import is_comment, read_float, read_int, 
 from psforge_grid.io.dyna_parser import DynaParser, parse_dyna
 from psforge_grid.io.factories import ParserFactory
 from psforge_grid.models.system import System
+from tests.cpat_fixtures import CPAT_MODEL11_DYNA, requires_model11, skip_without_model11
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures"
-DYNA_FILE = FIXTURE_DIR / "cpat_model11.dyna"
+DYNA_FILE = CPAT_MODEL11_DYNA
 
 
 # =============================================================================
@@ -167,8 +165,10 @@ class TestDynaParserIntegration:
     @pytest.fixture()
     def system(self) -> System:
         """Parse the test fixture file."""
+        skip_without_model11()
         return parse_dyna(DYNA_FILE)
 
+    @requires_model11
     def test_file_exists(self) -> None:
         assert DYNA_FILE.exists(), f"Test fixture not found: {DYNA_FILE}"
 
@@ -268,10 +268,12 @@ class TestDynaFactoryIntegration:
         parser = ParserFactory.from_extension("dyna")
         assert isinstance(parser, DynaParser)
 
+    @requires_model11
     def test_system_from_dyna(self) -> None:
         system = System.from_dyna(DYNA_FILE)
         assert system.num_buses == 10
 
+    @requires_model11
     def test_system_from_file(self) -> None:
         system = System.from_file(DYNA_FILE)
         assert system.num_buses == 10

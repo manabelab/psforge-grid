@@ -14,8 +14,6 @@ System characteristics:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from psforge_grid.io.pop.archive import PopArchive
@@ -24,20 +22,20 @@ from psforge_grid.io.pop.control_data import parse_control_data
 from psforge_grid.io.pop.topology import parse_topology
 from psforge_grid.io.pop_parser import PopParser, parse_pop
 from psforge_grid.models.system import System
-
-FIXTURE_DIR = Path(__file__).parent / "fixtures"
-WEST10_POP = FIXTURE_DIR / "WEST10peak.pop"
+from tests.cpat_fixtures import WEST10_POP, requires_west10, skip_without_west10
 
 
 @pytest.fixture
 def west10_archive() -> PopArchive:
     """Open WEST10peak.pop archive for testing."""
+    skip_without_west10()
     return PopArchive(WEST10_POP)
 
 
 @pytest.fixture
 def west10_system() -> System:
     """Parse WEST10peak.pop into a System object."""
+    skip_without_west10()
     return parse_pop(WEST10_POP)
 
 
@@ -361,11 +359,13 @@ class TestPopParserFactory:
         parser = ParserFactory.from_extension(".pop")
         assert isinstance(parser, PopParser)
 
+    @requires_west10
     def test_system_from_pop(self) -> None:
         """System.from_pop() should load the system."""
         system = System.from_pop(WEST10_POP)
         assert system.num_buses == 27
 
+    @requires_west10
     def test_system_from_file_auto_detect(self) -> None:
         """System.from_file() should auto-detect .pop format."""
         system = System.from_file(WEST10_POP)

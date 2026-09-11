@@ -13,6 +13,12 @@ import pytest
 from psforge_grid.io.factories import WriterFactory
 from psforge_grid.io.protocols import IWriter
 from psforge_grid.models.system import System
+from tests.cpat_fixtures import (
+    CPAT_MODEL11_DYNA,
+    WEST10_POP,
+    requires_model11,
+    requires_west10,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -257,11 +263,12 @@ class TestMatpowerWriterRoundtrip:
 # =============================================================================
 
 
+@requires_west10
 class TestPopWriterRoundtrip:
     """Round-trip tests for PopWriter."""
 
     def test_west10_roundtrip(self, tmp_path: Path) -> None:
-        system1 = System.from_pop(FIXTURES / "WEST10peak.pop")
+        system1 = System.from_pop(WEST10_POP)
         output = tmp_path / "west10_out.pop"
         system1.to_pop(output)
         system2 = System.from_pop(output)
@@ -269,7 +276,7 @@ class TestPopWriterRoundtrip:
 
     def test_facade_to_file(self, tmp_path: Path) -> None:
         """Test System.to_file() auto-detection for .pop."""
-        system1 = System.from_pop(FIXTURES / "WEST10peak.pop")
+        system1 = System.from_pop(WEST10_POP)
         output = tmp_path / "west10_auto.pop"
         system1.to_file(output)
         system2 = System.from_pop(output)
@@ -281,11 +288,12 @@ class TestPopWriterRoundtrip:
 # =============================================================================
 
 
+@requires_model11
 class TestDynaWriterRoundtrip:
     """Round-trip tests for DynaWriter."""
 
     def test_cpat_model11_roundtrip(self, tmp_path: Path) -> None:
-        system1 = System.from_dyna(FIXTURES / "cpat_model11.dyna")
+        system1 = System.from_dyna(CPAT_MODEL11_DYNA)
         output = tmp_path / "cpat_model11_out.dyna"
         system1.to_dyna(output)
         system2 = System.from_dyna(output)
@@ -293,7 +301,7 @@ class TestDynaWriterRoundtrip:
 
     def test_facade_to_file(self, tmp_path: Path) -> None:
         """Test System.to_file() auto-detection for .dyna."""
-        system1 = System.from_dyna(FIXTURES / "cpat_model11.dyna")
+        system1 = System.from_dyna(CPAT_MODEL11_DYNA)
         output = tmp_path / "cpat_model11_auto.dyna"
         system1.to_file(output)
         system2 = System.from_dyna(output)
@@ -411,9 +419,12 @@ _BASE_KV_PRESERVING = {"raw", "matpower", "pop"}  # Dyna doesn't store base_kv
 _CROSS_FORMAT_SOURCES = [
     ("raw", FIXTURES / "ieee14.raw"),
     ("matpower", FIXTURES / "pglib_opf_case14_ieee.m"),
-    ("pop", FIXTURES / "WEST10peak.pop"),
-    ("dyna", FIXTURES / "cpat_model11.dyna"),
+    ("pop", WEST10_POP),
+    ("dyna", CPAT_MODEL11_DYNA),
 ]
+
+# CPAT-derived sources are not distributed; skip their pairs when absent
+_SOURCE_MARKS = {"pop": requires_west10, "dyna": requires_model11}
 
 # Target formats to write
 _TARGET_FORMATS = ["raw", "matpower", "pop", "dyna"]
@@ -438,6 +449,7 @@ def _make_cross_params() -> list[tuple[str, Path, str]]:
                         fixture,
                         tgt_fmt,
                         id=_cross_format_id(src_fmt, tgt_fmt),
+                        marks=_SOURCE_MARKS.get(src_fmt, ()),
                     )
                 )
     return params

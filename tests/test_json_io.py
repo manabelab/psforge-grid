@@ -18,6 +18,7 @@ from psforge_grid.io import (
 )
 from psforge_grid.io.json_writer import FORMAT_NAME, FORMAT_VERSION
 from psforge_grid.models.scenario import Modification, ScenarioSet
+from tests.cpat_fixtures import WEST10_POP, requires_west10
 
 # =========================================================================
 # Fixtures
@@ -498,9 +499,12 @@ class TestFixtureJsonFiles:
         assert len(system.generators) == 3
         assert len(system.loads) == 3
 
-    def test_west10_json_fixture_loads(self) -> None:
-        """WEST10peak .psfg.json fixture loads correctly."""
-        system = parse_json(FIXTURE_DIR / "WEST10peak.psfg.json")
+    @requires_west10
+    def test_west10_json_fixture_loads(self, tmp_path: Path) -> None:
+        """WEST10peak converted to .psfg.json loads correctly."""
+        json_path = tmp_path / "WEST10peak.psfg.json"
+        write_json(System.from_pop(WEST10_POP), json_path)
+        system = parse_json(json_path)
         assert len(system.buses) == 27
         assert len(system.generators) == 10
         assert len(system.loads) == 17
@@ -537,10 +541,13 @@ class TestFixtureJsonFiles:
             assert json_bus.bus_id == raw_bus.bus_id
             assert json_bus.v_magnitude == pytest.approx(raw_bus.v_magnitude)
 
-    def test_west10_json_matches_pop(self) -> None:
+    @requires_west10
+    def test_west10_json_matches_pop(self, tmp_path: Path) -> None:
         """WEST10peak JSON matches original POP data."""
-        pop_system = System.from_pop(FIXTURE_DIR / "WEST10peak.pop")
-        json_system = parse_json(FIXTURE_DIR / "WEST10peak.psfg.json")
+        pop_system = System.from_pop(WEST10_POP)
+        json_path = tmp_path / "WEST10peak.psfg.json"
+        write_json(pop_system, json_path)
+        json_system = parse_json(json_path)
 
         assert len(json_system.buses) == len(pop_system.buses)
         assert len(json_system.generators) == len(pop_system.generators)

@@ -56,34 +56,28 @@ This directory contains test files for the psforge-grid parsers (PSS/E RAW, MATP
 | Total Generation | ~4374 MW |
 | Total Load | ~4242 MW |
 
-### WEST10peak.pop - IEEJ WEST 10-Machine Model (CPAT .pop format)
+### CPAT-derived data (not distributed)
 
-- **Source**: CPAT-GUI standard model data (IEEJ WEST 10-machine peak-load model)
-- **Format**: CPAT .pop (ZIP archive containing XML data)
-- **Description**: IEEJ standard power system model with 10 generators on a 500/275 kV network, used for validating the PopParser and ACPF E2E pipeline
+The CPAT parser tests use data that originates from CPATFree (developed by
+CRIEPI). These files are **not redistributed with this repository**. The tests
+that need them are skipped unless you supply the files locally, from your own
+CPATFree installation:
 
-| Component | Count |
-|-----------|-------|
-| Buses | 27 |
-| Generators | 10 |
-| Loads | 17 |
-| Branches | 35 |
-| Base MVA | 1000.0 |
+| File | Where it comes from | Tests |
+|------|---------------------|-------|
+| `WEST10peak.pop` | `CPATFree/Data/IEEJ標準モデル/WEST10peak.pop` (IEEJ WEST 10-machine peak-load model, 27 buses / 10 generators / 17 loads, base 1000 MVA) | PopParser, CLI, diagram, OpenDSS export, JSON conversion |
+| `cpat_model11.dyna` | The 10-node model system in the CPAT manual, written in dyna card format (10 nodes, 4 generators, 14 branches, base 1000 MVA, swing node 1100) | DynaParser integration |
 
-### cpat_model11.dyna - CPAT Manual Model System (dyna card format)
+Place the files in `tests/fixtures/cpat_local/` (git-ignored), or point the
+`PSFORGE_CPAT_DATA` environment variable at a directory that contains them:
 
-- **Source**: CPAT Manual p.26 (programmatically generated with correct column alignment)
-- **Format**: CPAT dyna (Fortran fixed-column 80-character card format)
-- **Description**: 10-node model system from the CPAT manual, used for validating the DynaParser and individual card parsers
+```bash
+export PSFORGE_CPAT_DATA=/path/to/cpat-data   # contains WEST10peak.pop, cpat_model11.dyna
+pytest tests/
+```
 
-| Component | Count |
-|-----------|-------|
-| Buses | 10 (nodes 1010-1100) |
-| Generators | 4 (G-1, G-2, G-3, SWING) |
-| Loads | 2 (LOAD-9, SWING) |
-| Branches | 14 (9 transmission lines + 5 transformers) |
-| Base MVA | 1000.0 |
-| Swing Node | 1100 |
+The lookup lives in `tests/cpat_fixtures.py`. Without the files, CI runs the
+remaining tests and reports the CPAT ones as skipped.
 
 ### psforge-grid JSON Files (.psfg.json)
 
@@ -114,18 +108,6 @@ The following `.psfg.json` files are generated from the source fixtures above an
 | Generators | 3 |
 | Loads | 3 |
 | Branches | 9 |
-
-#### WEST10peak.psfg.json - IEEJ WEST 10-Machine Model
-
-- **Source**: Generated from `WEST10peak.pop`
-- **Format**: psforge-grid JSON v1.0
-
-| Component | Count |
-|-----------|-------|
-| Buses | 27 |
-| Generators | 10 |
-| Loads | 17 |
-| Branches | 42 |
 
 #### ieee14_contingencies.psfg.json - N-1 Contingency Scenarios
 
@@ -165,4 +147,4 @@ The scenario format (`"format": "psforge-grid-scenario"`) references a base case
 - IEEE Test Systems: https://icseg.iti.illinois.edu/power-cases/
 - Texas A&M Electric Grid Test Case Repository: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/
 - PSS/E Documentation: Siemens PTI PSS/E Program Operation Manual
-- CPAT: https://www.jpower.co.jp/bs/cpat/
+- CPATFree user support (CRIEPI): https://www.cpat.jp/

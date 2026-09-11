@@ -13,6 +13,7 @@ from psforge_grid.models.diagram import (
     normalize_coordinates,
 )
 from psforge_grid.models.system import System
+from tests.cpat_fixtures import WEST10_POP, skip_without_west10
 
 # =========================================================================
 # BusPosition tests
@@ -193,10 +194,8 @@ class TestNormalizeCoordinates:
 class TestPopParserDiagram:
     @pytest.fixture
     def pop_system(self):
-        fixture = Path(__file__).parent / "fixtures" / "WEST10peak.pop"
-        if not fixture.exists():
-            pytest.skip("WEST10peak.pop fixture not found")
-        return System.from_pop(fixture)
+        skip_without_west10()
+        return System.from_pop(WEST10_POP)
 
     def test_diagram_created(self, pop_system):
         assert pop_system.diagram_schematic is not None
@@ -256,10 +255,8 @@ class TestPopParserDiagram:
 class TestJsonDiagramRoundTrip:
     @pytest.fixture
     def system_with_diagram(self):
-        fixture = Path(__file__).parent / "fixtures" / "WEST10peak.pop"
-        if not fixture.exists():
-            pytest.skip("WEST10peak.pop fixture not found")
-        return System.from_pop(fixture)
+        skip_without_west10()
+        return System.from_pop(WEST10_POP)
 
     def test_round_trip(self, system_with_diagram):
         """Diagram data should survive JSON write → read cycle."""

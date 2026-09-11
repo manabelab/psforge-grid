@@ -193,3 +193,8 @@ wiki/
 # Dev-dependency drift is pinned in [dev] instead, where a constraint can carry
 # its reason.
 uv.lock
+
+# CPAT-derived test data (CPATFree / CRIEPI) is not redistributed with this
+# repository. Keep local copies here, or point PSFORGE_CPAT_DATA at them;
+# see tests/fixtures/README.md.
+tests/fixtures/cpat_local/
