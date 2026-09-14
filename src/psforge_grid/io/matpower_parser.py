@@ -34,6 +34,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from psforge_grid.io.errors import FileFormatError, MalformedRecordError
+from psforge_grid.io.parse_report import ParseReportBuilder
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -78,15 +80,15 @@ class MatpowerParser(IParser):
         """Return human-readable format name."""
         return "MATPOWER"
 
-    def parse(self, filepath: str | Path) -> System:
+    def parse(self, filepath: str | Path, *, strict: bool = False) -> System:
         """Parse MATPOWER .m file and return a System object.
 
         See IParser.parse() for full documentation.
         """
-        return _parse_matpower_impl(filepath)
+        return _parse_matpower_impl(filepath, strict=strict)
 
 
-def parse_matpower(filepath: str | Path) -> System:
+def parse_matpower(filepath: str | Path, *, strict: bool = False) -> System:
     """Parse MATPOWER .m file and return a System object.
 
     Convenience function for parsing MATPOWER format files. For factory
@@ -117,20 +119,36 @@ def parse_matpower(filepath: str | Path) -> System:
         - ParserFactory: Factory for creating parsers
         - System.from_matpower(): Alternative factory method
     """
-    return _parse_matpower_impl(filepath)
+    return _parse_matpower_impl(filepath, strict=strict)
 
 
-def _parse_matpower_impl(filepath: str | Path) -> System:
-    """Internal implementation of MATPOWER file parsing."""
+def _parse_matpower_impl(filepath: str | Path, *, strict: bool = False) -> System:
+    """Internal implementation of MATPOWER file parsing.
+
+    Args:
+        filepath: Path to the .m file.
+        strict: Raise instead of skipping when any row cannot be read.
+
+    Returns:
+        The parsed System, carrying a ParseReport of anything skipped.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        FileFormatError: If no bus rows could be read at all.
+        MalformedRecordError: If ``strict`` is set and a row was skipped.
+    """
     filepath = Path(filepath)
     if not filepath.exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
+    builder = ParseReportBuilder(format="matpower")
+
     try:
-        with open(filepath, encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-    except Exception as e:
-        raise ValueError(f"Failed to read file {filepath}: {e}") from e
+        content = filepath.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise FileFormatError(f"could not read the file: {e}", filepath=str(filepath)) from e
+    if "\ufffd" in content:
+        builder.warn("file is not valid UTF-8; undecodable bytes were replaced")
 
     # Extract base MVA
     base_mva = _extract_base_mva(content)
@@ -146,22 +164,25 @@ def _parse_matpower_impl(filepath: str | Path) -> System:
     loads: list[Load] = []
     shunts: list[Shunt] = []
     if "bus" in sections:
-        buses, loads, shunts = _parse_bus_section(sections["bus"], base_mva)
+        buses, loads, shunts = _parse_bus_section(sections["bus"], base_mva, builder)
 
     # Parse generator section
     generators: list[Generator] = []
     if "gen" in sections:
-        generators = _parse_gen_section(sections["gen"], base_mva)
+        generators = _parse_gen_section(sections["gen"], base_mva, builder)
 
     # Parse branch section
     branches: list[Branch] = []
     if "branch" in sections:
-        branches = _parse_branch_section(sections["branch"])
+        branches = _parse_branch_section(sections["branch"], builder)
 
     # Parse generator cost section
     generator_costs: list[GeneratorCost] = []
     if "gencost" in sections:
-        generator_costs = _parse_gencost_section(sections["gencost"])
+        generator_costs = _parse_gencost_section(sections["gencost"], builder)
+
+    builder.record_read(len(buses) + len(generators) + len(branches) + len(generator_costs))
+    report = builder.build()
 
     system = System(
         buses=buses,
@@ -172,7 +193,23 @@ def _parse_matpower_impl(filepath: str | Path) -> System:
         generator_costs=generator_costs,
         base_mva=base_mva,
         name=case_name or filepath.name,
+        parse_report=report,
     )
+
+    if not buses:
+        raise FileFormatError(
+            f"no bus rows could be read; the file does not look like a MATPOWER case "
+            f"({report.records_read} rows read, {report.skipped_count} skipped)",
+            filepath=str(filepath),
+        )
+
+    if strict and report.skipped:
+        first = report.skipped[0]
+        raise MalformedRecordError(
+            f"{report.skipped_count} row(s) could not be read; first: {first.reason}",
+            filepath=str(filepath),
+            line_no=first.line_no,
+        )
 
     return system
 
@@ -207,20 +244,44 @@ def _extract_case_name(content: str) -> str:
     return ""
 
 
-def _extract_sections(content: str) -> dict[str, list[list[str]]]:
+def _non_numeric_column(row: list[str], count: int) -> str | None:
+    """Return a reason string if any of the first ``count`` columns is not a number.
+
+    MATPOWER data sections are numeric tables, so a column that does not read as
+    a number means the row is not the record it claims to be. Checking up front
+    keeps the row out of the model instead of letting a conversion raise from
+    the middle of building one.
+
+    Args:
+        row: Whitespace-separated fields of one row.
+        count: How many leading columns must be numeric.
+
+    Returns:
+        A reason to skip the row, or ``None`` when every column reads.
+    """
+    for index, value in enumerate(row[:count]):
+        try:
+            float(value)
+        except ValueError:
+            return f"column {index + 1} is not a number: {value!r}"
+    return None
+
+
+def _extract_sections(content: str) -> dict[str, list[tuple[int, list[str]]]]:
     """Extract data sections from MATPOWER file content.
 
     Finds all `mpc.SECTION = [ ... ];` blocks and extracts the data rows.
-    Each row is split into string fields.
+    Each row is split into string fields and paired with its 1-based line
+    number in the file, so a row that cannot be read can be reported against
+    its place in the source.
 
     Args:
         content: Full file content as string
 
     Returns:
-        Dictionary mapping section names to lists of rows,
-        where each row is a list of string fields.
+        Dictionary mapping section names to lists of ``(line_no, fields)``.
     """
-    sections: dict[str, list[list[str]]] = {}
+    sections: dict[str, list[tuple[int, list[str]]]] = {}
 
     # Pattern: mpc.section_name = [ ... ];
     # Uses non-greedy matching to find the content between [ and ];
@@ -232,9 +293,10 @@ def _extract_sections(content: str) -> dict[str, list[list[str]]]:
     for match in pattern.finditer(content):
         section_name = match.group(1)
         block = match.group(2)
+        block_first_line = content.count("\n", 0, match.start(2)) + 1
 
-        rows: list[list[str]] = []
-        for line in block.split("\n"):
+        rows: list[tuple[int, list[str]]] = []
+        for offset, line in enumerate(block.split("\n")):
             # Remove comments (% to end of line)
             line = re.sub(r"%.*$", "", line).strip()
             # Remove trailing semicolons within the block
@@ -245,7 +307,7 @@ def _extract_sections(content: str) -> dict[str, list[list[str]]]:
             # Split by whitespace or tabs
             fields = line.split()
             if fields:
-                rows.append(fields)
+                rows.append((block_first_line + offset, fields))
 
         if rows:
             sections[section_name] = rows
@@ -254,7 +316,7 @@ def _extract_sections(content: str) -> dict[str, list[list[str]]]:
 
 
 def _parse_bus_section(
-    rows: list[list[str]], base_mva: float
+    rows: list[tuple[int, list[str]]], base_mva: float, builder: ParseReportBuilder
 ) -> tuple[list[Bus], list[Load], list[Shunt]]:
     """Parse MATPOWER bus data section.
 
@@ -274,8 +336,9 @@ def _parse_bus_section(
         13: Vmin    - minimum voltage magnitude [pu]
 
     Args:
-        rows: List of field lists from bus section
+        rows: ``(line_no, fields)`` for each row of the bus section
         base_mva: System base MVA for per-unit conversion
+        builder: Report being filled for this parse run
 
     Returns:
         Tuple of (buses, loads, shunts)
@@ -284,8 +347,13 @@ def _parse_bus_section(
     loads: list[Load] = []
     shunts: list[Shunt] = []
 
-    for row in rows:
+    for line_no, row in rows:
         if len(row) < 13:
+            builder.skip(line_no, "bus", f"expected 13 columns, got {len(row)}", " ".join(row))
+            continue
+        reason = _non_numeric_column(row, 13)
+        if reason is not None:
+            builder.skip(line_no, "bus", reason, " ".join(row))
             continue
 
         bus_id = int(row[0])
@@ -336,7 +404,9 @@ def _parse_bus_section(
     return buses, loads, shunts
 
 
-def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator]:
+def _parse_gen_section(
+    rows: list[tuple[int, list[str]]], base_mva: float, builder: ParseReportBuilder
+) -> list[Generator]:
     """Parse MATPOWER generator data section.
 
     MATPOWER gen format columns (1-indexed):
@@ -363,8 +433,13 @@ def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator
     # Track gen_id per bus for multiple generators on same bus
     bus_gen_count: dict[int, int] = defaultdict(int)
 
-    for row in rows:
+    for line_no, row in rows:
         if len(row) < 10:
+            builder.skip(line_no, "gen", f"expected 10 columns, got {len(row)}", " ".join(row))
+            continue
+        reason = _non_numeric_column(row, 10)
+        if reason is not None:
+            builder.skip(line_no, "gen", reason, " ".join(row))
             continue
 
         bus_id = int(row[0])
@@ -403,7 +478,9 @@ def _parse_gen_section(rows: list[list[str]], base_mva: float) -> list[Generator
     return generators
 
 
-def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
+def _parse_branch_section(
+    rows: list[tuple[int, list[str]]], builder: ParseReportBuilder
+) -> list[Branch]:
     """Parse MATPOWER branch data section.
 
     MATPOWER branch format columns (1-indexed):
@@ -429,8 +506,13 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
     """
     branches: list[Branch] = []
 
-    for row in rows:
+    for line_no, row in rows:
         if len(row) < 13:
+            builder.skip(line_no, "branch", f"expected 13 columns, got {len(row)}", " ".join(row))
+            continue
+        reason = _non_numeric_column(row, 13)
+        if reason is not None:
+            builder.skip(line_no, "branch", reason, " ".join(row))
             continue
 
         from_bus = int(row[0])
@@ -482,7 +564,9 @@ def _parse_branch_section(rows: list[list[str]]) -> list[Branch]:
     return branches
 
 
-def _parse_gencost_section(rows: list[list[str]]) -> list[GeneratorCost]:
+def _parse_gencost_section(
+    rows: list[tuple[int, list[str]]], builder: ParseReportBuilder
+) -> list[GeneratorCost]:
     """Parse MATPOWER generator cost data section.
 
     MATPOWER gencost format columns (1-indexed):
@@ -503,8 +587,13 @@ def _parse_gencost_section(rows: list[list[str]]) -> list[GeneratorCost]:
     """
     costs: list[GeneratorCost] = []
 
-    for gen_index, row in enumerate(rows):
+    for gen_index, (line_no, row) in enumerate(rows):
         if len(row) < 4:
+            builder.skip(line_no, "gencost", f"expected 4 columns, got {len(row)}", " ".join(row))
+            continue
+        reason = _non_numeric_column(row, 4)
+        if reason is not None:
+            builder.skip(line_no, "gencost", reason, " ".join(row))
             continue
 
         model = int(row[0])

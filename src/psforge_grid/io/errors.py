@@ -20,8 +20,13 @@ Example:
 from __future__ import annotations
 
 
-class ParseError(Exception):
+class ParseError(ValueError):
     """Base class for every failure to read a power system data file.
+
+    Derives from ``ValueError`` on purpose. Before this hierarchy existed the
+    parsers raised bare ``ValueError``, and callers were told to catch it; code
+    written against that still works, while new code can catch the specific
+    subclass and read ``filepath`` and ``line_no`` off it.
 
     Attributes:
         filepath: The file being read, when the parser knew it.

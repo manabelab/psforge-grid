@@ -162,7 +162,7 @@ class System:
         return parse_raw(filepath, strict=strict)
 
     @classmethod
-    def from_matpower(cls, filepath: str | Path) -> System:
+    def from_matpower(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a MATPOWER .m file.
 
         Factory method for creating System instances from MATPOWER format
@@ -171,6 +171,7 @@ class System:
 
         Args:
             filepath: Path to the .m file
+            strict: Raise instead of skipping when any row cannot be read.
 
         Returns:
             System object containing all parsed power system data
@@ -191,10 +192,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.matpower_parser import parse_matpower
 
-        return parse_matpower(filepath)
+        return parse_matpower(filepath, strict=strict)
 
     @classmethod
-    def from_pop(cls, filepath: str | Path) -> System:
+    def from_pop(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a CPAT .pop file.
 
         Factory method for creating System instances from CPAT-GUI native
@@ -222,7 +223,7 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.pop_parser import parse_pop
 
-        return parse_pop(filepath)
+        return parse_pop(filepath, strict=strict)
 
     @classmethod
     def from_dss(cls, filepath: str | Path) -> System:
@@ -254,7 +255,7 @@ class System:
         return parse_dss(filepath)
 
     @classmethod
-    def from_dyna(cls, filepath: str | Path) -> System:
+    def from_dyna(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a CPAT dyna card format file.
 
         Factory method for creating System instances from CPAT Fortran
@@ -282,10 +283,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.dyna_parser import parse_dyna
 
-        return parse_dyna(filepath)
+        return parse_dyna(filepath, strict=strict)
 
     @classmethod
-    def from_json(cls, filepath: str | Path) -> System:
+    def from_json(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a psforge-grid JSON file.
 
         Factory method for loading System from psforge-grid native JSON
@@ -311,7 +312,7 @@ class System:
         """
         from psforge_grid.io.json_parser import parse_json
 
-        return parse_json(filepath)
+        return parse_json(filepath, strict=strict)
 
     # =========================================================================
     # Export methods (write to file)
@@ -1620,6 +1621,21 @@ class System:
             lines.append("### Missing Data:")
             for issue in missing:
                 lines.append(f"- {issue['message']}")
+
+        # Records the parser could not read. Without this the model below looks
+        # complete, and whatever reads it next analyses a grid that is missing
+        # pieces without knowing it.
+        if self.parse_report is not None and self.parse_report.skipped:
+            lines.append("")
+            lines.append("### Records Not Read:")
+            lines.append(
+                f"{self.parse_report.skipped_count} record(s) in the source file could not be "
+                "read and are absent from this model."
+            )
+            for record in self.parse_report.skipped[:10]:
+                lines.append(f"- {record.to_description()}")
+            if self.parse_report.skipped_count > 10:
+                lines.append(f"- ... and {self.parse_report.skipped_count - 10} more")
 
         return "\n".join(lines)
 

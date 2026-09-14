@@ -205,3 +205,140 @@ class TestParseReport:
         record = SkippedRecord(1, "BUS DATA", "reason", "x" * 500)
         assert len(record.raw_line) == 203
         assert record.raw_line.endswith("...")
+
+
+# A minimal MATPOWER case, used to corrupt one row at a time.
+MATPOWER_CASE = """\
+function mpc = tiny
+mpc.version = '2';
+mpc.baseMVA = 100.0;
+mpc.bus = [
+\t1\t3\t0.0\t0.0\t0.0\t0.0\t1\t1.0\t0.0\t230.0\t1\t1.1\t0.9;
+\t2\t1\t21.7\t12.7\t0.0\t0.0\t1\t1.0\t0.0\t230.0\t1\t1.1\t0.9;
+];
+mpc.gen = [
+\t1\t40.0\t10.0\t50.0\t-50.0\t1.0\t100.0\t1\t100.0\t0.0;
+];
+mpc.branch = [
+\t1\t2\t0.01938\t0.05917\t0.0528\t100.0\t0.0\t0.0\t0.0\t0.0\t1\t-360.0\t360.0;
+];
+"""
+
+PSFG_JSON = """\
+{
+  "metadata": {"format": "psforge-grid", "version": "1.0"},
+  "system": {"name": "tiny", "base_mva": 100.0},
+  "buses": [
+    {"bus_id": 1, "bus_type": 3, "base_kv": 230.0},
+    {"bus_id": 2, "bus_type": 1, "base_kv": 230.0, "no_such_field": 1}
+  ]
+}
+"""
+
+
+class TestOtherFormatsRefuseBadFiles:
+    """Every format reports failure the same way, whatever the format."""
+
+    @pytest.mark.parametrize(
+        ("suffix", "loader"),
+        [
+            (".raw", System.from_raw),
+            (".m", System.from_matpower),
+            (".psfg.json", System.from_json),
+        ],
+    )
+    def test_empty_file(self, tmp_path: Path, suffix: str, loader) -> None:  # noqa: ANN001
+        with pytest.raises(ParseError):
+            loader(_write(tmp_path, f"empty{suffix}", ""))
+
+    @pytest.mark.parametrize(
+        ("suffix", "loader"),
+        [
+            (".raw", System.from_raw),
+            (".m", System.from_matpower),
+            (".psfg.json", System.from_json),
+        ],
+    )
+    def test_content_of_another_format(self, tmp_path: Path, suffix: str, loader) -> None:  # noqa: ANN001
+        content = (FIXTURES / "ieee14.raw").read_text() if suffix != ".raw" else MATPOWER_CASE
+        with pytest.raises(ParseError):
+            loader(_write(tmp_path, f"alien{suffix}", content))
+
+
+class TestMatpowerRowsAreReported:
+    """A short MATPOWER row used to disappear between two element counts."""
+
+    def test_short_row_is_skipped_and_reported(self, tmp_path: Path) -> None:
+        broken = MATPOWER_CASE.replace(
+            "\t2\t1\t21.7\t12.7\t0.0\t0.0\t1\t1.0\t0.0\t230.0\t1\t1.1\t0.9;", "\t2\t1\t21.7;"
+        )
+        system = System.from_matpower(_write(tmp_path, "broken.m", broken))
+        assert len(system.buses) == 1
+        assert system.parse_report is not None
+        assert system.parse_report.skipped_count == 1
+        assert system.parse_report.skipped[0].section == "bus"
+        assert "13 columns" in system.parse_report.skipped[0].reason
+
+    def test_non_numeric_column_is_skipped_and_reported(self, tmp_path: Path) -> None:
+        broken = MATPOWER_CASE.replace("\t2\t1\t21.7\t", "\t2\tBROKEN\t21.7\t")
+        system = System.from_matpower(_write(tmp_path, "broken.m", broken))
+        assert len(system.buses) == 1
+        assert "not a number" in system.parse_report.skipped[0].reason
+
+    def test_clean_case_reports_clean(self, tmp_path: Path) -> None:
+        system = System.from_matpower(_write(tmp_path, "tiny.m", MATPOWER_CASE))
+        assert system.parse_report is not None
+        assert system.parse_report.is_clean
+        assert system.parse_report.records_read == 4  # 2 buses + 1 gen + 1 branch
+
+    def test_strict_raises(self, tmp_path: Path) -> None:
+        broken = MATPOWER_CASE.replace("\t2\t1\t21.7\t", "\t2\tBROKEN\t21.7\t")
+        with pytest.raises(MalformedRecordError):
+            System.from_matpower(_write(tmp_path, "broken.m", broken), strict=True)
+
+
+class TestJsonElementsAreReported:
+    """A JSON element whose fields do not match the model is named, not dropped."""
+
+    def test_unknown_field_is_reported_by_position(self, tmp_path: Path) -> None:
+        system = System.from_json(_write(tmp_path, "tiny.psfg.json", PSFG_JSON))
+        assert len(system.buses) == 1
+        assert system.parse_report is not None
+        assert system.parse_report.skipped[0].section == "buses[1]"
+
+    def test_invalid_json_names_the_line(self, tmp_path: Path) -> None:
+        with pytest.raises(FileFormatError, match="not valid JSON"):
+            System.from_json(_write(tmp_path, "bad.psfg.json", "{\n  'not': json,\n}"))
+
+
+class TestOpenDssLeavesTheWorkingDirectoryAlone:
+    """OpenDSS's Compile changes the process working directory; the parser restores it."""
+
+    def test_working_directory_is_preserved(self, tmp_path: Path) -> None:
+        import os
+
+        dss_path = tmp_path / "ieee14.dss"
+        System.from_raw(FIXTURES / "ieee14.raw").to_dss(dss_path)
+
+        before = os.getcwd()
+        System.from_dss(dss_path)
+        assert os.getcwd() == before
+
+
+class TestSkippedRecordsReachTheLlmContext:
+    """What the parser could not read must survive into the LLM-facing output."""
+
+    def test_context_names_the_missing_records(self, tmp_path: Path) -> None:
+        lines = (FIXTURES / "ieee14.raw").read_text().splitlines()
+        index = next(i for i, line in enumerate(lines) if line.strip().startswith("2,'Bus 2"))
+        lines[index] = ",".join(lines[index].split(",")[:3])
+        system = System.from_raw(_write(tmp_path, "t.raw", "\n".join(lines) + "\n"))
+
+        context = system.to_llm_context()
+        assert "Records Not Read:" in context
+        assert "1 record(s)" in context
+        assert "BUS DATA" in context
+
+    def test_clean_file_adds_no_section(self) -> None:
+        context = System.from_raw(FIXTURES / "ieee14.raw").to_llm_context()
+        assert "Records Not Read" not in context
