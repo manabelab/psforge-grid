@@ -367,10 +367,15 @@ def _parse_raw_impl(filepath: str | Path, *, strict: bool = False) -> System:
     return system
 
 
+#: Placeholder for the block after the header, whose identity is only known
+#: once a terminator names it.
+_PROVISIONAL = "__AFTER_HEADER__"
+
 #: Data blocks in the order PSS/E writes them. Only the first six are turned
 #: into elements; the rest are listed so that a terminator naming one of them
 #: moves the reader to the right place instead of losing everything after it.
 _BLOCK_LABELS: tuple[tuple[str, str], ...] = (
+    ("SYSTEM-WIDE DATA", "SYSTEM_WIDE_DATA"),
     ("BUS DATA", "BUS_DATA"),
     ("LOAD DATA", "LOAD_DATA"),
     ("FIXED SHUNT DATA", "FIXED_SHUNT_DATA"),
@@ -453,8 +458,10 @@ def _split_sections(lines: list[tuple[int, str]]) -> dict[str, list[tuple[int, s
             header_count += 1
             if header_count == 3:
                 sections["CASE_ID"] = case_id_lines
-                # v33 starts bus data straight after the header, with no marker
-                current_section = "BUS_DATA"
+                # What follows the header depends on the revision: bus data in
+                # v33, system-wide parameters in v34. Rather than guess, hold
+                # the lines until a terminator says which block just ended.
+                current_section = _PROVISIONAL
             continue
 
         line_upper = line.upper()
@@ -463,6 +470,8 @@ def _split_sections(lines: list[tuple[int, str]]) -> dict[str, list[tuple[int, s
             if current_section:
                 sections.setdefault(current_section, []).extend(current_lines)
                 current_lines = []
+                if current_section == _PROVISIONAL:
+                    pass  # renamed just below, once the terminator is read
             ended = current_section
             current_section = None
             # A terminator may name the next block ("BEGIN LOAD DATA"), name the
@@ -471,6 +480,12 @@ def _split_sections(lines: list[tuple[int, str]]) -> dict[str, list[tuple[int, s
                 if marker in line_upper:
                     ended = name
                     break
+            if ended is None or ended == _PROVISIONAL:
+                # Nothing named the block that just ended, so fall back to the
+                # v33 convention that bus data comes first.
+                ended = "BUS_DATA"
+            if _PROVISIONAL in sections:
+                sections[ended] = sections.pop(_PROVISIONAL) + sections.get(ended, [])
             if not any(marker in line_upper for marker, _ in markers):
                 current_section = _next_block(ended)
 

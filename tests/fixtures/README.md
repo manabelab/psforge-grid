@@ -56,6 +56,29 @@ This directory contains test files for the psforge-grid parsers (PSS/E RAW, MATP
 | Total Generation | ~4374 MW |
 | Total Load | ~4242 MW |
 
+### 39bus.raw - New England 39-Bus System (PSS/E v34 format)
+
+- **Source**: https://github.com/NatLabRockies/ParaEMT_public `models/39bus_psse/39bus.raw`
+- **Terms**: BSD 3-Clause. See `NOTICE.md` in this directory -- the notice must travel with the file.
+- **Format**: PSS/E v34, written by `PSS(R)E-34.8` on 2022-12-09
+- **Description**: The only v34 fixture, and the only one written by PSS/E itself. Tests that read
+  only files psforge wrote cannot show that psforge reads what other tools produce. It also carries
+  a v34 `SYSTEM-WIDE DATA` block (GENERAL / GAUSS / NEWTON / ADJUST / TYSL / RATING), which no other
+  fixture has.
+
+| Component | Count |
+|-----------|-------|
+| Buses | 39 (1 slack / 9 PV / 29 PQ) |
+| Generators | 10 |
+| Loads | 19 |
+| Branches | 46 (34 lines + 12 transformers) |
+| Shunts | 2 |
+| Base MVA | 100.0 |
+| Total Load | ~6150 MW |
+
+Note: every bus declares `BASKV = 1.0`; the model is expressed in per-unit. That is what the file
+says, not a parsing artefact.
+
 ### WEST10peak.pop - IEEJ WEST 10-Machine Model (CPAT .pop format)
 
 - **Source**: CPAT-GUI standard model data (IEEJ WEST 10-machine peak-load model)

@@ -287,7 +287,9 @@ class TestMatpowerRowsAreReported:
         broken = MATPOWER_CASE.replace("\t2\t1\t21.7\t", "\t2\tBROKEN\t21.7\t")
         system = System.from_matpower(_write(tmp_path, "broken.m", broken))
         assert len(system.buses) == 1
-        assert "not a number" in system.parse_report.skipped[0].reason
+        report = system.parse_report
+        assert report is not None
+        assert "not a number" in report.skipped[0].reason
 
     def test_clean_case_reports_clean(self, tmp_path: Path) -> None:
         system = System.from_matpower(_write(tmp_path, "tiny.m", MATPOWER_CASE))
@@ -451,3 +453,63 @@ class TestPopArchivesAreReported:
     def test_file_that_is_not_an_archive_is_refused(self, tmp_path: Path) -> None:
         with pytest.raises(FileFormatError):
             System.from_pop(_write(tmp_path, "notzip.pop", "this is not a ZIP archive"))
+
+
+class TestThirdPartyRawIsReadable:
+    """psforge must read RAW files other tools wrote, not only its own output.
+
+    ``39bus.raw`` was written by PSS/E 34.8 itself and is the only v34 file in
+    the fixtures. Generating a file with psforge's own writer cannot stand in
+    for it: the writer produces none of the dialect variations that real files
+    carry, so a suite built only on generated input proves nothing about them.
+    See ``tests/fixtures/NOTICE.md`` for its terms.
+    """
+
+    THIRD_PARTY_V34 = FIXTURES / "39bus.raw"
+
+    def test_reads_without_skipping_anything(self) -> None:
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        assert system.parse_report is not None
+        assert system.parse_report.is_clean, system.parse_report.to_description()
+        assert system.parse_report.records_read == 116
+
+    def test_element_counts(self) -> None:
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        assert len(system.buses) == 39
+        assert len(system.generators) == 10
+        assert len(system.loads) == 19
+        assert len(system.branches) == 46
+        assert len(system.shunts) == 2
+
+    def test_bus_types(self) -> None:
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        assert [bus.bus_id for bus in system.get_slack_buses()] == [39]
+        assert len(system.get_pv_buses()) == 9
+        assert len(system.get_pq_buses()) == 29
+
+    def test_transformers_are_separated_from_lines(self) -> None:
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        transformers = [branch for branch in system.branches if branch.is_transformer]
+        assert len(transformers) == 12
+        assert len(system.branches) - len(transformers) == 34
+
+    def test_system_wide_block_is_not_read_as_buses(self) -> None:
+        """v34 puts a SYSTEM-WIDE DATA block between the header and the buses.
+
+        Those records (GENERAL, GAUSS, NEWTON, ADJUST, TYSL, RATING x12) used to
+        land in the bus block, where they were dropped without trace. Reading
+        them as buses would also inflate the bus count.
+        """
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        assert len(system.buses) == 39
+        report = system.parse_report
+        assert report is not None
+        assert not any("GENERAL" in record.raw_line for record in report.skipped)
+
+    def test_generation_covers_load(self) -> None:
+        """A sanity check on magnitudes: ~6.15 GW of load in this model."""
+        system = System.from_raw(self.THIRD_PARTY_V34)
+        p_load = sum(load.p_load for load in system.loads) * system.base_mva
+        p_gen = sum(gen.p_gen for gen in system.generators) * system.base_mva
+        assert p_load == pytest.approx(6150.5, rel=1e-4)
+        assert p_gen > p_load
