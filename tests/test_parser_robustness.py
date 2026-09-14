@@ -22,6 +22,10 @@ from psforge_grid.io.errors import (
 )
 from psforge_grid.io.parse_report import ParseReport, SkippedRecord
 from psforge_grid.io.raw_parser import _split_fields
+from psforge_grid.models.branch import Branch
+from psforge_grid.models.bus import Bus
+from psforge_grid.models.generator import Generator
+from psforge_grid.models.load import Load
 from psforge_grid.models.system import System
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -342,3 +346,108 @@ class TestSkippedRecordsReachTheLlmContext:
     def test_clean_file_adds_no_section(self) -> None:
         context = System.from_raw(FIXTURES / "ieee14.raw").to_llm_context()
         assert "Records Not Read" not in context
+
+
+def _tiny_system() -> System:
+    """Build a two-bus system in memory.
+
+    Used to generate CPAT-format test decks with psforge's own writers, so that
+    the CPAT parsers can be exercised without shipping CPAT-derived data. This
+    checks the robustness contract -- what happens to a damaged record -- not
+    fidelity to CPAT's dialect, which needs real CPAT files and lives in the
+    round-trip tests.
+    """
+    return System(
+        buses=[
+            Bus(1, bus_type=3, base_kv=230.0, v_magnitude=1.0),
+            Bus(2, bus_type=1, base_kv=230.0, v_magnitude=1.0),
+        ],
+        branches=[Branch(1, 2, r_pu=0.01, x_pu=0.1, b_pu=0.02)],
+        generators=[Generator(bus_id=1, p_gen=0.5, q_gen=0.1, v_setpoint=1.0)],
+        loads=[Load(bus_id=2, p_load=0.4, q_load=0.1)],
+        base_mva=100.0,
+        name="TINY",
+    )
+
+
+class TestDynaCardsAreReported:
+    """CPAT dyna decks generated here; no CPAT-derived data is needed."""
+
+    @staticmethod
+    def _deck(tmp_path: Path) -> Path:
+        path = tmp_path / "tiny.dyna"
+        _tiny_system().to_dyna(path)
+        return path
+
+    def test_generated_deck_reads_back_cleanly(self, tmp_path: Path) -> None:
+        system = System.from_dyna(self._deck(tmp_path))
+        assert len(system.buses) == 2
+        assert system.parse_report is not None
+        assert system.parse_report.is_clean
+
+    def test_truncated_node_card_is_reported(self, tmp_path: Path) -> None:
+        """An N card cut short loses its node number and used to vanish."""
+        path = self._deck(tmp_path)
+        lines = path.read_text().splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("N        2"))
+        lines[index] = "N   "
+        path.write_text("\n".join(lines) + "\n")
+
+        system = System.from_dyna(path)
+        assert len(system.buses) == 1
+        assert system.parse_report is not None
+        assert system.parse_report.skipped_count == 1
+        assert system.parse_report.skipped[0].section == "N"
+        assert "node number" in system.parse_report.skipped[0].reason
+
+    def test_unrecognised_card_is_reported(self, tmp_path: Path) -> None:
+        path = self._deck(tmp_path)
+        lines = path.read_text().splitlines()
+        lines.insert(7, "ZZ  this card belongs to no section")
+        path.write_text("\n".join(lines) + "\n")
+
+        system = System.from_dyna(path)
+        assert len(system.buses) == 2
+        assert system.parse_report is not None
+        assert any("unrecognised card" in record.reason for record in system.parse_report.skipped)
+
+    def test_strict_raises_on_a_damaged_card(self, tmp_path: Path) -> None:
+        path = self._deck(tmp_path)
+        lines = path.read_text().splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("N        2"))
+        lines[index] = "N   "
+        path.write_text("\n".join(lines) + "\n")
+
+        with pytest.raises(MalformedRecordError):
+            System.from_dyna(path, strict=True)
+
+    def test_empty_deck_is_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(FileFormatError):
+            System.from_dyna(_write(tmp_path, "empty.dyna", ""))
+
+
+class TestPopArchivesAreReported:
+    """CPAT .pop archives generated here; no CPAT-derived data is needed."""
+
+    @staticmethod
+    def _archive(tmp_path: Path) -> Path:
+        path = tmp_path / "tiny.pop"
+        _tiny_system().to_pop(path)
+        return path
+
+    def test_generated_archive_reads_back_cleanly(self, tmp_path: Path) -> None:
+        system = System.from_pop(self._archive(tmp_path))
+        assert len(system.buses) == 2
+        assert system.parse_report is not None
+        assert system.parse_report.is_clean
+
+    def test_truncated_archive_is_refused(self, tmp_path: Path) -> None:
+        """A damaged ZIP used to escape as BadZipFile from inside the parser."""
+        path = self._archive(tmp_path)
+        path.write_bytes(path.read_bytes()[: len(path.read_bytes()) // 2])
+        with pytest.raises(FileFormatError):
+            System.from_pop(path)
+
+    def test_file_that_is_not_an_archive_is_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(FileFormatError):
+            System.from_pop(_write(tmp_path, "notzip.pop", "this is not a ZIP archive"))
