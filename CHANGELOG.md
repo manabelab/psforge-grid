@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matching `System` facade methods, and their factory entries.
   `ParserFactory.available_formats()` now returns `["raw", "matpower", "dss", "json"]`.
 - The test fixtures for those two formats.
+- Three RAW test fixtures whose provenance could not be established:
+  `ieee9.raw`, the previous `ieee14.raw`, and `ieee118_powsybl.raw`. Each was a
+  byte-for-byte copy taken from a repository with no `LICENSE` file, and each
+  held University of Washington data that the repository redistributed without
+  holding. `tests/fixtures/NOTICE.md` records which file came from where and why
+  it went, so they do not get restored by accident. This affects the test suite
+  only -- no fixture has ever been included in the sdist or wheel.
 
 ### Changed
 
@@ -45,6 +52,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A RAW file with mixed delimiters raised `ZeroDivisionError` from inside the parser.
+- **PSS/E RAW writer: the generator record omitted `RMPCT`**, so `PT` and `PB` were
+  written one field early. Every generator record psforge has ever written declares
+  the machine's rated output where a percentage belongs. A round trip could not catch
+  it, because the parser does not read `PT` or `PB` back; a regression test now checks
+  the field positions against the order `tests/fixtures/39bus.raw` states in its own
+  header.
+
+### Changed (test data)
+
+- `ieee14.raw` and the new `ieee118.raw` are written by psforge's own `RawWriter`
+  from the pglib-opf MATPOWER cases, which carry the University of Washington data
+  under **CC BY 4.0**. They inherit pglib's unsolved starting point: bus voltages are
+  flat and generation does not cover load. `39bus.raw` (BSD 3-Clause, written by
+  PSS/E 34.8 itself) is the fixture for anything needing a solved operating point,
+  and is what shows the parser reads files other tools produce.
+- `tests/fixtures/NOTICE.md` now covers every file in that directory, recording both
+  the terms it was obtained under and who created the model it holds.
+- **`LICENSE` now states its scope.** It claimed no limit, so read against the
+  repository it purported to place third-party test data under this project's dual
+  licence -- the same fault this release removes fixtures for. It cannot: the MIT tier
+  would let a user strip attribution that BSD 3-Clause and CC BY 4.0 require be kept,
+  and the Commercial tier would charge for use those licences already grant free. The
+  policy now says it covers the software, which is the whole of what the published
+  package contains, and points at `NOTICE.md` for the fixtures. No licence granted over
+  psforge's own code changed.
+- The `raw_parser` module docstring records how the parser was in fact derived, and
+  states plainly that neither the Siemens PSS/E Program Operation Manual nor a PSS/E
+  licence was used. The manual has been dropped from the fixture README's references,
+  where it was listed as a source it never was.
 
 ## [0.9.1] - 2026-07-16
 

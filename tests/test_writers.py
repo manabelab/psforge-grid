@@ -177,12 +177,35 @@ class TestRawWriterRoundtrip:
         system2 = System.from_raw(output)
         assert_systems_approx_equal(system1, system2)
 
-    def test_ieee9_roundtrip(self, tmp_path: Path) -> None:
-        system1 = System.from_raw(FIXTURES / "ieee9.raw")
-        output = tmp_path / "ieee9_out.raw"
+    def test_39bus_roundtrip(self, tmp_path: Path) -> None:
+        system1 = System.from_raw(FIXTURES / "39bus.raw")
+        output = tmp_path / "39bus_out.raw"
         system1.to_raw(output)
         system2 = System.from_raw(output)
         assert_systems_approx_equal(system1, system2)
+
+    def test_generator_record_keeps_rmpct_between_stat_and_pt(self, tmp_path: Path) -> None:
+        """RMPCT must occupy field 15, or PT and PB are read one slot early.
+
+        A round trip cannot catch this: the parser does not read PT or PB, so
+        a shifted field is invisible until another tool reads the file. The
+        field order is the one `39bus.raw` states in its own header comment:
+        ``GTAP, STAT, RMPCT, PT, PB``.
+        """
+        system = System.from_raw(FIXTURES / "39bus.raw")
+        output = tmp_path / "rmpct.raw"
+        system.to_raw(output)
+
+        block = output.read_text().split("BEGIN GENERATOR DATA")[1]
+        record = block.splitlines()[1]
+        fields = [f.strip() for f in record.split(",")]
+
+        assert float(fields[14]) == 1.0  # STAT
+        assert float(fields[15]) == 100.0  # RMPCT
+        # PT: the writer's "no limit" fallback, because the parser does not
+        # read PT back from the source file -- p_max is None here.
+        assert float(fields[16]) == 9999.0
+        assert float(fields[17]) == 0.0  # PB
 
     def test_facade_to_file(self, tmp_path: Path) -> None:
         """Test System.to_file() auto-detection for .raw."""

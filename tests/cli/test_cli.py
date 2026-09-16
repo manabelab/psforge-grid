@@ -26,7 +26,7 @@ def strip_ansi(text: str) -> str:
 # Path to test fixtures
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 IEEE14_RAW = FIXTURES_DIR / "ieee14.raw"
-IEEE9_RAW = FIXTURES_DIR / "ieee9.raw"
+NEWENGLAND39_RAW = FIXTURES_DIR / "39bus.raw"
 IEEE14_MATPOWER = FIXTURES_DIR / "pglib_opf_case14_ieee.m"
 IEEE14_JSON = FIXTURES_DIR / "ieee14.psfg.json"
 
@@ -507,7 +507,7 @@ class TestDiffCommand:
 
     def test_diff_different_systems(self) -> None:
         """Diff two different systems shows count differences."""
-        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE9_RAW), "-f", "json"])
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(NEWENGLAND39_RAW), "-f", "json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["summary"]["total_changes"] > 0

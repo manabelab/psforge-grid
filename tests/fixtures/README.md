@@ -4,57 +4,54 @@ This directory contains test files for the psforge-grid parsers (PSS/E RAW, MATP
 
 ## Data Sources
 
-### ieee9.raw - IEEE 9-Bus System (v34 format)
-
-- **Source**: GitHub - todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
-- **URL**: https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
-- **Format**: PSS/E v34
-- **Description**: IEEE 9-bus test system with 3 generators, 3 loads, 6 transmission lines, and 3 transformers
-
-| Component | Count |
-|-----------|-------|
-| Buses | 9 |
-| Generators | 3 |
-| Loads | 3 |
-| Branches | 9 (6 lines + 3 transformers) |
-| Total Generation | ~320 MW |
-| Total Load | 315 MW |
-
 ### ieee14.raw - IEEE 14-Bus System (v33 format)
 
-- **Source**: ITI/models repository (University of Washington Archive)
-- **URL**: https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/models/ieee-14-bus.raw
+- **Source**: written by psforge's own `RawWriter` from `pglib_opf_case14_ieee.m`
+  (**CC BY 4.0**, Copyright (c) 1999 Richard D. Christie, University of Washington).
+  Regenerate by re-running that conversion; see `NOTICE.md`, which records exactly
+  what the conversion changes.
 - **Format**: PSS/E v33
-- **Original Date**: August 19, 1993
-- **Description**: Classic IEEE 14-bus test system with 5 generators, 11 loads, 17 transmission lines, 3 transformers, and 1 shunt capacitor
+- **Description**: Classic IEEE 14-bus test system with 5 generators, 11 loads,
+  17 transmission lines, 3 transformers, and 1 shunt capacitor
 
 | Component | Count |
 |-----------|-------|
-| Buses | 14 |
+| Buses | 14 (1 slack / 4 PV / 9 PQ) |
 | Generators | 5 |
 | Loads | 11 |
 | Branches | 20 (17 lines + 3 transformers) |
 | Shunts | 1 (19 MVAr capacitor at bus 9) |
-| Total Generation | ~272 MW |
-| Total Load | ~259 MW |
+| Total Generation | 199.5 MW |
+| Total Load | 259.0 MW |
 
-### ieee118_powsybl.raw - IEEE 118-Bus System (v33 format, alternative source)
+Two things about this file are inherited from pglib and are **not** parsing
+artefacts. Generation does **not** cover load: the pglib cases are OPF inputs,
+so the dispatch is a starting point, not a solved power flow, and bus voltages
+are flat at 1.0 pu. And every bus declares `BASKV = 1.0`, because pglib's 14-bus
+file normalises base voltages away. Neither was filled in from another source.
+Tests needing a solved operating point use `39bus.raw`.
 
-- **Source**: powsybl/powsybl-distribution repository
-- **URL**: https://github.com/powsybl/powsybl-distribution/blob/main/resources/PSSE/IEEE_118_bus.raw
+### ieee118.raw - IEEE 118-Bus System (v33 format)
+
+- **Source**: written by psforge's own `RawWriter` from `pglib_opf_case118_ieee.m`
+  (**CC BY 4.0**, same copyright holder as above).
 - **Format**: PSS/E v33
-- **Original Date**: August 25, 1993
-- **Description**: Large-scale IEEE 118-bus test system used for parser tolerance verification
+- **Description**: The multi-voltage-level fixture. Unlike pglib's 14-bus case,
+  its 118-bus case carries real base voltages, taken by pglib from the PSAP
+  format file on the same University of Washington site.
 
 | Component | Count |
 |-----------|-------|
-| Buses | 118 |
+| Buses | 118 (1 slack / 53 PV / 64 PQ) |
 | Generators | 54 |
 | Loads | 99 |
-| Branches | 186 |
+| Branches | 186 (177 lines + 9 transformers) |
 | Shunts | 14 |
-| Total Generation | ~4374 MW |
-| Total Load | ~4242 MW |
+| Voltage Levels | 138, 161, 345 kV |
+| Total Generation | 3257.5 MW |
+| Total Load | 4242.0 MW |
+
+As with the 14-bus case, the dispatch is pglib's unsolved starting point.
 
 ### 39bus.raw - New England 39-Bus System (PSS/E v34 format)
 
@@ -109,7 +106,7 @@ The following `.psfg.json` files are generated from the source fixtures above an
 
 #### ieee14.psfg.json - IEEE 14-Bus System
 
-- **Source**: Generated from `ieee14.raw`
+- **Source**: Generated from `ieee14.raw` (and so CC BY 4.0 data; see `NOTICE.md`)
 - **Format**: psforge-grid JSON v1.0
 - **Description**: JSON representation of the IEEE 14-bus system with all buses, branches, generators, loads, and shunts
 
@@ -120,18 +117,6 @@ The following `.psfg.json` files are generated from the source fixtures above an
 | Loads | 11 |
 | Branches | 20 |
 | Shunts | 1 |
-
-#### ieee9.psfg.json - IEEE 9-Bus System
-
-- **Source**: Generated from `ieee9.raw`
-- **Format**: psforge-grid JSON v1.0
-
-| Component | Count |
-|-----------|-------|
-| Buses | 9 |
-| Generators | 3 |
-| Loads | 3 |
-| Branches | 9 |
 
 #### ieee14_contingencies.psfg.json - N-1 Contingency Scenarios
 
@@ -164,8 +149,19 @@ The psforge-grid `.psfg.json` format uses JSON with explicit metadata:
 
 The scenario format (`"format": "psforge-grid-scenario"`) references a base case `.psfg.json` file and defines differential modifications (target + match + set) to generate multiple System variants.
 
+## Licensing
+
+Every file here is covered by `NOTICE.md`, which records both the terms each file
+was obtained under and who created the model it holds. **Nothing may be added to
+this directory until its entry there is written.** Three fixtures were removed in
+the 0.10.0 cycle because their provenance could not be established; `NOTICE.md`
+names them and why, so they do not get restored by accident.
+
 ## References
 
-- IEEE Test Systems: https://icseg.iti.illinois.edu/power-cases/
+- pglib-opf: https://github.com/power-grid-lib/pglib-opf
 - Texas A&M Electric Grid Test Case Repository: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/
-- PSS/E Documentation: Siemens PTI PSS/E Program Operation Manual
+
+The Siemens PTI PSS/E Program Operation Manual is deliberately **not** listed:
+it was not used, and neither was a PSS/E licence. How the parser was in fact
+derived is recorded in the module docstring of `psforge_grid/io/raw_parser.py`.

@@ -5,6 +5,33 @@ Copyright (c) 2026 Manabe Lab LLC
 This software is provided under a dual-licensing model to support the
 educational community while sustaining the project's development.
 
+
+Scope
+
+This policy covers the software in this repository: the contents of src/,
+the test code in tests/, and the project's own documentation. That is what
+Manabe Lab LLC holds the copyright in, and it is the whole of what the
+published sdist and wheel contain.
+
+It does not cover the third-party test data in tests/fixtures/. Those files
+are other people's copyright and carry their own terms, recorded file by file
+in tests/fixtures/NOTICE.md:
+
+  - Creative Commons Attribution 4.0 for the pglib-opf cases, and for
+    ieee14.raw, ieee118.raw and ieee14.psfg.json, which are converted from
+    them;
+  - BSD 3-Clause for 39bus.raw;
+  - the Texas A&M Electric Grid Test Case Repository's terms for
+    ACTIVSg2000.raw.
+
+Nothing in this policy grants, withholds or restricts any right in those
+files. In particular, neither the MIT tier nor the Commercial tier below
+applies to them: each of those licences already permits commercial use, and
+each requires that its attribution stay with the file. Do not remove the
+copyright and credit lines those files carry.
+
+No file from tests/fixtures/ is included in the published package.
+
 1. Individual & Educational Use (MIT License)
 
 If you are a student, researcher, or individual using this for non-commercial

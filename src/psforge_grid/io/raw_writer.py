@@ -105,11 +105,17 @@ class RawWriter(IWriter):
             p_max_mw = (gen.p_max * base_mva) if gen.p_max is not None else 9999.0
             p_min_mw = (gen.p_min * base_mva) if gen.p_min is not None else 0.0
             gen_id = f"'{gen.gen_id}'"
+            # Field order (v33): I, ID, PG, QG, QT, QB, VS, IREG, MBASE, ZR, ZX,
+            # RT, XT, GTAP, STAT, RMPCT, PT, PB. RMPCT sits between STAT and PT
+            # and must be written even though psforge does not model it --
+            # omitting it shifts PT into the RMPCT slot, so another tool reads
+            # the machine's rated output as a percentage. 100.0 is PSS/E's own
+            # default, and is what the real files in tests/fixtures/ carry.
             lines.append(
                 f" {gen.bus_id},{gen_id},{p_mw:.6f},{q_mvar:.6f},"
                 f"{q_max_mvar:.6f},{q_min_mvar:.6f},"
                 f"{gen.v_setpoint:.6f},0,{gen.mbase:.1f},"
-                f"0.0,1.0,0.0,0.0,1.0,{gen.status},"
+                f"0.0,1.0,0.0,0.0,1.0,{gen.status},100.0,"
                 f"{p_max_mw:.6f},{p_min_mw:.6f}"
             )
         lines.append("0 / END OF GENERATOR DATA, BEGIN BRANCH DATA")

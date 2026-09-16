@@ -145,15 +145,15 @@ class TestTruncatedRecords:
     @staticmethod
     def _ieee14_with_truncated_bus2(tmp_path: Path) -> Path:
         lines = (FIXTURES / "ieee14.raw").read_text().splitlines()
-        index = next(i for i, line in enumerate(lines) if line.strip().startswith("2,'Bus 2"))
+        index = next(i for i, line in enumerate(lines) if line.strip().startswith("2,"))
         lines[index] = ",".join(lines[index].split(",")[:3])
         return _write(tmp_path, "truncated.raw", "\n".join(lines) + "\n")
 
     def test_truncated_bus_is_not_fabricated(self, tmp_path: Path) -> None:
-        """Bus 2 of ieee14 is a PV bus at 1.045 pu.
+        """Bus 2 of ieee14 is a PV bus (IDE=2).
 
-        Truncating its record before IDE used to produce a PQ bus at 1.0 pu --
-        a different element, created without a word. It must be skipped instead.
+        Truncating its record before IDE used to produce a PQ bus -- a
+        different element, created without a word. It must be skipped instead.
         """
         system = System.from_raw(self._ieee14_with_truncated_bus2(tmp_path))
         assert not any(bus.bus_id == 2 for bus in system.buses)
@@ -332,7 +332,7 @@ class TestSkippedRecordsReachTheLlmContext:
 
     def test_context_names_the_missing_records(self, tmp_path: Path) -> None:
         lines = (FIXTURES / "ieee14.raw").read_text().splitlines()
-        index = next(i for i, line in enumerate(lines) if line.strip().startswith("2,'Bus 2"))
+        index = next(i for i, line in enumerate(lines) if line.strip().startswith("2,"))
         lines[index] = ",".join(lines[index].split(",")[:3])
         system = System.from_raw(_write(tmp_path, "t.raw", "\n".join(lines) + "\n"))
 

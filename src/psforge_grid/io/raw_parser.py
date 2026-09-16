@@ -14,12 +14,39 @@ Architecture:
 
     Both use the same parsing logic internally.
 
+How this parser was derived:
+    Neither the Siemens PSS/E Program Operation Manual nor a PSS/E licence was
+    used to write it. Nothing here is transcribed from Siemens documentation.
+
+    The v34 support was built by running the parser against published real
+    files and correcting what it got wrong, rather than from a specification;
+    the primary record of that work is the project note
+    ``01_psforge_gridの設計方針/05_追加調査報告書_RAWパーサー動作確認.md``.
+    Several record layouts are documented by the fixtures themselves: a v34
+    file written by PSS/E carries ``@!`` header comments naming each field, and
+    ``tests/fixtures/39bus.raw`` is the reference used here for the generator
+    and branch records.
+
+    The origin of the v33 field offsets is no longer recorded and is not
+    guessed at here. Checking them against powsybl's public PSS/E
+    documentation, and recording that comparison, is outstanding work.
+
 Test Data Sources:
-    - IEEE 9-bus (v34): https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-
-    - IEEE 14-bus (v33): https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/
+    Terms for every file are recorded in ``tests/fixtures/NOTICE.md``; the
+    notices travel with the files.
+
+    - New England 39-bus (v34): NatLabRockies/ParaEMT_public, BSD 3-Clause.
+      Written by PSS/E 34.8 itself -- the reference for what a real v34 file
+      looks like.
+    - Synthetic 2000-bus (v33): Texas A&M Electric Grid Test Case Repository.
+    - IEEE 14-bus and 118-bus (v33): written by this package's own RawWriter
+      from the pglib-opf MATPOWER cases, which carry the University of
+      Washington data under CC BY 4.0. Being psforge's own output, they cannot
+      show that the parser reads what other tools produce -- that is what the
+      two files above are for.
 
 References:
-    - IEEE Test Systems: https://icseg.iti.illinois.edu/power-cases/
+    - pglib-opf: https://github.com/power-grid-lib/pglib-opf
     - Texas A&M Repository: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/
 
 IDE Navigation Tips:

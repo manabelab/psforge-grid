@@ -3,7 +3,7 @@
 Provides common fixtures used across multiple test modules:
 - ``fixtures_dir``: Path to the ``tests/fixtures/`` directory
 - ``ieee14_system``: IEEE 14-bus system parsed from RAW (module-scoped)
-- ``ieee9_system``: IEEE 9-bus system parsed from RAW (module-scoped)
+- ``newengland39_system``: New England 39-bus system parsed from RAW (module-scoped)
 """
 
 from __future__ import annotations
@@ -34,10 +34,12 @@ def ieee14_system() -> System:
 
 
 @pytest.fixture(scope="module")
-def ieee9_system() -> System:
-    """Load IEEE 9-bus system from RAW file (module-scoped).
+def newengland39_system() -> System:
+    """Load the New England 39-bus system from RAW file (module-scoped).
 
-    Reused across tests within the same module for efficiency.
-    Do not mutate the returned System in tests; create a copy if needed.
+    This is the v34 fixture, and the only one written by PSS/E itself, so it
+    is what the v34 tests read. Reused across tests within the same module for
+    efficiency. Do not mutate the returned System in tests; create a copy if
+    needed.
     """
-    return System.from_raw(FIXTURES_DIR / "ieee9.raw")
+    return System.from_raw(FIXTURES_DIR / "39bus.raw")
