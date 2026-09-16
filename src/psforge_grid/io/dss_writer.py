@@ -379,7 +379,7 @@ class DSSWriter(IWriter):
         - No loads (no-load voltage condition)
         - Transformers with proper winding connections for zero-sequence
 
-        This mirrors CPAT's T-method setup:
+        The impedance set follows the usual short-circuit study convention:
         - Z1: gen_reactance (default Xd') for positive-sequence
         - Z2: defaults to Z1 in OpenDSS (not explicitly output)
         - Z0: X0 with fallback for zero-sequence
@@ -395,14 +395,14 @@ class DSSWriter(IWriter):
         Args:
             system: Power system data to export
             gen_reactance: Generator reactance type for Z1.
-                "xdp" (default, CPAT compatible): Xd' (transient)
+                "xdp" (default): Xd' (transient)
                 "xdpp": Xd'' (sub-transient)
                 "xd": Xd (synchronous)
             gen_x0_fallback: Fallback when generator X0 is None.
-                "xd" (default, CPAT compatible): use Xd as X0
+                "xd" (default): use Xd as X0
                 "xdp": use Xd', "xdpp": use Xd''
             zero_seq_line_factor: Z0/Z1 ratio for lines without Z0 data.
-                Default 2.0 matches CPAT manual p.86 (Zo=2*Z1).
+                Default 2.0, the customary Zo = 2 * Z1 estimate for overhead lines.
 
         Returns:
             OpenDSS script string for fault study
@@ -617,7 +617,7 @@ class DSSWriter(IWriter):
         conn = br.winding_connection
         if conn is None:
             return False
-        # PopParser format: "wye-grounded/wye-grounded"
+        # Parser format: "wye-grounded/wye-grounded"
         if "/" in conn:
             parts = conn.split("/")
         else:
@@ -728,7 +728,7 @@ class DSSWriter(IWriter):
         """
         z_base = bus_kv**2 / gen.mbase  # ohm per p.u. on machine base
 
-        # Z1: positive-sequence (Xd' for CPAT)
+        # Z1: positive-sequence (Xd' by default)
         x1_pu = gen.get_fault_reactance(gen_reactance) or 0.01
         ra = gen.get_armature_resistance()
         r1_pu = ra if ra is not None else 0.0
@@ -765,7 +765,7 @@ class DSSWriter(IWriter):
         """Convert a transmission line to OpenDSS Line with zero-sequence parameters.
 
         When explicit Z0 data (r0_pu, x0_pu) is available, uses it directly.
-        Otherwise, estimates Z0 = factor * Z1 (CPAT default: factor=2.0).
+        Otherwise, estimates Z0 = factor * Z1 (default: factor=2.0).
         """
         from_kv = bus_kv.get(br.from_bus, 1.0)
         z_base = from_kv**2 / base_mva

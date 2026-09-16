@@ -14,7 +14,7 @@ Coordinate Systems:
         Units: degrees. CRS required (default: EPSG:4326 / WGS84).
 
 Normalization (schematic only):
-    When importing from external formats (CPAT .pop, OpenDSS, etc.), coordinates
+    When importing from external formats (OpenDSS, etc.), coordinates
     are normalized so that the short edge of the bounding box maps to
     ``normalization_ref`` (default: 1920, aligned with Full HD resolution).
     The long edge scales proportionally to preserve aspect ratio.
@@ -48,7 +48,7 @@ class BusPosition:
         x: X coordinate (right/east is positive).
         y: Y coordinate (up/north is positive).
         points: Optional list of (x, y) points for busbar rendering.
-            Used when a bus is drawn as a line segment (e.g., CPAT .pop format).
+            Used when a bus is drawn as a line segment, as some formats do.
             None means the bus is drawn as a single point at (x, y).
     """
 
@@ -114,7 +114,7 @@ class ImportMeta:
     system.
 
     Attributes:
-        source_format: Original file format ("pop", "dss", etc.).
+        source_format: Original file format ("dss", etc.).
         scale: Scale factor applied during normalization.
         offset_x: X offset applied during normalization.
         offset_y: Y offset applied during normalization.

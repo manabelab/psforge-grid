@@ -3,7 +3,7 @@
 Tests verify that:
 1. DSSWriter generates valid OpenDSS scripts that can be compiled
 2. Round-trip (System → .dss → DSSParser → System) preserves data
-3. Cross-format conversion works (RAW/MATPOWER/Pop → .dss)
+3. Cross-format conversion works (RAW/MATPOWER -> .dss)
 """
 
 from __future__ import annotations
@@ -278,15 +278,6 @@ class TestDSSCompilation:
         system = System.from_matpower(FIXTURES / "pglib_opf_case14_ieee.m")
         error = self._compile_system(system)
         assert error is None, f"case14_ieee compilation failed: {error}"
-
-    @pytest.mark.skipif(
-        not (FIXTURES / "WEST10peak.pop").exists(),
-        reason="WEST10peak.pop not available",
-    )
-    def test_compile_west10(self):
-        system = System.from_pop(FIXTURES / "WEST10peak.pop")
-        error = self._compile_system(system)
-        assert error is None, f"WEST10peak compilation failed: {error}"
 
 
 # ============================================================================

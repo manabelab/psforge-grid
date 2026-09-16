@@ -194,6 +194,5 @@ wiki/
 # its reason.
 uv.lock
 
-# CPAT-derived test data is not redistributed with this repository.
-# Keep local copies here; see tests/fixtures/README.md.
-tests/fixtures/cpat_local/
+# Data kept only on this machine and never committed.
+tests/fixtures/*_local/

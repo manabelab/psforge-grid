@@ -161,7 +161,8 @@ class Generator:
         """Get generator reactance for fault calculation.
 
         The T-method supports multiple generator reactance options.
-        Default is (Xd'' + Xq'')/2 as recommended by CPAT.
+        Default is (Xd'' + Xq'')/2, the usual estimate when the source data
+        does not give X2 directly.
 
         Args:
             xtype: Reactance type to use.

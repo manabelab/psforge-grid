@@ -3,11 +3,11 @@
 This module defines the System class as the central container for all power system components.
 
 Factory Methods (import):
-    - from_raw(), from_matpower(), from_pop(), from_dyna(): Create from specific formats
+    - from_raw(), from_matpower(), from_dss(), from_json(): Create from specific formats
     - from_file(): Create from any supported format (auto-detect)
 
 Export Methods (write):
-    - to_raw(), to_matpower(), to_pop(), to_dyna(): Write to specific formats
+    - to_raw(), to_matpower(), to_dss(), to_json(): Write to specific formats
     - to_file(): Write to any supported format (auto-detect)
 """
 
@@ -195,37 +195,6 @@ class System:
         return parse_matpower(filepath, strict=strict)
 
     @classmethod
-    def from_pop(cls, filepath: str | Path, *, strict: bool = False) -> System:
-        """Create a System from a CPAT .pop file.
-
-        Factory method for creating System instances from CPAT-GUI native
-        format (.pop = ZIP archive containing XML files).
-
-        Args:
-            filepath: Path to the .pop file
-
-        Returns:
-            System object containing all parsed power system data
-
-        Raises:
-            FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
-
-        Example:
-            >>> system = System.from_pop("WEST10peak.pop")
-            >>> print(f"Loaded {system.num_buses} buses")
-
-        See Also:
-            - from_raw(): Load PSS/E RAW format
-            - from_file(): Auto-detect format from extension
-            - parse_pop(): Standalone function alternative
-        """
-        # Lazy import to avoid circular dependency
-        from psforge_grid.io.pop_parser import parse_pop
-
-        return parse_pop(filepath, strict=strict)
-
-    @classmethod
     def from_dss(cls, filepath: str | Path) -> System:
         """Create a System from an OpenDSS .dss file.
 
@@ -253,37 +222,6 @@ class System:
         from psforge_grid.io.dss_parser import parse_dss
 
         return parse_dss(filepath)
-
-    @classmethod
-    def from_dyna(cls, filepath: str | Path, *, strict: bool = False) -> System:
-        """Create a System from a CPAT dyna card format file.
-
-        Factory method for creating System instances from CPAT Fortran
-        fixed-column card format files (.dyna).
-
-        Args:
-            filepath: Path to the .dyna file
-
-        Returns:
-            System object containing all parsed power system data
-
-        Raises:
-            FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
-
-        Example:
-            >>> system = System.from_dyna("cpat_model.dyna")
-            >>> print(f"Loaded {system.num_buses} buses")
-
-        See Also:
-            - from_pop(): Load CPAT .pop (ZIP+XML) format
-            - from_file(): Auto-detect format from extension
-            - parse_dyna(): Standalone function alternative
-        """
-        # Lazy import to avoid circular dependency
-        from psforge_grid.io.dyna_parser import parse_dyna
-
-        return parse_dyna(filepath, strict=strict)
 
     @classmethod
     def from_json(cls, filepath: str | Path, *, strict: bool = False) -> System:
@@ -352,23 +290,6 @@ class System:
 
         write_matpower(self, filepath)
 
-    def to_pop(self, filepath: str | Path) -> None:
-        """Export this System to a CPAT .pop file.
-
-        Args:
-            filepath: Output file path (.pop)
-
-        Example:
-            >>> system.to_pop("output.pop")
-
-        See Also:
-            - to_file(): Auto-detect format from extension
-            - write_pop(): Standalone function alternative
-        """
-        from psforge_grid.io.pop_writer import write_pop
-
-        write_pop(self, filepath)
-
     def to_dss(self, filepath: str | Path) -> None:
         """Export this System to an OpenDSS .dss file.
 
@@ -385,23 +306,6 @@ class System:
         from psforge_grid.io.dss_writer import write_dss
 
         write_dss(self, filepath)
-
-    def to_dyna(self, filepath: str | Path) -> None:
-        """Export this System to a CPAT .dyna file.
-
-        Args:
-            filepath: Output file path (.dyna)
-
-        Example:
-            >>> system.to_dyna("output.dyna")
-
-        See Also:
-            - to_file(): Auto-detect format from extension
-            - write_dyna(): Standalone function alternative
-        """
-        from psforge_grid.io.dyna_writer import write_dyna
-
-        write_dyna(self, filepath)
 
     def to_json(
         self,
@@ -438,11 +342,9 @@ class System:
         Example:
             >>> system.to_file("output.raw")   # PSS/E format
             >>> system.to_file("output.m")     # MATPOWER format
-            >>> system.to_file("output.pop")   # CPAT Pop format
-            >>> system.to_file("output.dyna")  # CPAT Dyna format
 
         See Also:
-            - to_raw(), to_matpower(), to_pop(), to_dyna(): Explicit format
+            - to_raw(), to_matpower(), to_dss(): Explicit format
             - WriterFactory: Direct writer access
         """
         from psforge_grid.io.factories import WriterFactory

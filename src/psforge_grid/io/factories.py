@@ -4,7 +4,7 @@ This module provides factory pattern implementations for
 instantiating the appropriate parser or writer based on file format.
 
 The factory pattern enables:
-    - Runtime format selection (PSS/E, MATPOWER, CPAT, etc.)
+    - Runtime format selection (PSS/E, MATPOWER, OpenDSS, etc.)
     - Automatic format detection from file extension
     - Future extensibility for new formats
 
@@ -51,8 +51,6 @@ class ParserFactory:
     _FORMATS = {
         "raw": "psforge_grid.io.raw_parser.RawParser",
         "matpower": "psforge_grid.io.matpower_parser.MatpowerParser",
-        "pop": "psforge_grid.io.pop_parser.PopParser",
-        "dyna": "psforge_grid.io.dyna_parser.DynaParser",
         "dss": "psforge_grid.io.dss_parser.DSSParser",
         "json": "psforge_grid.io.json_parser.JsonParser",
     }
@@ -62,8 +60,6 @@ class ParserFactory:
         "raw": "raw",
         "RAW": "raw",
         "m": "matpower",
-        "pop": "pop",
-        "dyna": "dyna",
         "dss": "dss",
         "DSS": "dss",
         "psfg.json": "json",
@@ -99,14 +95,6 @@ class ParserFactory:
             from psforge_grid.io.matpower_parser import MatpowerParser
 
             return MatpowerParser()
-        elif format_type == "pop":
-            from psforge_grid.io.pop_parser import PopParser
-
-            return PopParser()
-        elif format_type == "dyna":
-            from psforge_grid.io.dyna_parser import DynaParser
-
-            return DynaParser()
         elif format_type == "dss":
             from psforge_grid.io.dss_parser import DSSParser
 
@@ -192,7 +180,7 @@ class ParserFactory:
             >>> formats = ParserFactory.available_formats()
             >>> print(formats)  # ['raw']
         """
-        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
+        return ["raw", "matpower", "dss", "json"]
 
     @staticmethod
     def supported_extensions() -> list[str]:
@@ -211,14 +199,14 @@ class ParserFactory:
 class WriterFactory:
     """Factory for creating power system file writers.
 
-    Supports format selection between PSS/E RAW, MATPOWER, CPAT Pop,
-    and CPAT Dyna formats. Symmetric counterpart of ParserFactory.
+    Supports format selection between PSS/E RAW, MATPOWER, OpenDSS and the
+    psforge JSON format. Symmetric counterpart of ParserFactory.
 
     Available Formats:
         - "raw": PSS/E RAW format (v33)
         - "matpower": MATPOWER format (.m files)
-        - "pop": CPAT Pop format (.pop, ZIP+XML)
-        - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+        - "dss": OpenDSS script format (.dss)
+        - "json": psforge-grid JSON format (.psfg.json)
 
     Example:
         >>> writer = WriterFactory.create("raw")
@@ -234,8 +222,6 @@ class WriterFactory:
         "raw": "raw",
         "RAW": "raw",
         "m": "matpower",
-        "pop": "pop",
-        "dyna": "dyna",
         "dss": "dss",
         "DSS": "dss",
         "psfg.json": "json",
@@ -249,8 +235,8 @@ class WriterFactory:
             format_type: Writer format type. Available options:
                 - "raw": PSS/E RAW format (v33, default)
                 - "matpower": MATPOWER format (.m files)
-                - "pop": CPAT Pop format (.pop, ZIP+XML)
-                - "dyna": CPAT Dyna format (.dyna, fixed-column cards)
+                - "dss": OpenDSS script format (.dss)
+                - "json": psforge-grid JSON format (.psfg.json)
 
         Returns:
             IWriter implementation ready for use
@@ -270,14 +256,6 @@ class WriterFactory:
             from psforge_grid.io.matpower_writer import MatpowerWriter
 
             return MatpowerWriter()
-        elif format_type == "pop":
-            from psforge_grid.io.pop_writer import PopWriter
-
-            return PopWriter()
-        elif format_type == "dyna":
-            from psforge_grid.io.dyna_writer import DynaWriter
-
-            return DynaWriter()
         elif format_type == "dss":
             from psforge_grid.io.dss_writer import DSSWriter
 
@@ -351,7 +329,7 @@ class WriterFactory:
         Returns:
             List of format names that can be passed to create()
         """
-        return ["raw", "matpower", "pop", "dyna", "dss", "json"]
+        return ["raw", "matpower", "dss", "json"]
 
     @staticmethod
     def supported_extensions() -> list[str]:

@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `System.to_llm_context()` reports it under "Records Not Read".
 - Every parser takes `strict=True` to raise instead of skipping.
 
+### Removed
+
+- Support for the `.pop` and `.dyna` file formats: their parsers and writers, the
+  matching `System` facade methods, and their factory entries.
+  `ParserFactory.available_formats()` now returns `["raw", "matpower", "dss", "json"]`.
+- The test fixtures for those two formats.
+
 ### Changed
 
 - **Parsers no longer fill in missing fields.** A record that omits a field deciding
@@ -38,7 +45,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A RAW file with mixed delimiters raised `ZeroDivisionError` from inside the parser.
-- MATPOWER, CPAT dyna and psforge JSON dropped unreadable records without a trace.
 
 ## [0.9.1] - 2026-07-16
 
@@ -177,8 +183,6 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
 - `WriterFactory` (`io/factories.py`) with `create()`, `from_extension()`, `from_path()`, `available_formats()`, `supported_extensions()`
 - `RawWriter` — exports System to PSS/E RAW v33 format
 - `MatpowerWriter` — exports System to MATPOWER .m format (including gencost)
-- `PopWriter` — exports System to CPAT .pop format (ZIP archive with 3 XML files)
-- `DynaWriter` — exports System to CPAT dyna card format (80-char fixed-column)
 - `DSSWriter` — exports System to OpenDSS .dss script format (per-unit → physical unit conversion)
 - `DSSParser` — imports OpenDSS .dss files via `opendssdirect.py` API (compile-then-extract approach)
 - `DSSWriter.write_fault_study()` — fault study mode with Y-circuit transformer model
@@ -186,12 +190,12 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
   - Outputs generator Vsource with Z1 (gen reactance) and Z0 (zero-sequence impedance)
   - Outputs line Z0 with configurable estimation factor when explicit zero-sequence data is unavailable
   - Z2 defaults to Z1 in OpenDSS (not explicitly output) for better 1LG/2LG accuracy
-- `System.to_raw()`, `to_matpower()`, `to_pop()`, `to_dyna()`, `to_dss()` facade methods
+- `System.to_raw()`, `to_matpower()`, `to_dss()` facade methods
 - `System.from_dss()` facade method for OpenDSS import
 - `System.to_file()` — auto-detect format by file extension
-- `write_raw()`, `write_matpower()`, `write_pop()`, `write_dyna()`, `write_dss()` convenience functions
+- `write_raw()`, `write_matpower()`, `write_dss()` convenience functions
 - Cross-format model fields: `Branch.winding_connection`, `nomv_from`, `nomv_to`, `sbase_mva`, `mag_g`, `mag_b`; `Generator.kv`, `connection`, `model_type`, `rneut`, `xneut`; `Load.kv`, `connection`, `model_type`; `Shunt.kv`, `connection`, `num_steps`; `System.frequency_hz`
-- `Branch.reg_control_mode`, `reg_target_voltage_pu`, `tap_max`, `tap_min` — voltage regulation fields from CPAT .pop
+- `Branch.reg_control_mode`, `reg_target_voltage_pu`, `tap_max`, `tap_min` — voltage regulation fields
 - `opendssdirect.py` as core dependency for OpenDSS interoperability
 - `JsonWriter` — exports System to psforge-grid JSON format (`.psfg.json`)
   - Human/LLM-friendly format with metadata (`"format": "psforge-grid"`, `"version": "1.0"`)
@@ -202,7 +206,7 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
 - `load_scenarios()` — load base case + differential modifications for N-1 / parametric studies
 - `write_scenario()` — write scenario definition files (`"format": "psforge-grid-scenario"`)
 - Compound extension support in `ParserFactory.from_path()` and `WriterFactory.from_path()` for `.psfg.json`
-- JSON fixture files: `ieee14.psfg.json`, `ieee9.psfg.json`, `WEST10peak.psfg.json`, `ieee14_contingencies.psfg.json`
+- JSON fixture files: `ieee14.psfg.json`, `ieee9.psfg.json`, `ieee14_contingencies.psfg.json`
 - 41 JSON I/O tests (writer, parser, factory, fixture validation, scenario loading)
 - `docs/development.md` — development setup guide (moved from README)
 - 28 DSS writer/parser tests (factory, output, compilation, round-trip with bus/gen count verification)
@@ -229,12 +233,6 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
 - Hardcoded π values replaced with `math.pi`/`math.degrees()` in `bus.py` and `generator.py`
 - Version mismatch in `__init__.py` corrected (`0.3.0` → `0.4.0`)
 - `show` element_id filter used shallow copy instead of `deepcopy` (could mutate original data)
-- PopParser: Handle parallel circuit count (NL) correctly for multi-circuit branches
-- PopParser: Read correct generator X0/X2 fields and transformer Z0 from .pop XML
-- PopParser: Detect CPAT placeholder X0_Saturation (== Xd_Saturation) and treat as undefined to avoid using Xd as X0
-- PopParser: Add X2_Saturation fallback when X2 field is empty
-- PopParser: Fix Y1C convention — convert from CPAT half-charging (Y/2) to PSS/E total B convention (b_pu = Y1C * 2.0)
-- PopWriter: Reverse Y1C conversion (Y1C = b_pu / 2.0)
 - DSSWriter: Include R component in Y-circuit series reactor (previously X-only)
 - DSSParser: Internal buses created by OpenDSS transformer modeling are now filtered out
 - DSSParser: Swing bus generator (Circuit Vsource) is now recovered as a Generator with bus_type=3
@@ -245,15 +243,6 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
 
 ### Added
 
-- CPAT `.pop` format parser (`PopParser`) for CPAT-GUI project files (ZIP/XML)
-  - Reads `data.pnsd` XML inside the ZIP archive
-  - Parses nodes, branches (transmission lines and transformers), generators (G1-G5 machine data), and loads
-  - Supports IEEJ standard model systems (e.g., `WEST10peak.pop`)
-- CPAT dyna card format parser (`DynaParser`) for Fortran fixed-column (80-char) card format
-  - Supports DATA, T (transmission line), X (transformer), N (node), and G1-G5 (generator) cards
-  - Reads both positive-sequence and zero-sequence impedance data
-- `System.from_pop()` and `System.from_dyna()` factory methods
-- `ParserFactory` registration for `"pop"` and `"dyna"` format types
 - Zero-sequence impedance fields on `Branch`: `r0_pu`, `x0_pu`, `b0_pu`
 - Fault analysis fields on `Generator`: `xd_pu`, `xdp_pu`, `xdpp_pu`, `xqpp_pu`, `x2_pu`, `x0_pu`, `ra_pu`, `ta_s`
   - `get_fault_reactance()` method for selecting reactance by mode (xdqpp, xdpp, xdp, xd)
@@ -263,7 +252,6 @@ Released 2026-05-06 but never recorded here; reconstructed from the history.
   - Used when `limits` parameter is not specified
 - `is_classified` property to `VoltageStatus` and `LoadingStatus`
   - Returns `True` if status is classified (not `NOT_CLASSIFIED`)
-- Test fixtures: `WEST10peak.pop` (IEEJ WEST 10-machine model), `cpat_model11.dyna` (CPAT Manual model system)
 
 ### Changed
 
