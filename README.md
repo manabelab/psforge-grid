@@ -93,10 +93,10 @@ The parser supports **core power flow data** for AC power flow analysis:
 
 **Not yet supported:** Area/Zone/Owner Data, DC lines, FACTS, Switched Shunts, Three-winding Transformers.
 
-**Test data sources:**
-- IEEE 9-bus (v34): [GitHub - todstewart1001](https://github.com/todstewart1001/PSSE-24-Hour-Load-Dispatch-IEEE-9-Bus-System-)
-- IEEE 14-bus (v33): [GitHub - ITI/models](https://github.com/ITI/models/blob/master/electric-grid/physical/reference/ieee-14bus/)
-- IEEE 118-bus (v33): [GitHub - powsybl](https://github.com/powsybl/powsybl-distribution/blob/main/resources/PSSE/IEEE_118_bus.raw)
+**Test data sources** (terms for each are recorded in [`tests/fixtures/NOTICE.md`](tests/fixtures/NOTICE.md)):
+- New England 39-bus (v34): [NatLabRockies/ParaEMT_public](https://github.com/NatLabRockies/ParaEMT_public) — BSD 3-Clause, written by PSS/E 34.8 itself
+- Synthetic 2000-bus (v33): [Texas A&M Electric Grid Test Case Repository](https://electricgrids.engr.tamu.edu/electric-grid-test-cases/activsg2000/)
+- IEEE 14-bus and 118-bus (v33): written by psforge's own `RawWriter` from [pglib-opf](https://github.com/power-grid-lib/pglib-opf) cases (CC BY 4.0)
 
 </details>
 

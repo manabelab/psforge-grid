@@ -2,181 +2,167 @@
   "metadata": {
     "format": "psforge-grid",
     "version": "1.0",
-    "created": "2026-03-15T03:23:45.332142+00:00"
+    "created": "2026-09-16T10:35:25.629726+00:00"
   },
   "system": {
     "name": "ieee14.raw",
     "base_mva": 100.0,
-    "description": "08/19/93 UW ARCHIVE           100.0  1962 W IEEE 14 Bus Test Case"
+    "description": "IEEE 14 Bus Test Case"
   },
   "buses": [
     {
       "bus_id": 1,
       "bus_type": 3,
-      "v_magnitude": 1.06,
+      "v_magnitude": 1.0,
       "v_angle": 0.0,
-      "base_kv": 138.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 1       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 2,
       "bus_type": 2,
-      "v_magnitude": 1.045,
-      "v_angle": -0.08696277530986946,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 2       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 3,
       "bus_type": 2,
-      "v_magnitude": 1.01,
-      "v_angle": -0.22209314731627844,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 3       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 4,
       "bus_type": 1,
-      "v_magnitude": 1.01767,
-      "v_angle": -0.1799923150996712,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 4       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 5,
       "bus_type": 1,
-      "v_magnitude": 1.01951,
-      "v_angle": -0.1531316979114785,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 5       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 6,
       "bus_type": 2,
-      "v_magnitude": 1.07,
-      "v_angle": -0.24820152759686162,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 6       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 7,
       "bus_type": 1,
-      "v_magnitude": 1.06152,
-      "v_angle": -0.23316900674943447,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 7       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 8,
       "bus_type": 2,
-      "v_magnitude": 1.09,
-      "v_angle": -0.23316900674943447,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 8       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 9,
       "bus_type": 1,
-      "v_magnitude": 1.05593,
-      "v_angle": -0.2607260103091729,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 9       "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 10,
       "bus_type": 1,
-      "v_magnitude": 1.05099,
-      "v_angle": -0.26349584783208796,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 10      "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 11,
       "bus_type": 1,
-      "v_magnitude": 1.05691,
-      "v_angle": -0.2581446683454733,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 11      "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 12,
       "bus_type": 1,
-      "v_magnitude": 1.05519,
-      "v_angle": -0.26311711138440513,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 12      "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 13,
       "bus_type": 1,
-      "v_magnitude": 1.05038,
-      "v_angle": -0.26452559209076454,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 13      "
+      "v_max": 1.06,
+      "v_min": 0.94
     },
     {
       "bus_id": 14,
       "bus_type": 1,
-      "v_magnitude": 1.03553,
-      "v_angle": -0.2798391109477628,
-      "base_kv": 138.0,
+      "v_magnitude": 1.0,
+      "v_angle": 0.0,
+      "base_kv": 1.0,
       "area": 1,
       "zone": 1,
-      "v_max": 1.1,
-      "v_min": 0.9,
-      "name": "Bus 14      "
+      "v_max": 1.06,
+      "v_min": 0.94
     }
   ],
   "branches": [
@@ -188,8 +174,11 @@
       "b_pu": 0.0528,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 472.0,
+      "rate_b": 472.0,
+      "rate_c": 472.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 1,
@@ -199,8 +188,11 @@
       "b_pu": 0.0492,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 128.0,
+      "rate_b": 128.0,
+      "rate_c": 128.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 2,
@@ -210,8 +202,11 @@
       "b_pu": 0.0438,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 145.0,
+      "rate_b": 145.0,
+      "rate_c": 145.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 2,
@@ -221,8 +216,11 @@
       "b_pu": 0.034,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 158.0,
+      "rate_b": 158.0,
+      "rate_c": 158.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 2,
@@ -232,8 +230,11 @@
       "b_pu": 0.0346,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 161.0,
+      "rate_b": 161.0,
+      "rate_c": 161.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 3,
@@ -243,8 +244,11 @@
       "b_pu": 0.0128,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 160.0,
+      "rate_b": 160.0,
+      "rate_c": 160.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 4,
@@ -254,8 +258,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 664.0,
+      "rate_b": 664.0,
+      "rate_c": 664.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 6,
@@ -265,8 +272,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 134.0,
+      "rate_b": 134.0,
+      "rate_c": 134.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 6,
@@ -276,8 +286,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 104.0,
+      "rate_b": 104.0,
+      "rate_c": 104.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 6,
@@ -287,8 +300,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 201.0,
+      "rate_b": 201.0,
+      "rate_c": 201.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 7,
@@ -298,8 +314,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 167.0,
+      "rate_b": 167.0,
+      "rate_c": 167.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 7,
@@ -309,8 +328,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 267.0,
+      "rate_b": 267.0,
+      "rate_c": 267.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 9,
@@ -320,8 +342,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 325.0,
+      "rate_b": 325.0,
+      "rate_c": 325.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 9,
@@ -331,8 +356,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 99.0,
+      "rate_b": 99.0,
+      "rate_c": 99.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 10,
@@ -342,8 +370,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 141.0,
+      "rate_b": 141.0,
+      "rate_c": 141.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 12,
@@ -353,8 +384,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 99.0,
+      "rate_b": 99.0,
+      "rate_c": 99.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 13,
@@ -364,8 +398,11 @@
       "b_pu": 0.0,
       "tap_ratio": 1.0,
       "shift_angle": 0.0,
+      "rate_a": 76.0,
+      "rate_b": 76.0,
+      "rate_c": 76.0,
       "status": 1,
-      "circuit_id": "1 "
+      "circuit_id": "1"
     },
     {
       "from_bus": 4,
@@ -375,8 +412,9 @@
       "b_pu": 0.0,
       "tap_ratio": 0.978,
       "shift_angle": 0.0,
+      "rate_a": 141.0,
       "status": 1,
-      "circuit_id": "1 ",
+      "circuit_id": "1",
       "sbase_mva": 100.0,
       "is_xfmr": true
     },
@@ -388,8 +426,9 @@
       "b_pu": 0.0,
       "tap_ratio": 0.969,
       "shift_angle": 0.0,
+      "rate_a": 53.0,
       "status": 1,
-      "circuit_id": "1 ",
+      "circuit_id": "1",
       "sbase_mva": 100.0,
       "is_xfmr": true
     },
@@ -401,8 +440,9 @@
       "b_pu": 0.0,
       "tap_ratio": 0.932,
       "shift_angle": 0.0,
+      "rate_a": 117.0,
       "status": 1,
-      "circuit_id": "1 ",
+      "circuit_id": "1",
       "sbase_mva": 100.0,
       "is_xfmr": true
     }
@@ -410,58 +450,58 @@
   "generators": [
     {
       "bus_id": 1,
-      "p_gen": 2.3239199999999998,
-      "q_gen": -0.16549,
-      "v_setpoint": 1.06,
-      "q_max": 0.0,
+      "p_gen": 1.7,
+      "q_gen": 0.05,
+      "v_setpoint": 1.0,
+      "q_max": 0.1,
       "q_min": 0.0,
-      "mbase": 615.0,
+      "mbase": 100.0,
       "status": 1,
-      "gen_id": "1 "
+      "gen_id": "1"
     },
     {
       "bus_id": 2,
-      "p_gen": 0.4,
-      "q_gen": 0.43555999999999995,
-      "v_setpoint": 1.045,
-      "q_max": 0.5,
-      "q_min": -0.4,
-      "mbase": 60.0,
+      "p_gen": 0.295,
+      "q_gen": 0.0,
+      "v_setpoint": 1.0,
+      "q_max": 0.3,
+      "q_min": -0.3,
+      "mbase": 100.0,
       "status": 1,
-      "gen_id": "1 "
+      "gen_id": "1"
     },
     {
       "bus_id": 3,
       "p_gen": 0.0,
-      "q_gen": 0.25075,
-      "v_setpoint": 1.01,
+      "q_gen": 0.2,
+      "v_setpoint": 1.0,
       "q_max": 0.4,
       "q_min": 0.0,
-      "mbase": 60.0,
+      "mbase": 100.0,
       "status": 1,
-      "gen_id": "1 "
+      "gen_id": "1"
     },
     {
       "bus_id": 6,
       "p_gen": 0.0,
-      "q_gen": 0.1273,
-      "v_setpoint": 1.07,
+      "q_gen": 0.09,
+      "v_setpoint": 1.0,
       "q_max": 0.24,
       "q_min": -0.06,
-      "mbase": 25.0,
+      "mbase": 100.0,
       "status": 1,
-      "gen_id": "1 "
+      "gen_id": "1"
     },
     {
       "bus_id": 8,
       "p_gen": 0.0,
-      "q_gen": 0.17623,
-      "v_setpoint": 1.09,
+      "q_gen": 0.09,
+      "v_setpoint": 1.0,
       "q_max": 0.24,
       "q_min": -0.06,
-      "mbase": 25.0,
+      "mbase": 100.0,
       "status": 1,
-      "gen_id": "1 "
+      "gen_id": "1"
     }
   ],
   "loads": [
@@ -470,77 +510,77 @@
       "p_load": 0.217,
       "q_load": 0.127,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 3,
       "p_load": 0.9420000000000001,
       "q_load": 0.19,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 4,
       "p_load": 0.478,
       "q_load": -0.039,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 5,
       "p_load": 0.076,
       "q_load": 0.016,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 6,
       "p_load": 0.11199999999999999,
       "q_load": 0.075,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 9,
       "p_load": 0.295,
       "q_load": 0.166,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 10,
       "p_load": 0.09,
       "q_load": 0.057999999999999996,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 11,
       "p_load": 0.035,
       "q_load": 0.018000000000000002,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 12,
       "p_load": 0.061,
       "q_load": 0.016,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 13,
       "p_load": 0.135,
       "q_load": 0.057999999999999996,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     },
     {
       "bus_id": 14,
       "p_load": 0.149,
       "q_load": 0.05,
       "status": 1,
-      "load_id": "1 "
+      "load_id": "1"
     }
   ],
   "shunts": [
@@ -549,7 +589,7 @@
       "g_pu": 0.0,
       "b_pu": 0.19,
       "status": 1,
-      "shunt_id": " 1"
+      "shunt_id": "1"
     }
   ]
 }

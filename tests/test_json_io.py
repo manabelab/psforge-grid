@@ -490,14 +490,6 @@ class TestFixtureJsonFiles:
         assert len(system.shunts) == 1
         assert system.base_mva == pytest.approx(100.0)
 
-    def test_ieee9_json_fixture_loads(self) -> None:
-        """IEEE 9-bus .psfg.json fixture loads correctly."""
-        system = parse_json(FIXTURE_DIR / "ieee9.psfg.json")
-        assert len(system.buses) == 9
-        assert len(system.branches) == 9
-        assert len(system.generators) == 3
-        assert len(system.loads) == 3
-
     def test_ieee14_json_matches_raw(self) -> None:
         """IEEE 14-bus JSON matches original RAW data."""
         raw_system = System.from_raw(FIXTURE_DIR / "ieee14.raw")
@@ -518,16 +510,6 @@ class TestFixtureJsonFiles:
             assert json_br.to_bus == raw_br.to_bus
             assert json_br.r_pu == pytest.approx(raw_br.r_pu)
             assert json_br.x_pu == pytest.approx(raw_br.x_pu)
-
-    def test_ieee9_json_matches_raw(self) -> None:
-        """IEEE 9-bus JSON matches original RAW data."""
-        raw_system = System.from_raw(FIXTURE_DIR / "ieee9.raw")
-        json_system = parse_json(FIXTURE_DIR / "ieee9.psfg.json")
-
-        assert len(json_system.buses) == len(raw_system.buses)
-        for raw_bus, json_bus in zip(raw_system.buses, json_system.buses, strict=True):
-            assert json_bus.bus_id == raw_bus.bus_id
-            assert json_bus.v_magnitude == pytest.approx(raw_bus.v_magnitude)
 
     def test_ieee14_json_round_trip(self, tmp_path: Path) -> None:
         """JSON → System → JSON produces identical output."""
