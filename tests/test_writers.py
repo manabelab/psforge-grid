@@ -120,16 +120,6 @@ class TestWriterFactory:
         assert isinstance(writer, IWriter)
         assert writer.format_name == "MATPOWER"
 
-    def test_create_pop(self) -> None:
-        writer = WriterFactory.create("pop")
-        assert isinstance(writer, IWriter)
-        assert writer.format_name == "CPAT Pop"
-
-    def test_create_dyna(self) -> None:
-        writer = WriterFactory.create("dyna")
-        assert isinstance(writer, IWriter)
-        assert writer.format_name == "CPAT Dyna"
-
     def test_create_unknown_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown format"):
             WriterFactory.create("unknown")
@@ -146,16 +136,12 @@ class TestWriterFactory:
         formats = WriterFactory.available_formats()
         assert "raw" in formats
         assert "matpower" in formats
-        assert "pop" in formats
-        assert "dyna" in formats
         assert "dss" in formats
 
     def test_supported_extensions(self) -> None:
         exts = WriterFactory.supported_extensions()
         assert "raw" in exts
         assert "m" in exts
-        assert "pop" in exts
-        assert "dyna" in exts
         assert "dss" in exts
 
 
@@ -167,7 +153,7 @@ class TestWriterFactory:
 class TestIWriterInterface:
     """Tests that all writers implement IWriter correctly."""
 
-    @pytest.mark.parametrize("fmt", ["raw", "matpower", "pop", "dyna", "dss"])
+    @pytest.mark.parametrize("fmt", ["raw", "matpower", "dss"])
     def test_writer_has_required_properties(self, fmt: str) -> None:
         writer = WriterFactory.create(fmt)
         assert isinstance(writer.supported_extensions, list)
@@ -253,53 +239,6 @@ class TestMatpowerWriterRoundtrip:
 
 
 # =============================================================================
-# Round-trip tests: Pop format
-# =============================================================================
-
-
-class TestPopWriterRoundtrip:
-    """Round-trip tests for PopWriter."""
-
-    def test_west10_roundtrip(self, tmp_path: Path) -> None:
-        system1 = System.from_pop(FIXTURES / "WEST10peak.pop")
-        output = tmp_path / "west10_out.pop"
-        system1.to_pop(output)
-        system2 = System.from_pop(output)
-        assert_systems_approx_equal(system1, system2)
-
-    def test_facade_to_file(self, tmp_path: Path) -> None:
-        """Test System.to_file() auto-detection for .pop."""
-        system1 = System.from_pop(FIXTURES / "WEST10peak.pop")
-        output = tmp_path / "west10_auto.pop"
-        system1.to_file(output)
-        system2 = System.from_pop(output)
-        assert_systems_approx_equal(system1, system2)
-
-
-# =============================================================================
-# Round-trip tests: Dyna format
-# =============================================================================
-
-
-class TestDynaWriterRoundtrip:
-    """Round-trip tests for DynaWriter."""
-
-    def test_cpat_model11_roundtrip(self, tmp_path: Path) -> None:
-        system1 = System.from_dyna(FIXTURES / "cpat_model11.dyna")
-        output = tmp_path / "cpat_model11_out.dyna"
-        system1.to_dyna(output)
-        system2 = System.from_dyna(output)
-        assert_systems_approx_equal(system1, system2)
-
-    def test_facade_to_file(self, tmp_path: Path) -> None:
-        """Test System.to_file() auto-detection for .dyna."""
-        system1 = System.from_dyna(FIXTURES / "cpat_model11.dyna")
-        output = tmp_path / "cpat_model11_auto.dyna"
-        system1.to_file(output)
-        system2 = System.from_dyna(output)
-        assert_systems_approx_equal(system1, system2)
-
-
 # =============================================================================
 # Cross-format tests
 # =============================================================================
@@ -319,9 +258,6 @@ def assert_systems_core_equal(
     More lenient than assert_systems_approx_equal:
     - Load count may differ (formats aggregate/filter differently)
     - Total load P/Q per bus is compared instead of individual loads
-    - Voltage angles can be skipped (Pop/Dyna don't preserve them)
-    - Bus type can be skipped (Pop/Dyna reconstruct from gen data)
-    - Base kV can be skipped (Dyna doesn't store it)
     """
     # Component counts (loads excluded — formats handle differently)
     assert s1.num_buses == s2.num_buses, f"Bus count: {s1.num_buses} vs {s2.num_buses}"
@@ -403,23 +339,21 @@ def assert_systems_core_equal(
 # =============================================================================
 
 # Format capability flags
-_ANGLE_PRESERVING = {"raw", "matpower"}  # Pop/Dyna don't store voltage angles
-_BUS_TYPE_PRESERVING = {"raw", "matpower"}  # Pop/Dyna reconstruct from gen data
-_BASE_KV_PRESERVING = {"raw", "matpower", "pop"}  # Dyna doesn't store base_kv
+_ANGLE_PRESERVING = {"raw", "matpower"}
+_BUS_TYPE_PRESERVING = {"raw", "matpower"}
+_BASE_KV_PRESERVING = {"raw", "matpower"}
 
 # Source fixtures for cross-format tests
 _CROSS_FORMAT_SOURCES = [
     ("raw", FIXTURES / "ieee14.raw"),
     ("matpower", FIXTURES / "pglib_opf_case14_ieee.m"),
-    ("pop", FIXTURES / "WEST10peak.pop"),
-    ("dyna", FIXTURES / "cpat_model11.dyna"),
 ]
 
 # Target formats to write
-_TARGET_FORMATS = ["raw", "matpower", "pop", "dyna"]
+_TARGET_FORMATS = ["raw", "matpower"]
 
 # Extension mapping
-_FORMAT_EXT = {"raw": ".raw", "matpower": ".m", "pop": ".pop", "dyna": ".dyna"}
+_FORMAT_EXT = {"raw": ".raw", "matpower": ".m"}
 
 
 def _cross_format_id(source_fmt: str, target_fmt: str) -> str:
@@ -453,7 +387,6 @@ class TestCrossFormat:
     4. Compare core electrical data
 
     Note:
-        - Pop/Dyna don't preserve voltage angles → check_angles=False
         - Load counts may differ → total load per bus is compared
         - Charging susceptance (b_pu) may differ between formats
     """
@@ -491,8 +424,8 @@ class TestCrossFormat:
             check_base_kv=check_base_kv,
         )
 
-    def test_chain_raw_matpower_pop_dyna(self, tmp_path: Path) -> None:
-        """Chain conversion: RAW → MATPOWER → Pop → Dyna → RAW.
+    def test_chain_raw_matpower_raw(self, tmp_path: Path) -> None:
+        """Chain conversion: RAW -> MATPOWER -> RAW.
 
         Verify data survives multiple format conversions.
         """
@@ -502,20 +435,10 @@ class TestCrossFormat:
         s1.to_matpower(p1)
         s2 = System.from_matpower(p1)
 
-        # MATPOWER → Pop
-        p2 = tmp_path / "step2.pop"
-        s2.to_pop(p2)
-        s3 = System.from_pop(p2)
-
-        # Pop → Dyna
-        p3 = tmp_path / "step3.dyna"
-        s3.to_dyna(p3)
-        s4 = System.from_dyna(p3)
-
-        # Dyna → RAW
-        p4 = tmp_path / "step4.raw"
-        s4.to_raw(p4)
-        s5 = System.from_raw(p4)
+        # MATPOWER -> RAW
+        p2 = tmp_path / "step2.raw"
+        s2.to_raw(p2)
+        s5 = System.from_raw(p2)
 
         # Compare first and last: core data should survive the full chain
         assert s5.num_buses == s1.num_buses

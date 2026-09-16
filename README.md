@@ -21,8 +21,6 @@ from psforge_grid import System
 # Load from any supported format
 system = System.from_raw("ieee14.raw")              # PSS/E RAW
 system = System.from_matpower("case14.m")            # MATPOWER
-system = System.from_pop("WEST10peak.pop")           # CPAT .pop
-system = System.from_dyna("model.dyna")              # CPAT .dyna
 system = System.from_dss("network.dss")              # OpenDSS
 system = System.from_json("ieee14.psfg.json")        # psforge JSON
 system = System.from_file("case14.m")                # Auto-detect
@@ -52,7 +50,7 @@ psforge-grid show case14.m buses -f json
 | **Educational design** | Rich docstrings, clear naming | Varies |
 | **Type hints** | Complete type annotations | Often missing |
 | **CLI included** | Yes, with multiple output formats | Usually separate |
-| **Multi-format I/O** | 7 formats: RAW, MATPOWER, CPAT, OpenDSS, JSON | Usually single format |
+| **Multi-format I/O** | 5 formats: RAW (v33/v34), MATPOWER, OpenDSS, psforge JSON | Usually single format |
 
 ## Overview
 
@@ -72,8 +70,6 @@ psforge-grid serves as the **Hub** of the psforge ecosystem, providing:
 |--------|-------|-------|-----------|------------|
 | PSS/E RAW (v33/v34) | Yes | Yes (v33) | `.raw` | Yes |
 | MATPOWER | Yes | Yes | `.m` | Yes |
-| CPAT .pop (ZIP/XML) | Yes | Yes | `.pop` | Yes |
-| CPAT .dyna (cards) | Yes | Yes | `.dyna` | Yes |
 | OpenDSS | Yes | Yes | `.dss` | Yes |
 | **psforge JSON** | Yes | Yes | `.psfg.json` | Yes |
 | psforge Scenario | Yes | Yes | `.psfg.json` | - |
@@ -124,32 +120,6 @@ for cost in system.generator_costs:
     print(cost.to_description())
     # "Generator Cost (polynomial, degree 2): 0.0430 * P^2 + 20.00 * P + 0.00"
 ```
-
-</details>
-
-<details>
-<summary>CPAT format details (.pop / .dyna)</summary>
-
-### CPAT
-
-Supports two [CPAT](https://www.jpower.co.jp/bs/cpat/) formats for IEEJ standard model systems.
-
-**`.pop` format** (recommended): CPAT-GUI native project file (ZIP archive + XML).
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| System data (pnsd) | Yes | Nodes, branches, generators, loads |
-| Generator machine data | Yes | G1-G5 card fields (Xd, Xd', Xd'', etc.) |
-| Zero-sequence data | Yes | Branch and generator zero-sequence impedances |
-| Diagram layout (pnsw) | Yes | Bus positions, branch routes (normalized to 1920px short edge) |
-
-**`.dyna` card format**: Legacy Fortran fixed-column (80-character) cards.
-
-| Card Type | Description |
-|-----------|-------------|
-| DATA | System name, base MVA, frequency |
-| T / X / N | Transmission lines / Transformers / Nodes |
-| G1-G5 | Generator machine parameters |
 
 </details>
 
