@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A file format no longer has to live in this package.** `ParserFactory.register()`
+  and `WriterFactory.register()` add one at runtime, and any installed distribution
+  advertising the `psforge_grid.formats` entry-point group is registered the first
+  time anything asks the factory a question. `available_formats()`,
+  `supported_extensions()` and `System.from_file()` all see what was registered.
+- `ParserFactory.plugin_errors()` / `WriterFactory.plugin_errors()` report entry
+  points that advertised a format and failed to load. A broken plugin does not stop
+  psforge working, but it is not swallowed either: the failure is kept and warned
+  about (`FormatPluginWarning`), so a missing format has a stated cause rather than
+  presenting as "unsupported file type".
+
+### Changed
+
+- Format selection reads from one registry instead of an `if/elif` chain. The list
+  of formats had been written out in three places -- the chain, a `_FORMATS` dict
+  the chain ignored, and a hardcoded list in `available_formats()` -- which could
+  disagree with each other.
+- **Extension matching is now case-insensitive.** `.RAW` and `.DSS` used to need
+  their own registry entries; one entry per format now covers every casing.
+  `supported_extensions()` therefore returns each extension once, lowercased,
+  rather than listing `raw` and `RAW` separately.
+- `factories.py` docstring examples either run or no longer pretend to. Four
+  examples referenced a `system` that was never defined or a file that does not
+  exist; those are now plain code blocks, and the executable ones assert a value.
+  The package-wide fix is still #15.
+
 ## [0.10.0] - 2026-09-16
 
 ### Added
