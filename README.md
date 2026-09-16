@@ -288,6 +288,13 @@ This software is provided under a **dual-licensing model**:
 - **Individual & Educational Use**: MIT License (students, researchers, non-commercial educational purposes)
 - **Commercial & Business Use**: Requires a Commercial License
 
+This covers the software — `src/`, the test code, and this documentation — which is
+what the published package contains. It does **not** cover the third-party test data
+in `tests/fixtures/`, which is other people's copyright and carries its own terms
+(CC BY 4.0, BSD 3-Clause, and the Texas A&M repository's terms). Those licences already
+permit commercial use and each requires its attribution to stay with the file; the terms
+are recorded file by file in [`tests/fixtures/NOTICE.md`](tests/fixtures/NOTICE.md).
+
 See [LICENSE](LICENSE) for details.
 
 ---

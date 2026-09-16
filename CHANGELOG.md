@@ -69,6 +69,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and is what shows the parser reads files other tools produce.
 - `tests/fixtures/NOTICE.md` now covers every file in that directory, recording both
   the terms it was obtained under and who created the model it holds.
+- **`LICENSE` now states its scope.** It claimed no limit, so read against the
+  repository it purported to place third-party test data under this project's dual
+  licence -- the same fault this release removes fixtures for. It cannot: the MIT tier
+  would let a user strip attribution that BSD 3-Clause and CC BY 4.0 require be kept,
+  and the Commercial tier would charge for use those licences already grant free. The
+  policy now says it covers the software, which is the whole of what the published
+  package contains, and points at `NOTICE.md` for the fixtures. No licence granted over
+  psforge's own code changed.
 - The `raw_parser` module docstring records how the parser was in fact derived, and
   states plainly that neither the Siemens PSS/E Program Operation Manual nor a PSS/E
   licence was used. The manual has been dropped from the fixture README's references,
