@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `psforge_grid.io.errors`: `ParseError` and, under it, `FileFormatError`,
+  `UnsupportedVersionError` and `MalformedRecordError`. `ParseError` derives from
+  `ValueError`, so code that catches `ValueError` around a parser still works.
+- `psforge_grid.io.parse_report`: `ParseReport` lists every record a parser could not
+  read, with its line number, data block and reason. `System.parse_report` carries it,
+  and `System.to_llm_context()` reports it under "Records Not Read".
+- Every parser takes `strict=True` to raise instead of skipping.
+
+### Changed
+
+- **Parsers no longer fill in missing fields.** A record that omits a field deciding
+  what the element *is* (PSS/E `IDE`, `VM`, `VA`, `PL`, `QL`, `GL`, `BL`, `PG`, `QG`,
+  `VS`, `R`, `X`) is skipped and reported. Previously a bus record truncated before
+  `IDE` became a PQ bus at 1.0 pu -- a different element from the PV bus the file
+  described.
+- **A file that yields no elements raises `FileFormatError`** instead of returning an
+  empty `System`.
+- PSS/E RAW: fields may be separated by commas, blanks, or a mix, as the format allows.
+- PSS/E RAW: the header is checked. `IC` other than 0 (a change case) and revisions
+  outside 32/33/34 are refused by name rather than read in part; `SBASE` must be positive.
+- PSS/E RAW: terminators that name only the block that ended (`0 / END OF BUS DATA`)
+  now advance to the next block. Files written that way previously lost every block
+  after the first.
+- Undecodable bytes are replaced and noted in the report, rather than dropped silently.
+- `System.from_dss()` restores the working directory. OpenDSS's `Compile` changes it.
+
+### Fixed
+
+- A RAW file with mixed delimiters raised `ZeroDivisionError` from inside the parser.
+- MATPOWER, CPAT dyna and psforge JSON dropped unreadable records without a trace.
+
 ## [0.9.1] - 2026-07-16
 
 ### Fixed

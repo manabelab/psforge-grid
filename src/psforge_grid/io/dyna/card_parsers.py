@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from psforge_grid.io.dyna.format_utils import read_float, read_int, read_str
+from psforge_grid.io.parse_report import ParseReportBuilder
 
 # =============================================================================
 # Parsed data containers
@@ -462,7 +463,7 @@ def parse_g5_card(line: str, gen: DynaGenerator) -> None:
 # =============================================================================
 
 
-def parse_all_cards(lines: list[str]) -> DynaParsedData:
+def parse_all_cards(lines: list[str], builder: ParseReportBuilder | None = None) -> DynaParsedData:
     """Parse all cards from a list of lines.
 
     Reads the file top-to-bottom, dispatching each line to the
@@ -474,6 +475,8 @@ def parse_all_cards(lines: list[str]) -> DynaParsedData:
 
     Args:
         lines: List of lines from a .dyna file.
+        builder: Report to record cards that could not be read. Optional so
+            that the card parsers stay usable on their own.
 
     Returns:
         Fully populated DynaParsedData.
@@ -581,6 +584,12 @@ def parse_all_cards(lines: list[str]) -> DynaParsedData:
             node = parse_n_card(line)
             if node.node_no > 0:
                 data.nodes.append(node)
+                if builder is not None:
+                    builder.record_read()
+            elif builder is not None:
+                builder.skip(
+                    i + 1, "N", f"node number is {node.node_no}, expected a positive number", line
+                )
             i += 1
             continue
 
@@ -608,7 +617,9 @@ def parse_all_cards(lines: list[str]) -> DynaParsedData:
             i += 1
             continue
 
-        # Unknown line - skip
+        # No rule matched this line. Previously it vanished here.
+        if builder is not None:
+            builder.skip(i + 1, section, f"unrecognised card {card_id!r} in section", line)
         i += 1
 
     # Flush any remaining objects

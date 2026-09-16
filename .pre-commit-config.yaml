@@ -22,8 +22,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Third-party data must not be reformatted: the bytes are the fixture, and
+      # a whitespace-only edit is still a modification of someone else's file.
+      # pglib_opf_case14_ieee.m was committed with its trailing whitespace
+      # already stripped by these hooks.
       - id: trailing-whitespace
+        exclude: ^tests/fixtures/
       - id: end-of-file-fixer
+        exclude: ^tests/fixtures/
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files

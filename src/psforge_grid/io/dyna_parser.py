@@ -36,6 +36,8 @@ from psforge_grid.io.dyna.card_parsers import (
     DynaTransmissionLine,
     parse_all_cards,
 )
+from psforge_grid.io.errors import FileFormatError, MalformedRecordError
+from psforge_grid.io.parse_report import ParseReportBuilder
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -67,7 +69,7 @@ class DynaParser(IParser):
         """Return human-readable format name."""
         return "CPAT Dyna"
 
-    def parse(self, filepath: str | Path) -> System:
+    def parse(self, filepath: str | Path, *, strict: bool = False) -> System:
         """Parse a .dyna file and return a System object.
 
         Args:
@@ -80,10 +82,10 @@ class DynaParser(IParser):
             FileNotFoundError: If the file does not exist.
             ValueError: If the file format is invalid.
         """
-        return _parse_dyna_impl(filepath)
+        return _parse_dyna_impl(filepath, strict=strict)
 
 
-def parse_dyna(filepath: str | Path) -> System:
+def parse_dyna(filepath: str | Path, *, strict: bool = False) -> System:
     """Parse a CPAT dyna card format file and return a System object.
 
     Convenience function wrapping DynaParser.parse().
@@ -102,10 +104,10 @@ def parse_dyna(filepath: str | Path) -> System:
         >>> system = parse_dyna("cpat_model.dyna")
         >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
     """
-    return _parse_dyna_impl(filepath)
+    return _parse_dyna_impl(filepath, strict=strict)
 
 
-def _parse_dyna_impl(filepath: str | Path) -> System:
+def _parse_dyna_impl(filepath: str | Path, *, strict: bool = False) -> System:
     """Internal implementation of .dyna file parsing.
 
     Data flow:
@@ -127,13 +129,24 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
-    lines = path.read_text(encoding="utf-8").splitlines()
-    parsed = parse_all_cards(lines)
+    builder = ParseReportBuilder(format="dyna")
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        raise FileFormatError(f"could not read the file: {e}", filepath=str(path)) from e
+    if "\ufffd" in text:
+        builder.warn("file is not valid UTF-8; undecodable bytes were replaced")
+
+    lines = text.splitlines()
+    parsed = parse_all_cards(lines, builder)
 
     buses = _build_buses(parsed)
     branches = _build_branches(parsed)
     generators = _build_generators(parsed)
     loads = _build_loads(parsed)
+
+    report = builder.build()
 
     system = System(
         buses=buses,
@@ -142,7 +155,23 @@ def _parse_dyna_impl(filepath: str | Path) -> System:
         loads=loads,
         base_mva=parsed.control.base_mva,
         name=parsed.control.system_name,
+        parse_report=report,
     )
+
+    if not buses:
+        raise FileFormatError(
+            f"no node (N) cards could be read; the file does not look like a CPAT dyna deck "
+            f"({report.records_read} cards read, {report.skipped_count} skipped)",
+            filepath=str(path),
+        )
+
+    if strict and report.skipped:
+        first = report.skipped[0]
+        raise MalformedRecordError(
+            f"{report.skipped_count} card(s) could not be read; first: {first.reason}",
+            filepath=str(path),
+            line_no=first.line_no,
+        )
 
     logger.info(
         "Parsed .dyna file: %d buses, %d branches, %d generators, %d loads (base_mva=%.1f)",

@@ -12,10 +12,13 @@ Example:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from psforge_grid.io.errors import FileFormatError, MalformedRecordError
 from psforge_grid.io.json_writer import FORMAT_NAME
+from psforge_grid.io.parse_report import ParseReportBuilder
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -33,51 +36,92 @@ from psforge_grid.models.shunt import Shunt
 from psforge_grid.models.system import System
 
 
-def _parse_json_impl(filepath: str | Path) -> System:
+def _parse_json_impl(filepath: str | Path, *, strict: bool = False) -> System:
     """Parse a psforge-grid JSON file into a System object.
+
+    Elements whose fields do not match the current data model are skipped and
+    listed in :attr:`~psforge_grid.models.system.System.parse_report` rather
+    than raising from the middle of building the system. JSON carries no line
+    numbers, so each skip is identified by its position in the array, e.g.
+    ``buses[7]``.
 
     Args:
         filepath: Path to the .psfg.json file
+        strict: Raise instead of skipping when any element cannot be read.
 
     Returns:
         System object containing all parsed data
 
     Raises:
         FileNotFoundError: If the file does not exist
-        ValueError: If the file is not a valid psforge-grid JSON file
+        FileFormatError: If the file is not valid JSON, or not a psforge-grid
+            JSON file
+        MalformedRecordError: If ``strict`` is set and an element was skipped
     """
     path = Path(filepath)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    builder = ParseReportBuilder(format="json")
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise FileFormatError(
+            f"the file is not valid JSON: {exc.msg}", filepath=str(path), line_no=exc.lineno
+        ) from exc
+    except UnicodeDecodeError as exc:
+        raise FileFormatError(f"the file is not valid UTF-8: {exc}", filepath=str(path)) from exc
+
+    if not isinstance(data, dict):
+        raise FileFormatError(
+            f"the top level of the file is {type(data).__name__}, expected an object",
+            filepath=str(path),
+        )
 
     # Validate format metadata
     metadata = data.get("metadata", {})
-    file_format = metadata.get("format", "")
+    file_format = metadata.get("format", "") if isinstance(metadata, dict) else ""
     if file_format != FORMAT_NAME:
-        raise ValueError(
-            f"Not a psforge-grid JSON file: format='{file_format}', "
-            f"expected='{FORMAT_NAME}'. "
-            f"This may be a pglib-uc or other JSON file."
+        raise FileFormatError(
+            f"Not a psforge-grid JSON file: format={file_format!r}, expected {FORMAT_NAME!r}. "
+            "This may be a pglib-uc or other JSON file.",
+            filepath=str(path),
         )
 
     # Parse system-level fields
     sys_data = data.get("system", {})
+    if not isinstance(sys_data, dict):
+        raise FileFormatError(
+            f'"system" is {type(sys_data).__name__}, expected an object', filepath=str(path)
+        )
 
-    # Parse components
-    buses = [Bus(**b) for b in data.get("buses", [])]
-    branches = [Branch(**b) for b in data.get("branches", [])]
-    generators = [Generator(**g) for g in data.get("generators", [])]
-    loads = [Load(**ld) for ld in data.get("loads", [])]
-    shunts = [Shunt(**s) for s in data.get("shunts", [])]
-    generator_costs = [GeneratorCost(**gc) for gc in data.get("generator_costs", [])]
+    def build_all(key: str, factory: Callable[..., Any]) -> list[Any]:
+        """Build every element of one array, recording the ones that fail."""
+        built = []
+        for index, item in enumerate(data.get(key, []) or []):
+            try:
+                built.append(factory(**item))
+            except (TypeError, ValueError) as exc:
+                builder.skip(0, f"{key}[{index}]", str(exc), repr(item))
+            else:
+                builder.record_read()
+        return built
+
+    buses = build_all("buses", Bus)
+    branches = build_all("branches", Branch)
+    generators = build_all("generators", Generator)
+    loads = build_all("loads", Load)
+    shunts = build_all("shunts", Shunt)
+    generator_costs = build_all("generator_costs", GeneratorCost)
 
     # Parse diagram data (no re-normalization)
     diagram_schematic = _parse_diagram_dict(data.get("diagram_schematic"))
     diagram_geographic = _parse_diagram_dict(data.get("diagram_geographic"))
 
-    return System(
+    report = builder.build()
+
+    system = System(
         buses=buses,
         branches=branches,
         generators=generators,
@@ -90,7 +134,18 @@ def _parse_json_impl(filepath: str | Path) -> System:
         description=sys_data.get("description"),
         diagram_schematic=diagram_schematic,
         diagram_geographic=diagram_geographic,
+        parse_report=report,
     )
+
+    if strict and report.skipped:
+        first = report.skipped[0]
+        raise MalformedRecordError(
+            f"{report.skipped_count} element(s) could not be read; "
+            f"first: {first.section}: {first.reason}",
+            filepath=str(path),
+        )
+
+    return system
 
 
 def _parse_diagram_dict(d: dict[str, Any] | None) -> DiagramData | None:
@@ -186,7 +241,7 @@ class JsonParser(IParser):
         """Return human-readable format name."""
         return "psforge-grid JSON"
 
-    def parse(self, filepath: str | Path) -> System:
+    def parse(self, filepath: str | Path, *, strict: bool = False) -> System:
         """Parse a psforge-grid JSON file.
 
         Args:
@@ -199,10 +254,10 @@ class JsonParser(IParser):
             FileNotFoundError: If the file does not exist
             ValueError: If the file is not a valid psforge-grid JSON file
         """
-        return _parse_json_impl(filepath)
+        return _parse_json_impl(filepath, strict=strict)
 
 
-def parse_json(filepath: str | Path) -> System:
+def parse_json(filepath: str | Path, *, strict: bool = False) -> System:
     """Parse a psforge-grid JSON file.
 
     Convenience function wrapping JsonParser.
@@ -216,4 +271,4 @@ def parse_json(filepath: str | Path) -> System:
     Example:
         >>> system = parse_json("ieee14.psfg.json")
     """
-    return _parse_json_impl(filepath)
+    return _parse_json_impl(filepath, strict=strict)

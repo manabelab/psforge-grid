@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -23,6 +24,11 @@ from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
+
+if TYPE_CHECKING:
+    # Imported lazily: psforge_grid.io imports the models, so a runtime import
+    # here would close the cycle.
+    from psforge_grid.io.parse_report import ParseReport
 
 
 @dataclass(repr=False)
@@ -82,6 +88,10 @@ class System:
     description: str | None = None
     diagram_schematic: DiagramData | None = None
     diagram_geographic: DiagramData | None = None
+    #: What the parser could not read, when this System came from a file.
+    #: ``None`` for a System built in memory. See
+    #: :class:`~psforge_grid.io.parse_report.ParseReport`.
+    parse_report: ParseReport | None = None
 
     def __repr__(self) -> str:
         """Return a one-line summary instead of dumping every component.
@@ -115,22 +125,28 @@ class System:
     # =========================================================================
 
     @classmethod
-    def from_raw(cls, filepath: str | Path) -> System:
+    def from_raw(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a PSS/E RAW file.
 
         Factory method for creating System instances from PSS/E RAW format
         files (v33/v34). This is the recommended way to load power system
         data from RAW files.
 
+        Records that cannot be read are skipped and listed in
+        :attr:`parse_report`; they are never filled in with defaults.
+
         Args:
             filepath: Path to the .raw file
+            strict: Raise instead of skipping when any record cannot be read.
 
         Returns:
             System object containing all parsed power system data
 
         Raises:
             FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
+            FileFormatError: If the file cannot be read as a RAW case at all
+            UnsupportedVersionError: If the file declares an unsupported revision
+            MalformedRecordError: If ``strict`` is set and a record is unreadable
 
         Example:
             >>> system = System.from_raw("ieee14.raw")
@@ -143,10 +159,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.raw_parser import parse_raw
 
-        return parse_raw(filepath)
+        return parse_raw(filepath, strict=strict)
 
     @classmethod
-    def from_matpower(cls, filepath: str | Path) -> System:
+    def from_matpower(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a MATPOWER .m file.
 
         Factory method for creating System instances from MATPOWER format
@@ -155,6 +171,7 @@ class System:
 
         Args:
             filepath: Path to the .m file
+            strict: Raise instead of skipping when any row cannot be read.
 
         Returns:
             System object containing all parsed power system data
@@ -175,10 +192,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.matpower_parser import parse_matpower
 
-        return parse_matpower(filepath)
+        return parse_matpower(filepath, strict=strict)
 
     @classmethod
-    def from_pop(cls, filepath: str | Path) -> System:
+    def from_pop(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a CPAT .pop file.
 
         Factory method for creating System instances from CPAT-GUI native
@@ -206,7 +223,7 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.pop_parser import parse_pop
 
-        return parse_pop(filepath)
+        return parse_pop(filepath, strict=strict)
 
     @classmethod
     def from_dss(cls, filepath: str | Path) -> System:
@@ -238,7 +255,7 @@ class System:
         return parse_dss(filepath)
 
     @classmethod
-    def from_dyna(cls, filepath: str | Path) -> System:
+    def from_dyna(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a CPAT dyna card format file.
 
         Factory method for creating System instances from CPAT Fortran
@@ -266,10 +283,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.dyna_parser import parse_dyna
 
-        return parse_dyna(filepath)
+        return parse_dyna(filepath, strict=strict)
 
     @classmethod
-    def from_json(cls, filepath: str | Path) -> System:
+    def from_json(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a psforge-grid JSON file.
 
         Factory method for loading System from psforge-grid native JSON
@@ -295,7 +312,7 @@ class System:
         """
         from psforge_grid.io.json_parser import parse_json
 
-        return parse_json(filepath)
+        return parse_json(filepath, strict=strict)
 
     # =========================================================================
     # Export methods (write to file)
@@ -1604,6 +1621,21 @@ class System:
             lines.append("### Missing Data:")
             for issue in missing:
                 lines.append(f"- {issue['message']}")
+
+        # Records the parser could not read. Without this the model below looks
+        # complete, and whatever reads it next analyses a grid that is missing
+        # pieces without knowing it.
+        if self.parse_report is not None and self.parse_report.skipped:
+            lines.append("")
+            lines.append("### Records Not Read:")
+            lines.append(
+                f"{self.parse_report.skipped_count} record(s) in the source file could not be "
+                "read and are absent from this model."
+            )
+            for record in self.parse_report.skipped[:10]:
+                lines.append(f"- {record.to_description()}")
+            if self.parse_report.skipped_count > 10:
+                lines.append(f"- ... and {self.parse_report.skipped_count - 10} more")
 
         return "\n".join(lines)
 

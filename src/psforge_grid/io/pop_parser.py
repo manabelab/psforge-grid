@@ -25,9 +25,13 @@ See Also:
 from __future__ import annotations
 
 import logging
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 
+from psforge_grid.io.errors import FileFormatError, MalformedRecordError, ParseError
+from psforge_grid.io.parse_report import ParseReportBuilder
 from psforge_grid.io.pop.archive import PopArchive
 from psforge_grid.io.pop.case_data import PopCaseData, parse_case_data
 from psforge_grid.io.pop.control_data import PopControlData, parse_control_data
@@ -70,7 +74,7 @@ class PopParser(IParser):
         """Return human-readable format name."""
         return "CPAT Pop"
 
-    def parse(self, filepath: str | Path) -> System:
+    def parse(self, filepath: str | Path, *, strict: bool = False) -> System:
         """Parse a .pop file and return a System object.
 
         Args:
@@ -83,10 +87,10 @@ class PopParser(IParser):
             FileNotFoundError: If the file does not exist.
             ValueError: If the file format is invalid.
         """
-        return _parse_pop_impl(filepath)
+        return _parse_pop_impl(filepath, strict=strict)
 
 
-def parse_pop(filepath: str | Path) -> System:
+def parse_pop(filepath: str | Path, *, strict: bool = False) -> System:
     """Parse a CPAT .pop file and return a System object.
 
     Convenience function wrapping PopParser.parse().
@@ -105,10 +109,10 @@ def parse_pop(filepath: str | Path) -> System:
         >>> system = parse_pop("WEST10peak.pop")
         >>> print(f"{system.num_buses} buses, {system.num_branches} branches")
     """
-    return _parse_pop_impl(filepath)
+    return _parse_pop_impl(filepath, strict=strict)
 
 
-def _parse_pop_impl(filepath: str | Path) -> System:
+def _parse_pop_impl(filepath: str | Path, *, strict: bool = False) -> System:
     """Internal implementation of .pop file parsing.
 
     Data flow:
@@ -123,21 +127,38 @@ def _parse_pop_impl(filepath: str | Path) -> System:
 
     Args:
         filepath: Path to the .pop file.
+        strict: Raise instead of skipping when an element cannot be resolved.
 
     Returns:
-        Fully populated System object.
-    """
-    archive = PopArchive(filepath)
+        Fully populated System object, carrying a ParseReport.
 
-    control = parse_control_data(archive.pnsd_root)
-    topology = parse_topology(archive.pnsw_root)
-    case = parse_case_data(archive.pnsj_root)
+    Raises:
+        FileFormatError: If the archive or its XML cannot be read, or if no
+            buses could be built.
+        MalformedRecordError: If ``strict`` is set and an element was skipped.
+    """
+    builder = ParseReportBuilder(format="pop")
+
+    try:
+        archive = PopArchive(filepath)
+        control = parse_control_data(archive.pnsd_root)
+        topology = parse_topology(archive.pnsw_root)
+        case = parse_case_data(archive.pnsj_root)
+    except ParseError:
+        raise
+    except (OSError, zipfile.BadZipFile, ElementTree.ParseError, ValueError, KeyError) as exc:
+        raise FileFormatError(
+            f"could not read the .pop archive: {exc}", filepath=str(filepath)
+        ) from exc
 
     buses = _build_buses(topology, control, case, archive.pnsd_root)
-    branches = _build_branches(topology, archive, control, case)
+    branches = _build_branches(topology, archive, control, case, builder)
     generators = _build_generators(topology, archive, control, case)
     loads = _build_loads(case)
     diagram = _build_diagram(topology)
+
+    builder.record_read(len(buses) + len(branches) + len(generators) + len(loads))
+    report = builder.build()
 
     system = System(
         buses=buses,
@@ -147,7 +168,22 @@ def _parse_pop_impl(filepath: str | Path) -> System:
         base_mva=control.base_mva,
         name=control.header,
         diagram_schematic=diagram,
+        parse_report=report,
     )
+
+    if not buses:
+        raise FileFormatError(
+            f"no buses could be built from the archive "
+            f"({report.records_read} elements built, {report.skipped_count} skipped)",
+            filepath=str(filepath),
+        )
+
+    if strict and report.skipped:
+        first = report.skipped[0]
+        raise MalformedRecordError(
+            f"{report.skipped_count} element(s) could not be read; first: {first.reason}",
+            filepath=str(filepath),
+        )
 
     logger.info(
         "Parsed .pop file: %d buses, %d branches, %d generators, %d loads (base_mva=%.1f)",
@@ -257,6 +293,7 @@ def _build_branches(
     archive: PopArchive,
     _control: PopControlData,
     case: PopCaseData,
+    builder: ParseReportBuilder,
 ) -> list[Branch]:
     """Build Branch objects from topology and data.pnsd impedance data.
 
@@ -284,8 +321,9 @@ def _build_branches(
 
         try:
             from_bus, to_bus = topology.get_branch_from_to(cluster)
-        except (ValueError, KeyError):
+        except (ValueError, KeyError) as exc:
             logger.warning("Cannot resolve from/to for TransmissionLine ClusterIndex=%d", ci)
+            builder.skip(0, "TransmissionLine", f"ClusterIndex={ci}: {exc}")
             continue
 
         r_pu = get_float(tline_data, "Z1r", 0.0)
@@ -333,8 +371,9 @@ def _build_branches(
 
         try:
             from_bus, to_bus = topology.get_branch_from_to(cluster)
-        except (ValueError, KeyError):
+        except (ValueError, KeyError) as exc:
             logger.warning("Cannot resolve from/to for Transformer ClusterIndex=%d", ci)
+            builder.skip(0, "Transformer", f"ClusterIndex={ci}: {exc}")
             continue
 
         r_pu = get_float(xfmr_data, "Z1r", 0.0)
