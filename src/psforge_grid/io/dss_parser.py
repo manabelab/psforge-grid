@@ -15,11 +15,13 @@ Example:
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import opendssdirect as dss
 
+from psforge_grid.io.errors import FileFormatError
 from psforge_grid.io.protocols import IParser
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -73,20 +75,36 @@ class DSSParser(IParser):
 
         Raises:
             FileNotFoundError: If the file does not exist
-            ValueError: If the file cannot be compiled by OpenDSS
+            FileFormatError: If OpenDSS cannot compile the file
+
+        Note:
+            The caller's working directory is preserved; OpenDSS's ``Compile``
+            changes it as a side effect.
         """
         filepath = Path(filepath)
         if not filepath.exists():
             raise FileNotFoundError(f"File not found: {filepath}")
 
-        # Reset OpenDSS and compile the file
-        dss.Basic.ClearAll()
-        result = dss.run_command(f'Compile "{filepath.resolve()}"')
-        if result and "error" in result.lower():
-            raise ValueError(f"OpenDSS compilation error: {result}")
+        # Reset OpenDSS and compile the file.
+        #
+        # OpenDSS's Compile changes the process working directory to the folder
+        # holding the script, and leaves it there. A library must not move the
+        # caller's working directory out from under them -- every relative path
+        # in their program would resolve somewhere else afterwards -- so it is
+        # restored here.
+        cwd_before = os.getcwd()
+        try:
+            dss.Basic.ClearAll()
+            result = dss.run_command(f'Compile "{filepath.resolve()}"')
+            if result and "error" in result.lower():
+                raise FileFormatError(
+                    f"OpenDSS could not compile the file: {result}", filepath=str(filepath)
+                )
 
-        # Solve to initialize the circuit (snapshot mode)
-        dss.run_command("Solve Mode=Snapshot")
+            # Solve to initialize the circuit (snapshot mode)
+            dss.run_command("Solve Mode=Snapshot")
+        finally:
+            os.chdir(cwd_before)
 
         # Extract system info
         sys_name = dss.Circuit.Name()

@@ -1,7 +1,7 @@
 """Protocols for power system data file I/O.
 
 This module defines abstract interfaces for file parsers and writers,
-enabling support for multiple data formats (PSS/E, MATPOWER, CPAT, etc.).
+enabling support for multiple data formats (PSS/E, MATPOWER, OpenDSS, etc.).
 
 The design enables:
     - Transparent format switching via ParserFactory / WriterFactory
@@ -119,10 +119,10 @@ class IWriter(ABC):
           PSS/E RAW format (v33)
         - :class:`~psforge_grid.io.matpower_writer.MatpowerWriter`:
           MATPOWER format (.m files)
-        - :class:`~psforge_grid.io.pop_writer.PopWriter`:
-          CPAT Pop format (.pop, ZIP+XML)
-        - :class:`~psforge_grid.io.dyna_writer.DynaWriter`:
-          CPAT Dyna format (.dyna, fixed-column cards)
+        - :class:`~psforge_grid.io.dss_writer.DSSWriter`:
+          OpenDSS script format (.dss)
+        - :class:`~psforge_grid.io.json_writer.JsonWriter`:
+          psforge-grid JSON format (.psfg.json)
 
     See Also:
         - WriterFactory: io/factories.py

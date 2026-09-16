@@ -26,10 +26,9 @@ def strip_ansi(text: str) -> str:
 # Path to test fixtures
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 IEEE14_RAW = FIXTURES_DIR / "ieee14.raw"
-IEEE9_RAW = FIXTURES_DIR / "ieee9.raw"
+NEWENGLAND39_RAW = FIXTURES_DIR / "39bus.raw"
 IEEE14_MATPOWER = FIXTURES_DIR / "pglib_opf_case14_ieee.m"
 IEEE14_JSON = FIXTURES_DIR / "ieee14.psfg.json"
-WEST10_POP = FIXTURES_DIR / "WEST10peak.pop"
 
 
 class TestInfoCommand:
@@ -292,13 +291,6 @@ class TestMultiFormatInput:
         result = runner.invoke(app, ["info", str(IEEE14_JSON)])
         assert result.exit_code == 0
 
-    def test_info_pop_format(self) -> None:
-        """Test info command with CPAT .pop file."""
-        result = runner.invoke(app, ["info", str(WEST10_POP), "-f", "json"])
-        assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert data["counts"]["buses"] == 27
-
     def test_show_matpower_buses(self) -> None:
         """Test show buses with MATPOWER file."""
         result = runner.invoke(app, ["show", str(IEEE14_MATPOWER), "buses", "-f", "json"])
@@ -346,13 +338,6 @@ class TestConvertCommand:
         """Test converting psforge JSON to RAW."""
         output = tmp_path / "ieee14.raw"
         result = runner.invoke(app, ["convert", str(IEEE14_JSON), str(output)])
-        assert result.exit_code == 0
-        assert output.exists()
-
-    def test_convert_pop_to_json(self, tmp_path: Path) -> None:
-        """Test converting CPAT .pop to psforge JSON."""
-        output = tmp_path / "west10.psfg.json"
-        result = runner.invoke(app, ["convert", str(WEST10_POP), str(output)])
         assert result.exit_code == 0
         assert output.exists()
 
@@ -522,7 +507,7 @@ class TestDiffCommand:
 
     def test_diff_different_systems(self) -> None:
         """Diff two different systems shows count differences."""
-        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(IEEE9_RAW), "-f", "json"])
+        result = runner.invoke(app, ["diff", str(IEEE14_RAW), str(NEWENGLAND39_RAW), "-f", "json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["summary"]["total_changes"] > 0

@@ -3,11 +3,11 @@
 This module defines the System class as the central container for all power system components.
 
 Factory Methods (import):
-    - from_raw(), from_matpower(), from_pop(), from_dyna(): Create from specific formats
+    - from_raw(), from_matpower(), from_dss(), from_json(): Create from specific formats
     - from_file(): Create from any supported format (auto-detect)
 
 Export Methods (write):
-    - to_raw(), to_matpower(), to_pop(), to_dyna(): Write to specific formats
+    - to_raw(), to_matpower(), to_dss(), to_json(): Write to specific formats
     - to_file(): Write to any supported format (auto-detect)
 """
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from psforge_grid.models.branch import Branch
 from psforge_grid.models.bus import Bus
@@ -23,6 +24,11 @@ from psforge_grid.models.generator import Generator
 from psforge_grid.models.generator_cost import GeneratorCost
 from psforge_grid.models.load import Load
 from psforge_grid.models.shunt import Shunt
+
+if TYPE_CHECKING:
+    # Imported lazily: psforge_grid.io imports the models, so a runtime import
+    # here would close the cycle.
+    from psforge_grid.io.parse_report import ParseReport
 
 
 @dataclass(repr=False)
@@ -82,6 +88,10 @@ class System:
     description: str | None = None
     diagram_schematic: DiagramData | None = None
     diagram_geographic: DiagramData | None = None
+    #: What the parser could not read, when this System came from a file.
+    #: ``None`` for a System built in memory. See
+    #: :class:`~psforge_grid.io.parse_report.ParseReport`.
+    parse_report: ParseReport | None = None
 
     def __repr__(self) -> str:
         """Return a one-line summary instead of dumping every component.
@@ -115,22 +125,28 @@ class System:
     # =========================================================================
 
     @classmethod
-    def from_raw(cls, filepath: str | Path) -> System:
+    def from_raw(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a PSS/E RAW file.
 
         Factory method for creating System instances from PSS/E RAW format
         files (v33/v34). This is the recommended way to load power system
         data from RAW files.
 
+        Records that cannot be read are skipped and listed in
+        :attr:`parse_report`; they are never filled in with defaults.
+
         Args:
             filepath: Path to the .raw file
+            strict: Raise instead of skipping when any record cannot be read.
 
         Returns:
             System object containing all parsed power system data
 
         Raises:
             FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
+            FileFormatError: If the file cannot be read as a RAW case at all
+            UnsupportedVersionError: If the file declares an unsupported revision
+            MalformedRecordError: If ``strict`` is set and a record is unreadable
 
         Example:
             >>> system = System.from_raw("ieee14.raw")
@@ -143,10 +159,10 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.raw_parser import parse_raw
 
-        return parse_raw(filepath)
+        return parse_raw(filepath, strict=strict)
 
     @classmethod
-    def from_matpower(cls, filepath: str | Path) -> System:
+    def from_matpower(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a MATPOWER .m file.
 
         Factory method for creating System instances from MATPOWER format
@@ -155,6 +171,7 @@ class System:
 
         Args:
             filepath: Path to the .m file
+            strict: Raise instead of skipping when any row cannot be read.
 
         Returns:
             System object containing all parsed power system data
@@ -175,38 +192,7 @@ class System:
         # Lazy import to avoid circular dependency
         from psforge_grid.io.matpower_parser import parse_matpower
 
-        return parse_matpower(filepath)
-
-    @classmethod
-    def from_pop(cls, filepath: str | Path) -> System:
-        """Create a System from a CPAT .pop file.
-
-        Factory method for creating System instances from CPAT-GUI native
-        format (.pop = ZIP archive containing XML files).
-
-        Args:
-            filepath: Path to the .pop file
-
-        Returns:
-            System object containing all parsed power system data
-
-        Raises:
-            FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
-
-        Example:
-            >>> system = System.from_pop("WEST10peak.pop")
-            >>> print(f"Loaded {system.num_buses} buses")
-
-        See Also:
-            - from_raw(): Load PSS/E RAW format
-            - from_file(): Auto-detect format from extension
-            - parse_pop(): Standalone function alternative
-        """
-        # Lazy import to avoid circular dependency
-        from psforge_grid.io.pop_parser import parse_pop
-
-        return parse_pop(filepath)
+        return parse_matpower(filepath, strict=strict)
 
     @classmethod
     def from_dss(cls, filepath: str | Path) -> System:
@@ -238,38 +224,7 @@ class System:
         return parse_dss(filepath)
 
     @classmethod
-    def from_dyna(cls, filepath: str | Path) -> System:
-        """Create a System from a CPAT dyna card format file.
-
-        Factory method for creating System instances from CPAT Fortran
-        fixed-column card format files (.dyna).
-
-        Args:
-            filepath: Path to the .dyna file
-
-        Returns:
-            System object containing all parsed power system data
-
-        Raises:
-            FileNotFoundError: If the specified file does not exist
-            ValueError: If the file format is invalid or cannot be parsed
-
-        Example:
-            >>> system = System.from_dyna("cpat_model.dyna")
-            >>> print(f"Loaded {system.num_buses} buses")
-
-        See Also:
-            - from_pop(): Load CPAT .pop (ZIP+XML) format
-            - from_file(): Auto-detect format from extension
-            - parse_dyna(): Standalone function alternative
-        """
-        # Lazy import to avoid circular dependency
-        from psforge_grid.io.dyna_parser import parse_dyna
-
-        return parse_dyna(filepath)
-
-    @classmethod
-    def from_json(cls, filepath: str | Path) -> System:
+    def from_json(cls, filepath: str | Path, *, strict: bool = False) -> System:
         """Create a System from a psforge-grid JSON file.
 
         Factory method for loading System from psforge-grid native JSON
@@ -295,7 +250,7 @@ class System:
         """
         from psforge_grid.io.json_parser import parse_json
 
-        return parse_json(filepath)
+        return parse_json(filepath, strict=strict)
 
     # =========================================================================
     # Export methods (write to file)
@@ -335,23 +290,6 @@ class System:
 
         write_matpower(self, filepath)
 
-    def to_pop(self, filepath: str | Path) -> None:
-        """Export this System to a CPAT .pop file.
-
-        Args:
-            filepath: Output file path (.pop)
-
-        Example:
-            >>> system.to_pop("output.pop")
-
-        See Also:
-            - to_file(): Auto-detect format from extension
-            - write_pop(): Standalone function alternative
-        """
-        from psforge_grid.io.pop_writer import write_pop
-
-        write_pop(self, filepath)
-
     def to_dss(self, filepath: str | Path) -> None:
         """Export this System to an OpenDSS .dss file.
 
@@ -368,23 +306,6 @@ class System:
         from psforge_grid.io.dss_writer import write_dss
 
         write_dss(self, filepath)
-
-    def to_dyna(self, filepath: str | Path) -> None:
-        """Export this System to a CPAT .dyna file.
-
-        Args:
-            filepath: Output file path (.dyna)
-
-        Example:
-            >>> system.to_dyna("output.dyna")
-
-        See Also:
-            - to_file(): Auto-detect format from extension
-            - write_dyna(): Standalone function alternative
-        """
-        from psforge_grid.io.dyna_writer import write_dyna
-
-        write_dyna(self, filepath)
 
     def to_json(
         self,
@@ -421,11 +342,9 @@ class System:
         Example:
             >>> system.to_file("output.raw")   # PSS/E format
             >>> system.to_file("output.m")     # MATPOWER format
-            >>> system.to_file("output.pop")   # CPAT Pop format
-            >>> system.to_file("output.dyna")  # CPAT Dyna format
 
         See Also:
-            - to_raw(), to_matpower(), to_pop(), to_dyna(): Explicit format
+            - to_raw(), to_matpower(), to_dss(): Explicit format
             - WriterFactory: Direct writer access
         """
         from psforge_grid.io.factories import WriterFactory
@@ -1604,6 +1523,21 @@ class System:
             lines.append("### Missing Data:")
             for issue in missing:
                 lines.append(f"- {issue['message']}")
+
+        # Records the parser could not read. Without this the model below looks
+        # complete, and whatever reads it next analyses a grid that is missing
+        # pieces without knowing it.
+        if self.parse_report is not None and self.parse_report.skipped:
+            lines.append("")
+            lines.append("### Records Not Read:")
+            lines.append(
+                f"{self.parse_report.skipped_count} record(s) in the source file could not be "
+                "read and are absent from this model."
+            )
+            for record in self.parse_report.skipped[:10]:
+                lines.append(f"- {record.to_description()}")
+            if self.parse_report.skipped_count > 10:
+                lines.append(f"- ... and {self.parse_report.skipped_count - 10} more")
 
         return "\n".join(lines)
 

@@ -12,15 +12,13 @@ Commands:
 Supported input formats (auto-detected by extension):
     .raw: PSS/E RAW (v33/v34)
     .m: MATPOWER
-    .pop: CPAT Pop (ZIP/XML)
-    .dyna: CPAT Dyna (Fortran cards)
     .dss: OpenDSS
     .psfg.json: psforge JSON
 
 Example:
     $ psforge-grid info ieee14.raw
     $ psforge-grid info case14.m --format json
-    $ psforge-grid show WEST10peak.pop buses
+    $ psforge-grid show ieee14.raw buses
     $ psforge-grid convert ieee14.raw output.psfg.json
 """
 
@@ -97,7 +95,7 @@ def main_callback(
     """Power system data inspection, validation, and conversion CLI.
 
     Supports all psforge-grid formats: PSS/E RAW (.raw), MATPOWER (.m),
-    CPAT (.pop/.dyna), OpenDSS (.dss), and psforge JSON (.psfg.json).
+    OpenDSS (.dss), and psforge JSON (.psfg.json).
     Input format is auto-detected from file extension.
 
     Examples:
@@ -106,7 +104,7 @@ def main_callback(
 
         $ psforge-grid info case14.m --format json
 
-        $ psforge-grid show WEST10peak.pop buses
+        $ psforge-grid show ieee14.raw buses
 
         $ psforge-grid convert ieee14.raw output.psfg.json
     """
@@ -117,7 +115,7 @@ def info(
     input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
+            help="Path to power system data file (.raw, .m, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -166,7 +164,7 @@ def info(
 
         $ psforge-grid info case14.m -f json
 
-        $ psforge-grid info WEST10peak.pop -f summary
+        $ psforge-grid info ieee14.raw -f summary
     """
     try:
         # Validate format
@@ -223,7 +221,7 @@ def show(
     input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
+            help="Path to power system data file (.raw, .m, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -288,7 +286,7 @@ def show(
 
         $ psforge-grid show case14.m branches -f json
 
-        $ psforge-grid show WEST10peak.pop generators -f csv
+        $ psforge-grid show ieee14.raw generators -f csv
     """
     try:
         # Validate format
@@ -363,7 +361,7 @@ def validate(
     input_file: Annotated[
         Path,
         typer.Argument(
-            help="Path to power system data file (.raw, .m, .pop, .dyna, .dss, .psfg.json).",
+            help="Path to power system data file (.raw, .m, .dss, .psfg.json).",
             exists=True,
             readable=True,
         ),
@@ -517,7 +515,7 @@ def convert(
 
     Input and output formats are auto-detected from file extensions.
 
-    Supported formats: .raw, .m, .pop, .dyna, .dss, .psfg.json
+    Supported formats: .raw, .m, .dss, .psfg.json
 
     Examples:
 
@@ -525,7 +523,7 @@ def convert(
 
         $ psforge-grid convert ieee14.raw ieee14.m
 
-        $ psforge-grid convert WEST10peak.pop west10.psfg.json
+        $ psforge-grid convert ieee14.raw ieee14.psfg.json
     """
     try:
         if verbose >= 1:

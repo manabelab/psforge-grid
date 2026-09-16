@@ -9,8 +9,6 @@
 - Common data classes (`System`, `Bus`, `Branch`, `Generator`, `GeneratorCost`, `Load`, `Shunt`)
 - PSS/E RAW file parser and writer (v33/v34)
 - MATPOWER .m file parser and writer (pglib-opf compatible)
-- CPAT .pop file parser and writer (ZIP/XML format)
-- CPAT .dyna file parser and writer (Fortran card format)
 - OpenDSS .dss file parser and writer (via opendssdirect.py)
 - Shared utilities for power system analysis
 - **Foundation for LLM-friendly output structures**
@@ -32,8 +30,8 @@
 │         system.to_file("output.m")             # auto-detect│
 ├─────────────────────────────────────────────────────────────┤
 │              Facade: System (models/system.py)              │
-│  Read:  from_raw, from_matpower, from_pop, from_dyna, from_dss│
-│  Write: to_raw, to_matpower, to_pop, to_dyna, to_dss, to_file│
+│  Read:  from_raw, from_matpower, from_dss, from_json         │
+│  Write: to_raw, to_matpower, to_dss, to_json, to_file        │
 ├─────────────────────────────────────────────────────────────┤
 │              Factories (io/factories.py)                    │
 │  ParserFactory.create("raw") → RawParser                    │
@@ -45,10 +43,8 @@
 │  IWriter: write(system, filepath) → None                    │
 ├─────────────────────────────────────────────────────────────┤
 │              Implementations: io/                           │
-│  Parsers: RawParser, MatpowerParser, PopParser, DynaParser,  │
-│           DSSParser                                          │
-│  Writers: RawWriter, MatpowerWriter, PopWriter, DynaWriter,  │
-│           DSSWriter                                          │
+│  Parsers: RawParser, MatpowerParser, DSSParser, JsonParser   │
+│  Writers: RawWriter, MatpowerWriter, DSSWriter, JsonWriter   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,10 +70,6 @@ psforge_grid/
     ├── raw_writer.py    # RawWriter implementation
     ├── matpower_parser.py # MatpowerParser implementation
     ├── matpower_writer.py # MatpowerWriter implementation
-    ├── pop_parser.py    # PopParser implementation
-    ├── pop_writer.py    # PopWriter implementation
-    ├── dyna_parser.py   # DynaParser implementation
-    ├── dyna_writer.py   # DynaWriter implementation
     ├── dss_parser.py    # DSSParser implementation (opendssdirect.py)
     └── dss_writer.py    # DSSWriter implementation
 ```
@@ -160,7 +152,7 @@ class Bus:
 
 > **Core Principle**: Use `Optional[T] = None` to represent data that the source format does not provide, rather than using sentinel values or raising errors.
 
-psforge-grid's data models serve as a **universal interchange format** across multiple file formats (PSS/E RAW, MATPOWER, CPAT, OpenDSS). Each format provides different subsets of information. The "Optional + None = Source Not Provided" principle ensures lossless cross-format conversion.
+psforge-grid's data models serve as a **universal interchange format** across multiple file formats (PSS/E RAW, MATPOWER, OpenDSS). Each format provides different subsets of information. The "Optional + None = Source Not Provided" principle ensures lossless cross-format conversion.
 
 ### Rules
 
