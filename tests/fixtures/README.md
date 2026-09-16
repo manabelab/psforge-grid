@@ -78,6 +78,30 @@ This directory contains test files for the psforge-grid parsers (PSS/E RAW, MATP
 
 Note: every bus declares `BASKV = 1.0`; the model is expressed in per-unit. That is what the file
 says, not a parsing artefact.
+### ACTIVSg2000.raw - Synthetic Texas 2000-Bus System (v33 format)
+
+- **Source**: Texas A&M University Electric Grid Test Case Repository
+- **URL**: https://electricgrids.engr.tamu.edu/electric-grid-test-cases/activsg2000/
+- **Format**: PSS/E v33
+- **Terms**: "This power system dataset is synthetic and does not represent any actual grid.
+  It is provided by Texas A&M University researchers free for commercial or non-commercial use."
+  The repository asks users to cite the corresponding papers; developed with support of the
+  U.S. DOE ARPA-E GRID DATA program, and contains no CEII.
+- **Description**: Synthetic 2000-bus model geographically sited on the footprint of the Texas
+  grid. Used by `test_large_case.py` to exercise the RAW parser and writer at a scale the IEEE
+  fixtures cannot reach: eight areas, ten voltage levels, and a mix of in-service and
+  out-of-service generators.
+
+| Component | Count |
+|-----------|-------|
+| Buses | 2000 (1 slack / 484 PV / 1515 PQ) |
+| Generators | 544 (432 in service) |
+| Loads | 1350 |
+| Branches | 3206 (2345 lines + 861 transformers) |
+| Shunts | 4 |
+| Base MVA | 100.0 |
+| Total Load | ~67109 MW / ~19014 MVAr |
+| Voltage Levels | 13.2, 13.8, 18, 20, 22, 24, 115, 161, 230, 500 kV |
 
 ### WEST10peak.pop - IEEJ WEST 10-Machine Model (CPAT .pop format)
 

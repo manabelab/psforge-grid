@@ -61,6 +61,24 @@ Alliance for Sustainable Energy or NREL.
 
 ---
 
+## ACTIVSg2000.raw — synthetic 2000-bus model of the Texas grid (PSS/E RAW v33)
+
+- **Obtained from**: Texas A&M University Electric Grid Test Case Repository,
+  <https://electricgrids.engr.tamu.edu/electric-grid-test-cases/activsg2000/>.
+- **Terms**, quoted from that page: "This power system dataset is synthetic and
+  does not represent any actual grid. It is provided by Texas A&M University
+  researchers free for commercial or non-commercial use." The repository asks
+  users to cite the corresponding papers.
+- **Citation requested**: the papers listed on the repository's references page —
+  reference [1] for the base case, [4] for economic data, [5] for dynamics.
+- **Origin**: developed with support of the U.S. DOE ARPA-E GRID DATA program.
+  The file's own second line states it contains no CEII.
+- **Why it is here**: the only fixture large enough to exercise eight areas, ten
+  voltage levels, 3206 branches and out-of-service generators. See
+  `test_large_case.py`.
+
+---
+
 ## Not yet recorded
 
 The other files in this directory predate this notice and their provenance is
